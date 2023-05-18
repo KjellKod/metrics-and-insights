@@ -1,7 +1,7 @@
 import os
 from jira import JIRA
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import numpy as np
 
 # import time_handling
@@ -13,10 +13,25 @@ import numpy as np
 # Function to parse dates
 
 
+import numpy as np
+
+
 def datetime_serializer(obj):
-    if isinstance(obj, datetime):
+    if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+    elif isinstance(obj, np.int64):
+        return int(obj)
+    else:
+        raise TypeError(
+            f"Object of type {obj.__class__.__name__} is not JSON serializable"
+        )
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super(DateTimeEncoder, self).default(obj)
 
 
 def parse_date(date_str):
@@ -25,35 +40,40 @@ def parse_date(date_str):
     return None
 
 
-# Function to calculate business days between two dates
+def seconds_to_hms(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return hours, minutes, seconds
 
 
-def business_days_between(start_date, end_date):
-    business_days = np.busday_count(start_date.date(), end_date.date())
-    return business_days
+def business_days_and_hours_between(start, end):
+    weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
+    total_business_seconds = 0
+    seconds_in_workday = 8 * 60 * 60  # 8 hours * 60 minutes * 60 seconds
 
+    current = start
+    while current <= end:
+        if current.weekday() in weekdays:
+            day_end = current.replace(hour=23, minute=59)
+            remaining_time_today = day_end - current
 
-# Function to calculate business days between two dates, including partial days & remaining hours
+            if current.date() != end.date():
+                total_business_seconds += min(
+                    remaining_time_today.total_seconds(), seconds_in_workday
+                )
+                current += timedelta(days=1)
+                current = current.replace(hour=0, minute=0)
+            else:
+                remaining_time_on_last_day = end - current
+                total_business_seconds += min(
+                    remaining_time_on_last_day.total_seconds(), seconds_in_workday
+                )
+                break
+        else:
+            current += timedelta(days=1)
+            current = current.replace(hour=0, minute=0)
 
-
-def business_days_and_hours_between(start_date, end_date):
-    WORK_HOURS_PER_DAY = 8
-    business_days = np.busday_count(start_date.date(), end_date.date())
-    remaining_hours_on_first_day = (
-        min(WORK_HOURS_PER_DAY - start_date.hour, end_date.hour)
-        if start_date.date() == end_date.date()
-        else WORK_HOURS_PER_DAY - start_date.hour
-    )
-    remaining_hours_on_last_day = (
-        end_date.hour if start_date.date() != end_date.date() else 0
-    )
-    total_business_hours = (
-        business_days * WORK_HOURS_PER_DAY
-        + remaining_hours_on_first_day
-        + remaining_hours_on_last_day
-    )
-
-    return business_days, total_business_hours
+    return total_business_seconds
 
 
 def parse_status_changes(histories):
@@ -77,19 +97,24 @@ def parse_status_changes(histories):
     return status_changes
 
 
-def calculate_in_progress_intervals(status_changes, status_to_measure):
-    in_progress_intervals = []
-    in_progress_start = None
+def calculate_status_intervals(status_changes, status_to_measure):
+    status_intervals = []
+    status_start = None
 
     for change in status_changes:
         if change["to"] == status_to_measure:
-            in_progress_start = change["timestamp"]
-        elif in_progress_start is not None and change["from"] == status_to_measure:
-            in_progress_end = change["timestamp"]
-            in_progress_intervals.append((in_progress_start, in_progress_end))
-            in_progress_start = None
+            status_start = change["timestamp"]
+        elif status_start is not None and change["from"] == status_to_measure:
+            status_end = change["timestamp"]
+            interval = (
+                status_to_measure,
+                status_start,
+                status_end,
+            )  # Include state name
+            status_intervals.append(interval)
+            status_start = None
 
-    return in_progress_intervals
+    return status_intervals
 
 
 def find_status_timestamps(status_changes, *statuses):
@@ -103,81 +128,45 @@ def find_status_timestamps(status_changes, *statuses):
     return timestamps
 
 
+def save_status_timing_results(result_dict, issue_key, status, intervals):
+    if issue_key not in result_dict:
+        result_dict[issue_key] = {}
+
+    result_dict[issue_key][status] = [
+        {
+            "start": start,
+            "end": end,
+            "duration": (end - start).total_seconds(),
+            "adjusted_duration": business_days_and_hours_between(start, end),
+        }
+        for state, start, end in intervals
+    ]
+
+
 def extract_status_durations(jira, jira_issue, result_dict):
     issue = jira.issue(jira_issue.key, expand="changelog")
 
     status_changes = parse_status_changes(issue.changelog.histories)
-    in_progress_intervals = calculate_in_progress_intervals(
-        status_changes, "In Progress"
-    )
-    in_review_intervals = calculate_in_progress_intervals(status_changes, "In Review")
+    status_list = ["In Progress", "In Review", "Pending Release"]
 
-    status_timestamps = find_status_timestamps(
-        status_changes,
-        "TODO",
-        "Prioritized",
-        "In Progress",
-        "In Review",
-        "Pending Staging",
-        "Closed",
-        "Pending Release",
-    )
+    for status in status_list:
+        intervals = calculate_status_intervals(status_changes, status)
 
-    # Print the variables
-    print(
-        "Status Changes:",
-        json.dumps(status_changes, indent=2, default=datetime_serializer),
-    )
-    print(
-        "In Progress Intervals:",
-        json.dumps(in_progress_intervals, indent=2, default=datetime_serializer),
-    )
-    print(
-        "In-Review  Intervals:",
-        json.dumps(in_review_intervals, indent=2, default=datetime_serializer),
-    )
-    print(
-        "Status Timestamps:",
-        json.dumps(status_timestamps, indent=2, default=datetime_serializer),
-    )
+        # Include state name, start, and end times when printing each interval
+        formatted_intervals = [
+            {
+                "state": state,
+                "start": start,
+                "end": end,
+                "duration": (end - start).total_seconds(),
+            }
+            for state, start, end in intervals
+        ]
 
-    earliest_end_datetime = min(
-        (ts for ts in status_timestamps.values() if ts is not None), default=None
-    )
-
-    business_days, in_progress_hours = (None, None)
-    if (
-        status_timestamps["In Progress"] is not None
-        and earliest_end_datetime is not None
-    ):
-        business_days, in_progress_hours = business_days_and_hours_between(
-            status_timestamps["In Progress"], earliest_end_datetime
-        )
-
-    business_days_in_review, hours_in_review = (None, None)
-    if status_timestamps["In Review"] is not None and earliest_end_datetime is not None:
-        business_days_in_review, hours_in_review = business_days_and_hours_between(
-            status_timestamps["In Review"], earliest_end_datetime
-        )
-
-    # Calculate total time spent in "In Progress" status
-    total_in_progress_seconds = sum(
-        (end - start).total_seconds() for start, end in in_progress_intervals
-    )
-    total_in_progress_minutes = round(total_in_progress_seconds / 60)
-    total_in_progress_hours_and_minutes = divmod(total_in_progress_minutes, 60)
-
-    result_dict[issue.key]["in_progress_weekdays"] = business_days
-    result_dict[issue.key]["hours_in_progress"] = in_progress_hours
-    result_dict[issue.key]["in_progress_minutes"] = total_in_progress_minutes
-    result_dict[issue.key][
-        "in_progress_hours_and_minutes"
-    ] = total_in_progress_hours_and_minutes
-    result_dict[issue.key]["in_review_weekdays"] = business_days_in_review
-    result_dict[issue.key]["in_review_hours"] = hours_in_review
+        # print(json.dumps(formatted_intervals, indent=2, cls=DateTimeEncoder))
+        save_status_timing_results(result_dict, issue.key, status, intervals)
 
 
-# -------
 # Function to fetch custom fields and map them by ID
 def get_custom_fields_mapping(jira):
     custom_field_map = {}
@@ -243,40 +232,6 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
     return result_dict
 
 
-def convert_numpy_types(obj):
-    if isinstance(obj, (np.int64, np.int32, np.int16)):
-        return int(obj)
-    elif isinstance(obj, (np.float64, np.float32)):
-        return float(obj)
-    else:
-        return obj
-
-
-def calculate_averages(keyword_tickets):
-    total_time_in_progress = sum(
-        ticket["time_in_progress"]
-        for ticket in keyword_tickets
-        if ticket["time_in_progress"]
-    )
-    total_time_in_review = sum(
-        ticket["time_in_review"]
-        for ticket in keyword_tickets
-        if ticket["time_in_review"]
-    )
-
-    if len(keyword_tickets) > 0:
-        average_time_in_progress = total_time_in_progress / len(keyword_tickets)
-    else:
-        average_time_in_progress = 0
-
-    compound_time_in_progress = total_time_in_progress
-
-    return {
-        "average_time_in_progress": average_time_in_progress,
-        "compound_time_in_progress": compound_time_in_progress,
-    }
-
-
 # https://ganazhq.slack.com/archives/C03BR47GDQW/p1684342201816599
 # xops_ch_sms_whatsapp
 # xops_ch_change_name
@@ -285,8 +240,6 @@ def calculate_averages(keyword_tickets):
 # xops_remove_profile
 # xops_packet_update
 # xops_new_packet
-
-
 def main():
     # Authenticate with JIRA API
     user = os.environ.get("USER_EMAIL")
@@ -323,31 +276,46 @@ def main():
             ticket_data = extract_ticket_data(issue, custom_fields_map, ticket_data)
             extract_status_durations(jira, issue, ticket_data)
 
-        for key, ticket in ticket_data.items():
-            ticket_id = ticket["ID"]
-            title = ticket["summary"]
-            in_progress_time_minutes = ticket["in_progress_minutes"]
-            in_progress_time_hours_minutes = ticket["in_progress_hours_and_minutes"]
-            in_review_time_hours = ticket["in_review_hours"]
+    # print(
+    #     "Ticket Data:", json.dumps(ticket_data, indent=2, default=datetime_serializer)
+    # )
 
-            print(
-                f"{ticket_id}: {title.ljust(45)} in-progress: {in_progress_time_minutes} m. {in_progress_time_hours_minutes[0]}h. {in_progress_time_hours_minutes[1]}m, in-review: {in_review_time_hours}h"
-            )
+    for key, ticket in ticket_data.items():
+        ticket_id = ticket["ID"]
+        title = ticket["summary"]
 
-    # result_dict[issue.key]["in_progress_weekdays"] = time_till_in_progress_ended_business_days
-    # result_dict[issue.key]["hours_in_progress"] = total_in_progress_hours
-    # result_dict[issue.key]["in_progress_minutes"] = total_in_progress_minutes
-    # result_dict[issue.key]["in_progress_hours_and_minutes"] = total_in_progress_hours_and_minutes
-    # result_dict[issue.key]["in_review_weekdays"] = time_to_finish_in_review_business_days
-    # result_dict[issue.key]["in_review_hours"] = time_to_finish_in_review_hours\
+        # In-Progress time
+        in_progress_time_seconds = sum(
+            [entry["duration"] for entry in ticket.get("In Progress", [])]
+        )
+        in_progress_hours, in_progress_minutes, in_progress_seconds = seconds_to_hms(
+            in_progress_time_seconds
+        )
 
-    # average_in_progress = total_in_progress_time // len(ticket_data)
-    # average_in_review = total_in_review_time // len(ticket_data)
+        # In-Review time
+        in_review_time_seconds = sum(
+            [entry["duration"] for entry in ticket.get("In Review", [])]
+        )
+        in_review_hours, in_review_minutes, in_review_seconds = seconds_to_hms(
+            in_review_time_seconds
+        )
 
-    # print(f"total ")
-    # print(f"average in-progress: {average_in_progress}h")
-    # print(f"average in-review: {average_in_review}h")
-    # print(f"total time used in-progress: {total_in_progress_time}h")
+        # In-pending_release time
+        in_pending_releasetime_seconds = sum(
+            [entry["duration"] for entry in ticket.get("Pending Release", [])]
+        )
+        (
+            in_pending_release_hours,
+            in_pending_release_minutes,
+            in_pending_release_seconds,
+        ) = seconds_to_hms(in_pending_releasetime_seconds)
+
+        print(
+            f"{ticket_id}: {title.ljust(45)} \n\t"
+            f"in-progress: {in_progress_hours} hours, {in_progress_minutes} minutes, and {in_progress_seconds:.2f} seconds,\n\t"
+            f"in-review: {in_review_hours} hours, {in_review_minutes} minutes, and {in_review_seconds:.2f} seconds,\n\t"
+            f"in-pending-release: {in_pending_release_hours} hours, {in_pending_release_minutes} minutes, and {in_pending_release_seconds:.2f} seconds"
+        )
 
 
 if __name__ == "__main__":
