@@ -267,8 +267,8 @@ def main():
     labels = {label: [] for label in labels_list}
 
     for label in labels:
-        # jql = f"project = GAN AND created >= startOfYear() AND labels = {label} AND Status = Closed ORDER BY duedate ASC"
-        jql = f"project = GAN AND KEY='GAN-5614' AND created >= startOfYear() AND labels = {label} ORDER BY duedate ASC"
+        jql2 = f"project = GAN AND created >= startOfYear() AND labels = {label} AND Status = Closed ORDER BY duedate ASC"
+        jql = f"project = GAN AND KEY='GAN-5346' AND created >= startOfYear() AND labels = {label} ORDER BY duedate ASC"
         issues = jira.search_issues(jql)
         ticket_data = {}
 
@@ -276,9 +276,9 @@ def main():
             ticket_data = extract_ticket_data(issue, custom_fields_map, ticket_data)
             extract_status_durations(jira, issue, ticket_data)
 
-    # print(
-    #     "Ticket Data:", json.dumps(ticket_data, indent=2, default=datetime_serializer)
-    # )
+    print(
+        "Ticket Data:", json.dumps(ticket_data, indent=2, default=datetime_serializer)
+    )
 
     for key, ticket in ticket_data.items():
         ticket_id = ticket["ID"]
