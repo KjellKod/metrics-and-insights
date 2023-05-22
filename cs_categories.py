@@ -240,6 +240,7 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
 # xops_remove_profile
 # xops_packet_update
 # xops_new_packet
+# xops_ch_portal
 def main():
     # Authenticate with JIRA API
     user = os.environ.get("USER_EMAIL")
@@ -261,7 +262,8 @@ def main():
         # "xops_enable_remittances",
         # "xops_remove_profile",
         "xops_packet_update",
-        # "xops_new_packet"
+        # "xops_new_packet",
+        # xops_ch_portal `project = GAN AND issuetype = "Support Request" AND (summary ~ CH and summary ~ portal)  ORDER BY duedate ASC`
     ]
 
     labels = {label: [] for label in labels_list}
@@ -312,9 +314,9 @@ def main():
 
         print(
             f"{ticket_id}: {title.ljust(45)} \n\t"
-            f"in-progress: {in_progress_hours} hours, {in_progress_minutes} minutes, and {in_progress_seconds:.2f} seconds,\n\t"
-            f"in-review: {in_review_hours} hours, {in_review_minutes} minutes, and {in_review_seconds:.2f} seconds,\n\t"
-            f"in-pending-release: {in_pending_release_hours} hours, {in_pending_release_minutes} minutes, and {in_pending_release_seconds:.2f} seconds"
+            f"in-progress: {in_progress_hours}h:{in_progress_minutes}m: {in_progress_seconds:.2f}s,\n\t"
+            f"in-review: {in_review_hours}h:{in_review_minutes}m:{in_review_seconds:.2f}s,\n\t"
+            f"in-pending-release: {in_pending_release_hours}h:{in_pending_release_minutes}m:{in_pending_release_seconds:.2f}s"
         )
 
 
