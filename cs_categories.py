@@ -241,6 +241,7 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
 # xops_packet_update
 # xops_new_packet
 # xops_ch_portal
+# xops_company_employee_id_counter
 def main():
     # Authenticate with JIRA API
     user = os.environ.get("USER_EMAIL")
@@ -264,6 +265,7 @@ def main():
         "xops_packet_update",
         # "xops_new_packet",
         # xops_ch_portal `project = GAN AND issuetype = "Support Request" AND (summary ~ CH and summary ~ portal)  ORDER BY duedate ASC`
+        # xops_company_employee_id_counter
     ]
 
     labels = {label: [] for label in labels_list}
