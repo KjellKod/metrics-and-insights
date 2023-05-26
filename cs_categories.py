@@ -1,19 +1,32 @@
 import os
 from jira import JIRA
+from jira.resources import Issue
 import json
 from datetime import datetime, date, timedelta
 import numpy as np
+from collections import defaultdict
 
-# import time_handling
-# -------
-from datetime import datetime
-from jira import JIRA
-import numpy as np
+g_in_progress_id = 0
+g_in_review_id = 1
+g_in_pending_release_id = 2
 
-# Function to parse dates
+g_status_list = ["In Progress", "In Review", "Pending Release"]
 
 
-import numpy as np
+def save_jira_data_to_file(data, file_name):
+    with open(file_name, "w") as outfile:
+        json.dump([issue.raw for issue in data], outfile)
+
+
+def load_jira_data_from_file(file_name, jira_instance):
+    with open(file_name, "r") as infile:
+        raw_issues_data = json.load(infile)
+
+    issues = [
+        Issue(jira_instance._options, jira_instance._session, raw)
+        for raw in raw_issues_data
+    ]
+    return issues
 
 
 def datetime_serializer(obj):
@@ -46,7 +59,7 @@ def seconds_to_hms(seconds):
     return hours, minutes, seconds
 
 
-def business_days_and_hours_between(start, end):
+def business_time_spent_in_seconds(start, end):
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
     seconds_in_workday = 8 * 60 * 60  # 8 hours * 60 minutes * 60 seconds
@@ -132,39 +145,46 @@ def save_status_timing_results(result_dict, issue_key, status, intervals):
     if issue_key not in result_dict:
         result_dict[issue_key] = {}
 
-    result_dict[issue_key][status] = [
+    new_intervals = [
         {
             "start": start,
             "end": end,
-            "duration": (end - start).total_seconds(),
-            "adjusted_duration": business_days_and_hours_between(start, end),
+            "duration_s": (end - start).total_seconds(),
+            "adjusted_duration_s": business_time_spent_in_seconds(start, end),
         }
         for state, start, end in intervals
     ]
+
+    if status not in result_dict[issue_key]:
+        result_dict[issue_key][status] = new_intervals
+    else:
+        result_dict[issue_key][status].extend(new_intervals)
 
 
 def extract_status_durations(jira, jira_issue, result_dict):
     issue = jira.issue(jira_issue.key, expand="changelog")
 
     status_changes = parse_status_changes(issue.changelog.histories)
-    status_list = ["In Progress", "In Review", "Pending Release"]
 
-    for status in status_list:
+    for status in g_status_list:
         intervals = calculate_status_intervals(status_changes, status)
-
-        # Include state name, start, and end times when printing each interval
-        formatted_intervals = [
-            {
-                "state": state,
-                "start": start,
-                "end": end,
-                "duration": (end - start).total_seconds(),
-            }
-            for state, start, end in intervals
-        ]
-
-        # print(json.dumps(formatted_intervals, indent=2, cls=DateTimeEncoder))
         save_status_timing_results(result_dict, issue.key, status, intervals)
+
+    for key, ticket in result_dict.items():
+        in_progress_sum = sum(
+            [
+                interval["adjusted_duration_s"]
+                for interval in ticket.get("In Progress", [])
+            ]
+        )
+        in_review_sum = sum(
+            [
+                interval["adjusted_duration_s"]
+                for interval in ticket.get("In Review", [])
+            ]
+        )
+        ticket["in_progress_s"] = in_progress_sum
+        ticket["in_review_s"] = in_review_sum
 
 
 # Function to fetch custom fields and map them by ID
@@ -178,6 +198,7 @@ def get_custom_fields_mapping(jira):
     return custom_field_map
 
 
+# extract metadata with from the ticket
 def extract_ticket_data(issue, custom_fields_map, result_dict):
     result_dict[issue.key] = {}
     result_dict[issue.key]["ID"] = issue.key
@@ -186,6 +207,8 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
     result_dict[issue.key]["points"] = issue.fields.customfield_10028
     result_dict[issue.key]["sprint"] = issue.fields.customfield_10020
     result_dict[issue.key]["start"] = issue.fields.customfield_10015
+    result_dict[issue.key]["resolutiondate"] = issue.fields.resolutiondate
+    result_dict[issue.key]["description"] = issue.fields.description
 
     for field_id, field_value in issue.raw["fields"].items():
         # Get field name or use ID as fallback
@@ -229,21 +252,131 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
                 component_name = component["name"]
                 result_dict[issue.key]["component"].append(component_name)
 
-    return result_dict
+
+# Process issues to calculate In-Progress time, In-Review time, etc.
+def process_issues(jira, issues, custom_fields_map):
+    ticket_data = {}
+
+    for issue in issues:
+        extract_ticket_data(issue, custom_fields_map, ticket_data)
+        extract_status_durations(jira, issue, ticket_data)
+
+    return ticket_data
 
 
-# https://ganazhq.slack.com/archives/C03BR47GDQW/p1684342201816599
-# xops_ch_sms_whatsapp
-# xops_ch_change_name
-# xops_ch_message_troubleshoot
-# xops_enable_remittances
-# xops_remove_profile
-# xops_packet_update
-# xops_new_packet
-# xops_ch_portal
-# xops_company_employee_id_counter
+def extract_closed_date(ticket_data):
+    closed_dates = defaultdict(dict)
+
+    for key, ticket in ticket_data.items():
+        for status in g_status_list:
+            if ticket.get(status):
+                closed_timestamp = ticket[status][-1]["end"]
+                closed_time = closed_timestamp.strftime("%Y-%m-%d")
+                closed_dates[status][key] = closed_time
+
+    return closed_dates
+
+
+def update_aggregated_results(xops_time_records, ticket_data, label):
+    total_adjusted_in_progress_seconds = 0
+    total_adjusted_in_review_seconds = 0
+    total_tickets = len(ticket_data)
+
+    for key, ticket in ticket_data.items():
+        in_progress_intervals = ticket.get("In Progress", [])
+        in_review_intervals = ticket.get("In Review", [])
+
+        for interval in in_progress_intervals:
+            adjusted_duration_s = interval["adjusted_duration_s"]
+            total_adjusted_in_progress_seconds += adjusted_duration_s
+
+        for interval in in_review_intervals:
+            adjusted_duration_s = interval["adjusted_duration_s"]
+            total_adjusted_in_review_seconds += adjusted_duration_s
+
+    xops_time_records[label] = {
+        "total_tickets": len(ticket_data),
+        "total_in_progress_s": total_adjusted_in_progress_seconds,
+        "total_in_review_s": total_adjusted_in_review_seconds,
+        "average_in_progress_s": (total_adjusted_in_progress_seconds / total_tickets),
+        "average_in_review_s": (total_adjusted_in_review_seconds / total_tickets),
+        "total_tickets": total_tickets,
+    }
+
+    return xops_time_records
+
+
+def display_ticket_close_dates(ticket_close_dates, label):
+    print(f"Label: {label}, with tickets:")
+    for ticket_id, close_date in ticket_close_dates.items():
+        print(f"{ticket_id}, closed: {close_date}")
+
+
+# Fetch all issues with specific label
+def fetch_issues_by_label(jira, label):
+    issues = []
+    start_index = 0
+    max_results = 100
+
+    query = (
+        "project = GAN  AND status in (Closed) "
+        'and labels="{label}" '
+        'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
+        "and resolutiondate > '2022-01-01' "
+        "order by resolved desc"
+    )
+    while True:
+        chunk = jira.search_issues(
+            jql_str=query.format(label=label),
+            startAt=start_index,
+            maxResults=max_results,
+            expand="changelog",
+        )
+
+        if len(chunk) == 0:
+            break
+
+        issues.extend(chunk)
+        start_index += max_results
+
+    return issues
+
+
+def print_time_records(label, time_records):
+    print(f'Label: {label} {time_records["total_tickets"]} tickets completed')
+    print(f"\tTotal In Progress   (m): {time_records['total_in_progress_s']/60:7.2f}")
+    print(f"\tTotal In Review     (m): {time_records['total_in_review_s']/60:7.2f}")
+    print(f"\tAverage In Progress (m): {time_records['average_in_progress_s']/60:7.2f}")
+    print(f"\tAverage In Review   (m): {time_records['average_in_review_s']/60:7.2f}")
+    print()
+
+
+# # https://ganazhq.slack.com/archives/C03BR47GDQW/p1684342201816599
+# # xops_ch_sms_whatsapp
+# # xops_ch_change_name
+# # xops_ch_message_troubleshoot
+# # xops_enable_remittances
+# # xops_remove_profile
+# # xops_packet_update
+# # xops_new_packet
+# # xops_ch_portal
+# # xops_company_employee_id_counter
+# # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
-    # Authenticate with JIRA API
+    xops_labels = [
+        # "xops_packet_update",
+        # "xops_new_packet",
+        # "xops_ch_sms_whatsapp",
+        # "xops_ch_change_name", v
+        # "xops_ch_message_troubleshoot",
+        "xops_enable_remittances",
+        # "xops_remove_profile",
+        # "xops_ch_portal",
+        # "xops_company_employee_id_counter",
+        # "xops_reports",
+    ]
+
+    # Perform JQL query and handle pagination if needed
     user = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
     link = os.environ.get("JIRA_LINK")
@@ -253,73 +386,39 @@ def main():
     jira = JIRA(options=options, basic_auth=(user, api_key))
     custom_fields_map = get_custom_fields_mapping(jira)
 
-    weeks_ago = datetime.now() - timedelta(days=70)
-    from_date = weeks_ago.strftime("%Y-%m-%d")
+    # Loop through each xops_label, fetch issues and process results
+    xops_time_records = {}
+    for label in xops_labels:
+        print(f'Fetching issues with label "{label}"...')
+        # issues = load_jira_data_from_file(f"{label}_data_small.json", jira)
 
-    labels_list = [
-        # "xops_ch_sms_whatsapp",
-        # "xops_ch_change_name",
-        # "xops_ch_message_troubleshoot",
-        # "xops_enable_remittances",
-        # "xops_remove_profile",
-        "xops_packet_update",
-        # "xops_new_packet",
-        # xops_ch_portal `project = GAN AND issuetype = "Support Request" AND (summary ~ CH and summary ~ portal)  ORDER BY duedate ASC`
-        # xops_company_employee_id_counter
-    ]
+        issues = fetch_issues_by_label(jira, label)
+        # save_jira_data_to_file(issues, f"{label}_data_small.json")
 
-    labels = {label: [] for label in labels_list}
+        print(f'Processing {len(issues)} issues with label "{label}"...')
+        ticket_data = process_issues(jira, issues, custom_fields_map)
 
-    for label in labels:
-        jql2 = f"project = GAN AND created >= startOfYear() AND labels = {label} AND Status = Closed ORDER BY duedate ASC"
-        jql = f"project = GAN AND KEY='GAN-5346' AND created >= startOfYear() AND labels = {label} ORDER BY duedate ASC"
-        issues = jira.search_issues(jql)
-        ticket_data = {}
-
-        for issue in issues:
-            ticket_data = extract_ticket_data(issue, custom_fields_map, ticket_data)
-            extract_status_durations(jira, issue, ticket_data)
-
-    print(
-        "Ticket Data:", json.dumps(ticket_data, indent=2, default=datetime_serializer)
-    )
-
-    for key, ticket in ticket_data.items():
-        ticket_id = ticket["ID"]
-        title = ticket["summary"]
-
-        # In-Progress time
-        in_progress_time_seconds = sum(
-            [entry["duration"] for entry in ticket.get("In Progress", [])]
+        # Assuming you have `ticket_data` object
+        pretty_ticket_data = json.dumps(
+            ticket_data, indent=4, default=datetime_serializer
         )
-        in_progress_hours, in_progress_minutes, in_progress_seconds = seconds_to_hms(
-            in_progress_time_seconds
-        )
+        print(pretty_ticket_data)
 
-        # In-Review time
-        in_review_time_seconds = sum(
-            [entry["duration"] for entry in ticket.get("In Review", [])]
-        )
-        in_review_hours, in_review_minutes, in_review_seconds = seconds_to_hms(
-            in_review_time_seconds
-        )
+        for key, ticket in ticket_data.items():
+            in_progress_duration = ticket["in_progress_s"]
+            in_progress_hms = seconds_to_hms(in_progress_duration)
+            in_progress_str = f"{in_progress_hms[0]} hours, {in_progress_hms[1]} minutes, {in_progress_hms[2]} seconds"
+            print(
+                f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
+            )
+        update_aggregated_results(xops_time_records, ticket_data, label)
 
-        # In-pending_release time
-        in_pending_releasetime_seconds = sum(
-            [entry["duration"] for entry in ticket.get("Pending Release", [])]
-        )
-        (
-            in_pending_release_hours,
-            in_pending_release_minutes,
-            in_pending_release_seconds,
-        ) = seconds_to_hms(in_pending_releasetime_seconds)
+        print(f"total tickets: {len(ticket_data)}")
 
-        print(
-            f"{ticket_id}: {title.ljust(45)} \n\t"
-            f"in-progress: {in_progress_hours}h:{in_progress_minutes}m: {in_progress_seconds:.2f}s,\n\t"
-            f"in-review: {in_review_hours}h:{in_review_minutes}m:{in_review_seconds:.2f}s,\n\t"
-            f"in-pending-release: {in_pending_release_hours}h:{in_pending_release_minutes}m:{in_pending_release_seconds:.2f}s"
-        )
+    # # Now you can calculate averages, total costs, and other required aggregations using final_results.
+    # # Display aggregated results for each xops_label
+    for label in xops_labels:
+        print_time_records(label, xops_time_records[label])
 
 
 if __name__ == "__main__":
