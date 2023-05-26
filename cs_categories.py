@@ -1,14 +1,12 @@
 import os
+import sys
 from jira import JIRA
 from jira.resources import Issue
 import json
 from datetime import datetime, date, timedelta
 import numpy as np
 from collections import defaultdict
-
-g_in_progress_id = 0
-g_in_review_id = 1
-g_in_pending_release_id = 2
+import argparse
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
 
@@ -306,10 +304,27 @@ def update_aggregated_results(xops_time_records, ticket_data, label):
     return xops_time_records
 
 
-def display_ticket_close_dates(ticket_close_dates, label):
-    print(f"Label: {label}, with tickets:")
-    for ticket_id, close_date in ticket_close_dates.items():
-        print(f"{ticket_id}, closed: {close_date}")
+def print_time_records(label, time_records):
+    print(f'Label: {label} {time_records["total_tickets"]} tickets completed')
+    print(f"\tTotal In Progress   (m): {time_records['total_in_progress_s']/60:7.2f}")
+    print(f"\tTotal In Review     (m): {time_records['total_in_review_s']/60:7.2f}")
+    print(f"\tAverage In Progress (m): {time_records['average_in_progress_s']/60:7.2f}")
+    print(f"\tAverage In Review   (m): {time_records['average_in_review_s']/60:7.2f}")
+    print()
+
+
+def print_detailed_ticket_data(ticket_data):
+    # Assuming you have `ticket_data` object
+    pretty_ticket_data = json.dumps(ticket_data, indent=4, default=datetime_serializer)
+    print(pretty_ticket_data)
+
+    for key, ticket in ticket_data.items():
+        in_progress_duration = ticket["in_progress_s"]
+        in_progress_hms = seconds_to_hms(in_progress_duration)
+        in_progress_str = f"{in_progress_hms[0]} hours, {in_progress_hms[1]} minutes, {in_progress_hms[2]} seconds"
+        print(
+            f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
+        )
 
 
 # Fetch all issues with specific label
@@ -342,13 +357,26 @@ def fetch_issues_by_label(jira, label):
     return issues
 
 
-def print_time_records(label, time_records):
-    print(f'Label: {label} {time_records["total_tickets"]} tickets completed')
-    print(f"\tTotal In Progress   (m): {time_records['total_in_progress_s']/60:7.2f}")
-    print(f"\tTotal In Review     (m): {time_records['total_in_review_s']/60:7.2f}")
-    print(f"\tAverage In Progress (m): {time_records['average_in_progress_s']/60:7.2f}")
-    print(f"\tAverage In Review   (m): {time_records['average_in_review_s']/60:7.2f}")
-    print()
+def retrieve_jira_query_issues(args, jira, label):
+    issues = {}
+    jira_file = f"{label}_data.json"
+    if args.load:
+        jira_file = f"{label}_data.json"
+        if not os.path.exists(jira_file):
+            print(
+                f"{jira_file} does not exist. You need to retrieve JIRA data first and save it with the '-s' option first."
+            )
+            sys.exit(1)
+        issues = load_jira_data_from_file(jira_file, jira)
+        print(f"Load jira {len(issues)} tickets from {jira_file}")
+    else:
+        issues = fetch_issues_by_label(jira, label)
+        print(f'Fetched {len(issues)} issues with label "{label}"...')
+
+    if args.save:
+        print(f"Saving JIRA {len(issues)} issues to {jira_file}")
+        save_jira_data_to_file(issues, jira_file)
+    return issues
 
 
 # # https://ganazhq.slack.com/archives/C03BR47GDQW/p1684342201816599
@@ -363,16 +391,36 @@ def print_time_records(label, time_records):
 # # xops_company_employee_id_counter
 # # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Display detailed ticket data"
+    )
+    parser.add_argument(
+        "-l",
+        "--load",
+        action="store_true",
+        help="Load from previously stored json dump of JIRA data",
+    )
+    parser.add_argument(
+        "-s",
+        "--save",
+        action="store_true",
+        help="Save a json dump from the JIRA data you will now retrieve, you can later use the -l --load function and avoid JIRA query overhead",
+    )
+    args = parser.parse_args()
+    if args.verbose:
+        print("Verbose mode is on.")
+
     xops_labels = [
-        # "xops_packet_update",
-        # "xops_new_packet",
-        # "xops_ch_sms_whatsapp",
-        # "xops_ch_change_name", v
-        # "xops_ch_message_troubleshoot",
+        "xops_packet_update",
+        "xops_new_packet",
+        "xops_ch_sms_whatsapp",
+        "xops_ch_change_name",
+        "xops_ch_message_troubleshoot",
         "xops_enable_remittances",
-        # "xops_remove_profile",
-        # "xops_ch_portal",
-        # "xops_company_employee_id_counter",
+        "xops_remove_profile",
+        "xops_ch_portal",
+        "xops_company_employee_id_counter",
         # "xops_reports",
     ]
 
@@ -389,30 +437,14 @@ def main():
     # Loop through each xops_label, fetch issues and process results
     xops_time_records = {}
     for label in xops_labels:
-        print(f'Fetching issues with label "{label}"...')
-        # issues = load_jira_data_from_file(f"{label}_data_small.json", jira)
-
-        issues = fetch_issues_by_label(jira, label)
-        # save_jira_data_to_file(issues, f"{label}_data_small.json")
-
+        issues = retrieve_jira_query_issues(args, jira, label)
         print(f'Processing {len(issues)} issues with label "{label}"...')
         ticket_data = process_issues(jira, issues, custom_fields_map)
 
-        # Assuming you have `ticket_data` object
-        pretty_ticket_data = json.dumps(
-            ticket_data, indent=4, default=datetime_serializer
-        )
-        print(pretty_ticket_data)
+        if args.verbose:
+            print_detailed_ticket_data(ticket_data)
 
-        for key, ticket in ticket_data.items():
-            in_progress_duration = ticket["in_progress_s"]
-            in_progress_hms = seconds_to_hms(in_progress_duration)
-            in_progress_str = f"{in_progress_hms[0]} hours, {in_progress_hms[1]} minutes, {in_progress_hms[2]} seconds"
-            print(
-                f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
-            )
         update_aggregated_results(xops_time_records, ticket_data, label)
-
         print(f"total tickets: {len(ticket_data)}")
 
     # # Now you can calculate averages, total costs, and other required aggregations using final_results.
