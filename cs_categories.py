@@ -389,6 +389,8 @@ def retrieve_jira_query_issues(args, jira, label):
 # # xops_new_packet
 # # xops_ch_portal
 # # xops_company_employee_id_counter
+# # xops_raffle
+# # xops_carholder_assorted
 # # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
     parser = argparse.ArgumentParser()
@@ -421,7 +423,9 @@ def main():
         "xops_remove_profile",
         "xops_ch_portal",
         "xops_company_employee_id_counter",
-        # "xops_reports",
+        "xops_raffle",
+        "xops_reports",
+        "xops_carholder_assorted"
     ]
 
     # Perform JQL query and handle pagination if needed
