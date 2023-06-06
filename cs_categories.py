@@ -3,12 +3,56 @@ import sys
 from jira import JIRA
 from jira.resources import Issue
 import json
+import csv
 from datetime import datetime, date, timedelta
 import numpy as np
 from collections import defaultdict
 import argparse
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
+
+
+import csv
+
+
+def export_tickets_per_label_csv(data, filename, title):
+    with open(filename, mode="w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Write a title (timeframe)
+        writer.writerow([title])
+
+        # Add the headers
+        writer.writerow(["label", "total_tickets"])
+
+        # Add the data
+        for row in data:
+            label, total_tickets = row
+            writer.writerow([label, total_tickets])
+
+    print(
+        f"CSV file {filename} has been generated with 'label' and 'total_tickets' columns."
+    )
+
+
+def export_in_progress_time_per_label_csv(data, filename, title):
+    with open(filename, mode="w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Write a title (timeframe)
+        writer.writerow([title])
+
+        # Add the headers
+        writer.writerow(["label", "total_in_progress"])
+
+        # Add the data
+        for row in data:
+            label, total_in_progress = row
+            writer.writerow([label, total_in_progress])
+
+    print(
+        f"CSV file {filename} has been generated with 'label' and 'total_in_progress' columns."
+    )
 
 
 def save_jira_data_to_file(data, file_name):
@@ -520,6 +564,33 @@ def main():
         print(f"\tTotal In Review     (m): {item['total_in_review']/60:>7.2f}")
         print(f"\tAverage In Progress (m): {item['average_in_progress']/60:>7.2f}")
         print(f"\tAverage In Review   (m): {item['average_in_review']/60:>7.2f}\n")
+
+        # Convert data dictionary into list of tuples for export functions
+    # [("label1", 10), ("label2", 15), ...]
+    data_list_1 = [(label, values["total_tickets"]) for label, values in data.items()]
+    data_list_1.sort(key=lambda x: x[1], reverse=True)
+
+    # [("label1", 3600), ("label2", 1800), ...]
+    data_list_2 = [
+        (label, values["total_in_progress"]) for label, values in data.items()
+    ]
+    data_list_2.sort(key=lambda x: x[1], reverse=True)
+
+    # Export two separate CSV files
+    # Export the two CSV files
+    resolution_date_formatted = f"{resolution_date}"
+
+    # Export the two CSV files with the formatted titles
+    export_tickets_per_label_csv(
+        data_list_1,
+        "tickets_per_label.csv",
+        f"xops tickets since {resolution_date_formatted}",
+    )
+    export_in_progress_time_per_label_csv(
+        data_list_2,
+        "in_progress_time_per_label.csv",
+        f"xops time, in-progress, since {resolution_date_formatted}",
+    )
 
 
 if __name__ == "__main__":
