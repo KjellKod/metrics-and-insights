@@ -1,13 +1,14 @@
+import argparse
+import csv
+import json
 import os
 import sys
+from collections import defaultdict
+from datetime import date, datetime, timedelta
+
+import numpy as np
 from jira import JIRA
 from jira.resources import Issue
-import json
-import csv
-from datetime import datetime, date, timedelta
-import numpy as np
-from collections import defaultdict
-import argparse
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
 
