@@ -12,7 +12,6 @@ from jira.resources import Issue
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
 
-
 import csv
 
 
@@ -500,6 +499,7 @@ def parse_arguments():
 # # xops_company_employee_id_counter
 # # xops_raffle
 # # xops_carholder_assorted
+# # xops_remove_incomplete_packets
 # # xops_new_packet -- NOT in-review but 'acceptance-testing' as end criterion
 # # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
@@ -518,6 +518,7 @@ def main():
         "xops_raffle",
         "xops_reports",
         "xops_carholder_assorted",
+        "xops_remove_incomplete_packets"
         # xops_new_packet -- NOT in-review but 'acceptance-testing' as end criterion
     ]
 
