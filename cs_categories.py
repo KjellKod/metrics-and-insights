@@ -61,7 +61,7 @@ def save_jira_data_to_file(data, file_name):
 
 
 def load_jira_data_from_file(file_name, jira_instance):
-    with open(file_name, "r") as infile:
+    with open(f"{file_name}", "r") as infile:
         raw_issues_data = json.load(infile)
 
     issues = [
@@ -418,15 +418,18 @@ def fetch_issues_by_label(jira, label, resolution_date):
 
 def retrieve_jira_query_issues(args, jira, label, resolution_date):
     issues = {}
-    jira_file = f"{label}_data.json"
+    jira_file = f"xops_data/{label}_data.json"
     if args.load:
-        jira_file = f"{label}_data.json"
+        jira_file = f"xops_data/{label}_data.json"
         if not os.path.exists(jira_file):
             print(
-                f"{jira_file} does not exist. You need to retrieve JIRA data first and save it with the '-s' option first."
+                f"\nWARNING {jira_file} does not exist. The data is missing, or you need to retrieve JIRA data first and save it with the '-s' option first.\n"
             )
-            sys.exit(1)
+            return []  # Return an empty list or handle the error accordingly
         issues = load_jira_data_from_file(jira_file, jira)
+        if issues is None:
+            print("Failed to load JIRA data from file")
+            return []  # Return an empty list or handle the error accordingly
         print(f"Load jira {len(issues)} tickets from {jira_file}")
     else:
         issues = fetch_issues_by_label(jira, label, resolution_date)
