@@ -504,6 +504,7 @@ def parse_arguments():
 # # xops_carholder_assorted
 # # xops_remove_incomplete_packets
 # # xops_new_packet -- NOT in-review but 'acceptance-testing' as end criterion
+## xops_training_tracks
 # # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
     args, resolution_date = parse_arguments()
@@ -522,7 +523,8 @@ def main():
         "xops_reports",
         "xops_carholder_assorted",
         "xops_remove_incomplete_packets"
-        # xops_new_packet -- NOT in-review but 'acceptance-testing' as end criterion
+        "xops_new_packet", 
+        "xops_training_tracks" 
     ]
 
     default_metrics = {
