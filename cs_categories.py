@@ -15,6 +15,7 @@ from jira_file_utils import (
     export_in_progress_time_per_label_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
+    fetch_issues,
 )
 
 from jira_time_utils import (
@@ -64,39 +65,6 @@ def print_detailed_ticket_data(ticket_data):
         )
 
 
-# Fetch all issues with specific label
-def fetch_issues_by_label(jira, label, resolution_date):
-    issues = []
-    start_index = 0
-    max_results = 100
-
-    query = (
-        f"project = GAN  AND status in (Closed) "
-        f'and labels="{label}" '
-        f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
-        f"and resolutiondate > '{resolution_date}' "
-        f"order by resolved desc"
-    )
-
-    print(f" Executing query:\n\t [{query}]")
-
-    while True:
-        chunk = jira.search_issues(
-            jql_str=query.format(label=label),
-            startAt=start_index,
-            maxResults=max_results,
-            expand="changelog",
-        )
-
-        if len(chunk) == 0:
-            break
-
-        issues.extend(chunk)
-        start_index += max_results
-
-    return issues
-
-
 def retrieve_jira_query_issues(args, jira, label, resolution_date):
     issues = {}
     jira_file = f"xops_data/{label}_data.json"
@@ -113,7 +81,14 @@ def retrieve_jira_query_issues(args, jira, label, resolution_date):
             return []  # Return an empty list or handle the error accordingly
         print(f"Load jira {len(issues)} tickets from {jira_file}")
     else:
-        issues = fetch_issues_by_label(jira, label, resolution_date)
+        query = (
+            f"project = GAN  AND status in (Closed) "
+            f'and labels="{label}" '
+            f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
+            f"and resolutiondate > '{resolution_date}' "
+            f"order by resolved desc"
+        )
+        issues = fetch_issues(jira, query)
         print(f'Fetched {len(issues)} issues with label "{label}"...')
 
     if args.save:

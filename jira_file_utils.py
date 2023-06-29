@@ -51,3 +51,27 @@ def load_jira_data_from_file(file_name, jira_instance):
 
     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in raw_issues_data]
     return issues
+
+
+def fetch_issues(jira, query):
+    issues = []
+    start_index = 0
+    max_results = 100
+
+    print(f" Executing query:\n\t [{query}]")
+
+    while True:
+        chunk = jira.search_issues(
+            jql_str=query,
+            startAt=start_index,
+            maxResults=max_results,
+            expand="changelog",
+        )
+
+        if len(chunk) == 0:
+            break
+
+        issues.extend(chunk)
+        start_index += max_results
+
+    return issues
