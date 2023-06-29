@@ -445,12 +445,12 @@ def main():
     # Export the two CSV files with the formatted titles
     export_tickets_per_label_csv(
         data_list_1,
-        "tickets_per_label.csv",
+        "xops_data/tickets_per_label.csv",
         f"xops tickets since {resolution_date_formatted}",
     )
     export_in_progress_time_per_label_csv(
         data_list_2,
-        "in_progress_time_per_label.csv",
+        "xops_data/in_progress_time_per_label.csv",
         f"xops time, in-progress, since {resolution_date_formatted}",
     )
 
