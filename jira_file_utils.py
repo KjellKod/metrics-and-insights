@@ -1,3 +1,4 @@
+import os
 import csv
 import json
 from jira import JIRA
@@ -53,7 +54,7 @@ def load_jira_data_from_file(file_name, jira_instance):
     return issues
 
 
-def fetch_issues(jira, query):
+def fetch_issues_from_api(jira, query):
     issues = []
     start_index = 0
     max_results = 100
@@ -74,4 +75,29 @@ def fetch_issues(jira, query):
         issues.extend(chunk)
         start_index += max_results
 
+    return issues
+
+
+def retrieve_jira_issues(args, jira, query, tag, path):
+    issues = {}
+    jira_file = f"{path}/{tag}_data.json"
+    if args.load:
+        jira_file = f"{path}/{tag}_data.json"
+        if not os.path.exists(jira_file):
+            print(
+                f"\nWARNING {jira_file} does not exist. The data is missing, or you need to retrieve JIRA data first and save it with the '-s' option first.\n"
+            )
+            return []  # Return an empty list or handle the error accordingly
+        issues = load_jira_data_from_file(jira_file, jira)
+        if issues is None:
+            print("Failed to load JIRA data from file")
+            return []  # Return an empty list or handle the error accordingly
+        print(f"Load jira {len(issues)} tickets from {jira_file}")
+    else:
+        issues = fetch_issues_from_api(jira, query)
+        print(f'Fetched {len(issues)} issues for  "{tag}"...')
+
+    if args.save:
+        print(f"Saving JIRA {len(issues)} issues to {jira_file}")
+        save_jira_data_to_file(issues, jira_file)
     return issues

@@ -15,7 +15,8 @@ from jira_file_utils import (
     export_in_progress_time_per_label_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
-    fetch_issues,
+    fetch_issues_from_api,
+    retrieve_jira_issues,
 )
 
 from jira_time_utils import (
@@ -63,41 +64,6 @@ def print_detailed_ticket_data(ticket_data):
         print(
             f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
         )
-
-
-def retrieve_jira_query_issues(args, jira, label, resolution_date):
-    issues = {}
-    jira_file = f"xops_data/{label}_data.json"
-    if args.load:
-        jira_file = f"xops_data/{label}_data.json"
-        if not os.path.exists(jira_file):
-            print(
-                f"\nWARNING {jira_file} does not exist. The data is missing, or you need to retrieve JIRA data first and save it with the '-s' option first.\n"
-            )
-            return []  # Return an empty list or handle the error accordingly
-        issues = load_jira_data_from_file(jira_file, jira)
-        if issues is None:
-            print("Failed to load JIRA data from file")
-            return []  # Return an empty list or handle the error accordingly
-        print(f"Load jira {len(issues)} tickets from {jira_file}")
-    else:
-        query = (
-            f"project = GAN  AND status in (Closed) "
-            f'and labels="{label}" '
-            f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
-            f"and resolutiondate > '{resolution_date}' "
-            f"order by resolved desc"
-        )
-        issues = fetch_issues(jira, query)
-        print(f'Fetched {len(issues)} issues with label "{label}"...')
-
-    if args.save:
-        print(f"Saving JIRA {len(issues)} issues to {jira_file}")
-        save_jira_data_to_file(issues, jira_file)
-    return issues
-
-
-# ... (Imports and other functions here)
 
 
 def parse_arguments():
@@ -191,7 +157,14 @@ def main():
     # Loop through each xops_label, fetch issues and process results
     xops_time_records = {}
     for label in xops_labels:
-        issues = retrieve_jira_query_issues(args, jira, label, resolution_date)
+        query = (
+            f"project = GAN  AND status in (Closed) "
+            f'and labels="{label}" '
+            f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
+            f"and resolutiondate > '{resolution_date}' "
+            f"order by resolved desc"
+        )
+        issues = retrieve_jira_issues(args, jira, query, label, "xops_data")
         print(f'Processing {len(issues)} issues with label "{label}"...')
         ticket_data = process_issues(jira, issues, custom_fields_map)
 
