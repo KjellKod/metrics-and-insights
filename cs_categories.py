@@ -491,20 +491,6 @@ def parse_arguments():
 
 
 # # https://ganazhq.slack.com/archives/C03BR47GDQW/p1684342201816599
-# # xops_ch_sms_whatsapp
-# # xops_ch_change_name
-# # xops_ch_message_troubleshoot
-# # xops_enable_remittances
-# # xops_remove_profile
-# # xops_packet_update
-# # xops_new_packet
-# # xops_ch_portal
-# # xops_company_employee_id_counter
-# # xops_raffle
-# # xops_carholder_assorted
-# # xops_remove_incomplete_packets
-# # xops_new_packet -- NOT in-review but 'acceptance-testing' as end criterion
-## xops_training_tracks
 # # https://ganaz.atlassian.net/browse/GAN-5750
 def main():
     args, resolution_date = parse_arguments()
@@ -524,7 +510,8 @@ def main():
         "xops_carholder_assorted",
         "xops_remove_incomplete_packets"
         "xops_new_packet", 
-        "xops_training_tracks" 
+        "xops_training_tracks",
+        "xops_paystubs" 
     ]
 
     default_metrics = {
