@@ -13,7 +13,7 @@ def export_tickets_per_category_csv(data, filename, title, category):
         writer.writerow([title])
 
         # Add the headers
-        writer.writerow(f"[{category}, 'total_tickets']")
+        writer.writerow([category, "total_tickets"])
 
         # Add the data
         for row in data:
@@ -31,12 +31,12 @@ def export_in_progress_time_per_category_csv(data, filename, title, category):
         writer.writerow([title])
 
         # Add the headers
-        writer.writerow(f"[{category}, 'total_in_progress']")
+        writer.writerow([category, "total_in_progress"])
 
         # Add the data
         for row in data:
             label, total_in_progress = row
-            writer.writerow(f"[{category}, total_in_progress]")
+            writer.writerow([category, total_in_progress])
 
     print(f"CSV file {filename} has been generated {category} and 'total_in_progress' columns.")
 
