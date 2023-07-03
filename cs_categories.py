@@ -11,8 +11,8 @@ from jira import JIRA
 from jira.resources import Issue
 
 from jira_file_utils import (
-    export_tickets_per_label_csv,
-    export_in_progress_time_per_label_csv,
+    export_tickets_per_category_csv,
+    export_in_progress_time_per_category_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
     fetch_issues_from_api,
@@ -51,14 +51,6 @@ def print_records(label, records):
     print(f"\tAverage In Progress (m): {records['average_in_progress']/60:7.2f}")
     print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
     print()
-
-    # print(f"Label: {item['label']} {item['total_tickets']} tickets completed")
-    # print(f"\tTotal points: {item['total_ticket_points']}")
-    # # print(f"Total dump: {json.dumps(item, indent=4)}")
-    # print(f"\tTotal In Progress   (m): {item['total_in_progress']/60:>7.2f}")
-    # print(f"\tTotal In Review     (m): {item['total_in_review']/60:>7.2f}")
-    # print(f"\tAverage In Progress (m): {item['average_in_progress']/60:>7.2f}")
-    # print(f"\tAverage In Review   (m): {item['average_in_review']/60:>7.2f}\n")
 
 
 def print_detailed_ticket_data(ticket_data):
@@ -219,15 +211,14 @@ def main():
     resolution_date_formatted = f"{resolution_date}"
 
     # Export the two CSV files with the formatted titles
-    export_tickets_per_label_csv(
-        data_list_1,
-        "xops_data/tickets_per_label.csv",
-        f"xops tickets since {resolution_date_formatted}",
+    export_tickets_per_category_csv(
+        data_list_1, "xops_data/tickets_per_label.csv", f"xops tickets since {resolution_date_formatted}", "label"
     )
-    export_in_progress_time_per_label_csv(
+    export_in_progress_time_per_category_csv(
         data_list_2,
         "xops_data/in_progress_time_per_label.csv",
         f"xops time, in-progress, since {resolution_date_formatted}",
+        "label",
     )
 
 

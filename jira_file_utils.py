@@ -5,7 +5,7 @@ from jira import JIRA
 from jira.resources import Issue
 
 
-def export_tickets_per_label_csv(data, filename, title):
+def export_tickets_per_category_csv(data, filename, title, category):
     with open(filename, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
 
@@ -13,17 +13,17 @@ def export_tickets_per_label_csv(data, filename, title):
         writer.writerow([title])
 
         # Add the headers
-        writer.writerow(["label", "total_tickets"])
+        writer.writerow(f"[{category}, 'total_tickets']")
 
         # Add the data
         for row in data:
             label, total_tickets = row
             writer.writerow([label, total_tickets])
 
-    print(f"CSV file {filename} has been generated with 'label' and 'total_tickets' columns.")
+    print(f"CSV file {filename} has been generated with {category} and 'total_tickets' columns.")
 
 
-def export_in_progress_time_per_label_csv(data, filename, title):
+def export_in_progress_time_per_category_csv(data, filename, title, category):
     with open(filename, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
 
@@ -31,14 +31,14 @@ def export_in_progress_time_per_label_csv(data, filename, title):
         writer.writerow([title])
 
         # Add the headers
-        writer.writerow(["label", "total_in_progress"])
+        writer.writerow(f"[{category}, 'total_in_progress']")
 
         # Add the data
         for row in data:
             label, total_in_progress = row
-            writer.writerow([label, total_in_progress])
+            writer.writerow(f"[{category}, total_in_progress]")
 
-    print(f"CSV file {filename} has been generated with 'label' and 'total_in_progress' columns.")
+    print(f"CSV file {filename} has been generated {category} and 'total_in_progress' columns.")
 
 
 def save_jira_data_to_file(data, file_name):
