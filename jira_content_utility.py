@@ -178,6 +178,7 @@ def update_aggregated_results(time_records, ticket_data, label):
     total_adjusted_in_progress_seconds = 0
     total_adjusted_in_review_seconds = 0
     total_tickets = len(ticket_data)
+    total_ticket_points = 0
 
     for key, ticket in ticket_data.items():
         in_progress_intervals = ticket.get("In Progress", [])
