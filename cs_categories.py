@@ -43,13 +43,22 @@ from jira_content_utility import (
 )
 
 
-def print_time_records(label, time_records):
-    print(f'Label: {label} {time_records["total_tickets"]} tickets completed')
-    print(f"\tTotal Time In Progress   (m): {time_records['total_in_progress_s']/60:7.2f}")
-    print(f"\tTotal Time In Review     (m): {time_records['total_in_review_s']/60:7.2f}")
-    print(f"\tAverage In Progress (m): {time_records['average_in_progress_s']/60:7.2f}")
-    print(f"\tAverage In Review   (m): {time_records['average_in_review_s']/60:7.2f}")
+def print_records(label, records):
+    print(f'Label: {label} {records["total_tickets"]} tickets completed')
+    print(f"\tTotal points: {records['total_ticket_points']}")
+    print(f"\tTotal Time In Progress   (m): {records['total_in_progress']/60:7.2f}")
+    print(f"\tTotal Time In Review     (m): {records['total_in_review']/60:7.2f}")
+    print(f"\tAverage In Progress (m): {records['average_in_progress']/60:7.2f}")
+    print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
     print()
+
+    # print(f"Label: {item['label']} {item['total_tickets']} tickets completed")
+    # print(f"\tTotal points: {item['total_ticket_points']}")
+    # # print(f"Total dump: {json.dumps(item, indent=4)}")
+    # print(f"\tTotal In Progress   (m): {item['total_in_progress']/60:>7.2f}")
+    # print(f"\tTotal In Review     (m): {item['total_in_review']/60:>7.2f}")
+    # print(f"\tAverage In Progress (m): {item['average_in_progress']/60:>7.2f}")
+    # print(f"\tAverage In Review   (m): {item['average_in_review']/60:>7.2f}\n")
 
 
 def print_detailed_ticket_data(ticket_data):
@@ -194,15 +203,9 @@ def main():
     sorted_data = sorted(data_list, key=lambda x: x["total_tickets"], reverse=True)
 
     for item in sorted_data:
-        print(f"Label: {item['label']} {item['total_tickets']} tickets completed")
-        print(f"\tTotal points: {item['total_ticket_points']}")
-        # print(f"Total dump: {json.dumps(item, indent=4)}")
-        print(f"\tTotal In Progress   (m): {item['total_in_progress']/60:>7.2f}")
-        print(f"\tTotal In Review     (m): {item['total_in_review']/60:>7.2f}")
-        print(f"\tAverage In Progress (m): {item['average_in_progress']/60:>7.2f}")
-        print(f"\tAverage In Review   (m): {item['average_in_review']/60:>7.2f}\n")
+        print_records(label, item)
 
-        # Convert data dictionary into list of tuples for export functions
+    # Convert data dictionary into list of tuples for export functions
     # [("label1", 10), ("label2", 15), ...]
     data_list_1 = [(label, values["total_tickets"]) for label, values in data.items()]
     data_list_1.sort(key=lambda x: x[1], reverse=True)
