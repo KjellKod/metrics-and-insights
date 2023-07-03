@@ -1,4 +1,6 @@
 from datetime import datetime, date, timedelta
+from dateutil.relativedelta import relativedelta
+
 import json
 import numpy as np
 
@@ -60,3 +62,19 @@ def business_time_spent_in_seconds(start, end):
             current = current.replace(hour=0, minute=0)
 
     return total_business_seconds
+
+
+def get_week_intervals(minimal_date, maximal_date, interval):
+    minimal_date = datetime.strptime(minimal_date, "%Y-%m-%d")
+    maximal_date = datetime.strptime(maximal_date, "%Y-%m-%d")
+
+    intervals = []
+
+    current_date = minimal_date
+    while current_date <= maximal_date:
+        intervals.append(current_date.strftime("%Y-%m-%d"))
+
+        # Use `relativedelta` to add interval number of weeks
+        current_date += relativedelta(weeks=+interval)
+
+    return intervals
