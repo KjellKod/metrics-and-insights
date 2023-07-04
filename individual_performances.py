@@ -156,6 +156,7 @@ def main():
     data = {}
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
     record_data = []
+    overwrite_flag = {person: True for person in engineering_users}
     for i in range(len(intervals) - 1):
         start_date = intervals[i]
         end_date = intervals[i + 1]
@@ -169,7 +170,8 @@ def main():
                 f"and resolutiondate <= '{end_date}' "
                 f"order by resolved desc"
             )
-            issues = retrieve_jira_issues(args, jira, query, person, "engineering_data")
+            issues = retrieve_jira_issues(args, jira, query, person, "engineering_data", overwrite_flag[person])
+            overwrite_flag[person] = False  # Switch flag after first write operation
             print(f'Processing {len(issues)} issues with "{person}"...')
             ticket_data = process_issues(jira, issues, custom_fields_map)
 

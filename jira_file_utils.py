@@ -101,9 +101,27 @@ def export_in_progress_time_per_category_csv(data, filename, title, category):
     print(f"CSV file {filename} has been generated {category} and 'total_in_progress' columns.")
 
 
-def save_jira_data_to_file(data, file_name):
-    with open(file_name, "w") as outfile:
-        json.dump([issue.raw for issue in data], outfile)
+# def save_jira_data_to_file(data, file_name, overwrite_flag):
+#     file_write_type = "w" if overwrite_flag else "a+"
+#     with open(file_name, file_write_type) as outfile:
+#         json.dump([issue.raw for issue in data], outfile)
+
+
+def save_jira_data_to_file(data, file_name, overwrite_flag):
+    if overwrite_flag:
+        with open(file_name, "w") as outfile:
+            json.dump([issue.raw for issue in data], outfile)
+    else:
+        with open(file_name, "r+") as outfile:
+            try:
+                file_data = json.load(outfile)
+            except ValueError:
+                file_data = []
+
+            file_data.extend(issue.raw for issue in data)
+
+            outfile.seek(0)
+            json.dump(file_data, outfile)
 
 
 def load_jira_data_from_file(file_name, jira_instance):
@@ -138,7 +156,7 @@ def fetch_issues_from_api(jira, query):
     return issues
 
 
-def retrieve_jira_issues(args, jira, query, tag, path):
+def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag):
     issues = {}
     jira_file = f"{path}/{tag}_data.json"
     if args.load:
@@ -159,5 +177,5 @@ def retrieve_jira_issues(args, jira, query, tag, path):
 
     if args.save:
         print(f"Saving JIRA {len(issues)} issues to {jira_file}")
-        save_jira_data_to_file(issues, jira_file)
+        save_jira_data_to_file(issues, jira_file, overwrite_flag)
     return issues
