@@ -5,7 +5,7 @@ import os
 import sys
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-
+import pytz
 import numpy as np
 from jira import JIRA
 from jira.resources import Issue
@@ -117,7 +117,7 @@ def main():
     args, resolution_date = parse_arguments()
 
     engineering_users = [
-        "Luke Dean",
+        # "Luke Dean",
         "Liz Schwab",
         # "Luis Chávez",
         # "Ragan Webber",
@@ -147,6 +147,7 @@ def main():
     custom_fields_map = get_custom_fields_mapping(jira)
 
     # Calculate minimal_date and maximal_date based on weeks_back
+    pacific = pytz.timezone("US/Pacific")
     today = date.today().isoformat()  # today's date
     minimal_date = resolution_date  # weeks_back weeks before from today
     maximal_date = today  # today's date
@@ -158,19 +159,27 @@ def main():
     record_data = []
     overwrite_flag = {person: True for person in engineering_users}
     for i in range(len(intervals) - 1):
-        start_date = intervals[i]
-        end_date = intervals[i + 1]
+        start_date = datetime.strptime(intervals[i], "%Y-%m-%d").date()
+        end_date = datetime.strptime(intervals[i + 1], "%Y-%m-%d").date()
+        # Convert start_date and end_date to datetime objects and set them to PDT
+        start_date = pacific.localize(datetime.combine(start_date, datetime.min.time()))
+        end_date = pacific.localize(datetime.combine(end_date, datetime.max.time()))
+        # then sigh, fix it again to be in format that JIRA api likes
+        start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
+        end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
 
         for person in engineering_users:
             query = (
                 f"project = GAN  AND status in (Closed) "
                 f'and assignee="{person}" '
                 f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined") '
-                f"and resolutiondate > '{start_date}' "
-                f"and resolutiondate <= '{end_date}' "
+                f"and resolutiondate > '{start_date_str}' "
+                f"and resolutiondate <= '{end_date_str}' "
                 f"order by resolved desc"
             )
-            issues = retrieve_jira_issues(args, jira, query, person, "engineering_data", overwrite_flag[person])
+            issues = retrieve_jira_issues(
+                args, jira, query, person, "engineering_data", overwrite_flag[person], start_date, end_date
+            )
             overwrite_flag[person] = False  # Switch flag after first write operation
             print(f'Processing {len(issues)} issues with "{person}"...')
             ticket_data = process_issues(jira, issues, custom_fields_map)

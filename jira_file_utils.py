@@ -1,6 +1,9 @@
 import os
 import csv
 import json
+import pytz
+from datetime import datetime
+from dateutil import parser
 from jira import JIRA
 from jira.resources import Issue
 
@@ -124,12 +127,76 @@ def save_jira_data_to_file(data, file_name, overwrite_flag):
             json.dump(file_data, outfile)
 
 
-def load_jira_data_from_file(file_name, jira_instance):
+# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
+#     with open(f"{file_name}", "r") as infile:
+#         raw_issues_data = json.load(infile)
+
+#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in raw_issues_data]
+#     return issues
+
+
+# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
+#     with open(f"{file_name}", "r") as infile:
+#         raw_issues_data = json.load(infile)
+
+#     # Convert given start_date & end_date to datetime
+#     start_date = datetime.combine(start_date, datetime.min.time())
+#     end_date = datetime.combine(end_date, datetime.max.time())
+
+#     Filter out the issues that are not within the required date-time range
+#     filtered_issues_data = [
+#         raw_issue
+#         for raw_issue in raw_issues_data
+#         if start_date <= datetime.strptime(raw_issue["fields"]["resolutiondate"], "%Y-%m-%dT%H:%M:%S.%f%z") <= end_date
+#     ]
+
+#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
+#     return issues
+
+
+def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     with open(f"{file_name}", "r") as infile:
         raw_issues_data = json.load(infile)
 
-    issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in raw_issues_data]
+    # Convert given start_date & end_date to datetime and make them timezone aware
+    start_date = pytz.timezone("US/Pacific").localize(datetime.combine(start_date, datetime.min.time()))
+    end_date = pytz.timezone("US/Pacific").localize(datetime.combine(end_date, datetime.max.time()))
+
+    # Filter out the issues that are not within the required date-time range
+    filtered_issues_data = [
+        raw_issue
+        for raw_issue in raw_issues_data
+        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone("US/Pacific")) > start_date
+        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone("US/Pacific")) <= end_date
+    ]
+
+    issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
     return issues
+
+
+# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
+#     with open(f"{file_name}", "r") as infile:
+#         raw_issues_data = json.load(infile)
+
+#     # Convert given start_date & end_date to datetime
+#     start_date = datetime.combine(start_date, datetime.min.time()).replace(
+#         tzinfo=pytz.timezone("America/Denver")
+#     )  # assuming start_date/end_date is 'naive'
+#     end_date = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=pytz.timezone("America/Denver"))
+
+#     # Filter out the issues that are not within the required date-time range
+#     filtered_issues_data = [
+#         raw_issue
+#         for raw_issue in raw_issues_data
+#         if start_date
+#         < utc_to_pdt(
+#             parser.parse(raw_issue["fields"]["resolutiondate"])
+#         )  # directly parse the date string into an aware datetime object and convert to PDT
+#         < end_date
+#     ]
+
+#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
+#     return issues
 
 
 def fetch_issues_from_api(jira, query):
@@ -156,7 +223,17 @@ def fetch_issues_from_api(jira, query):
     return issues
 
 
-def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag):
+# def printIssues(issues):
+#     for issue in issues:
+#         print(issue.key)
+
+
+def printIssues(issues):
+    for issue in issues:
+        print(f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}")
+
+
+def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_date, end_date):
     issues = {}
     jira_file = f"{path}/{tag}_data.json"
     if args.load:
@@ -166,15 +243,16 @@ def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag):
                 f"\nWARNING {jira_file} does not exist. The data is missing, or you need to retrieve JIRA data first and save it with the '-s' option first.\n"
             )
             return []  # Return an empty list or handle the error accordingly
-        issues = load_jira_data_from_file(jira_file, jira)
+        issues = load_jira_data_from_file(jira_file, jira, start_date, end_date)
         if issues is None:
             print("Failed to load JIRA data from file")
             return []  # Return an empty list or handle the error accordingly
-        print(f"Load jira {len(issues)} tickets from {jira_file}")
+        print(f"Load jira from file,  {start_date} to {end_date}: {len(issues)} tickets from {jira_file}")
     else:
         issues = fetch_issues_from_api(jira, query)
         print(f'Fetched {len(issues)} issues for  "{tag}"...')
 
+    printIssues(issues)
     if args.save:
         print(f"Saving JIRA {len(issues)} issues to {jira_file}")
         save_jira_data_to_file(issues, jira_file, overwrite_flag)
