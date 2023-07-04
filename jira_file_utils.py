@@ -158,16 +158,18 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     with open(f"{file_name}", "r") as infile:
         raw_issues_data = json.load(infile)
 
+    timezone_str = "US/Mountain"
+
     # Convert given start_date & end_date to datetime and make them timezone aware
-    start_date = pytz.timezone("US/Pacific").localize(datetime.combine(start_date, datetime.min.time()))
-    end_date = pytz.timezone("US/Pacific").localize(datetime.combine(end_date, datetime.max.time()))
+    start_date = pytz.timezone(timezone_str).localize(datetime.combine(start_date, datetime.min.time()))
+    end_date = pytz.timezone(timezone_str).localize(datetime.combine(end_date, datetime.max.time()))
 
     # Filter out the issues that are not within the required date-time range
     filtered_issues_data = [
         raw_issue
         for raw_issue in raw_issues_data
-        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone("US/Pacific")) > start_date
-        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone("US/Pacific")) <= end_date
+        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) > start_date
+        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) <= end_date
     ]
 
     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
