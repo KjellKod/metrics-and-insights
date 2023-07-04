@@ -13,7 +13,7 @@ from jira.resources import Issue
 from jira_file_utils import (
     export_tickets_per_category_csv,
     export_in_progress_time_per_category_csv,
-    export_tickets_per_category_and_time_period_csv,
+    export_metrics_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
     fetch_issues_from_api,
@@ -119,8 +119,8 @@ def main():
     engineering_users = [
         "Luke Dean",
         "Liz Schwab",
-        "Luis Chávez",
-        "Ragan Webber",
+        # "Luis Chávez",
+        # "Ragan Webber",
     ]
 
     default_metrics = {
@@ -180,7 +180,8 @@ def main():
                 ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values()
             )
             weeks = (date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()).days // 7
-            average_points_weekly = total_points / max(1, weeks)
+            print(f"weeks: {weeks}")
+            average_points_weekly = format(total_points / interval, ".1f")
 
             time_records = update_aggregated_results(time_records, ticket_data, person)
             time_records[person].update(
@@ -190,18 +191,28 @@ def main():
                 }
             )
 
+            num_tickets = len(ticket_data)
+            avg_in_progress = format(
+                (time_records[person]["total_in_progress"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f"
+            )
+            avg_in_review = format(
+                (time_records[person]["total_in_review"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f"
+            )
             record_data.append(
                 {
                     "Person": person,
                     f"{start_date} - {end_date}": len(ticket_data),
                     "Total tickets": time_records[person]["total_tickets"],
-                    "Total in progress": time_records[person]["total_in_progress"],
+                    "Total points": time_records[person]["total_ticket_points"],
+                    "Average points weekly": time_records[person]["average_ticket_points_weekly"],
+                    "Average in-progress [h]": avg_in_progress,
+                    "Average in-review [h]": avg_in_review,
                 }
             )
 
             data[person] = time_records[person]
             print(f"total tickets: {len(ticket_data)}")
-            # print(f"dump: {json.dumps(time_records , indent=4)}")
+            print(f"dump: {json.dumps(time_records , indent=4)}")
 
     # Convert data dictionary into list of dicts
     data_list = [{**{"person": person}, **values} for person, values in data.items()]
@@ -243,8 +254,25 @@ def main():
     print(f"Total DUMP: {json.dumps(record_data, indent=4)}")
 
     # Now use the updated data list to create CSV
-    export_tickets_per_category_and_time_period_csv(
-        record_data, "engineering_data/TEST_tickets_per_person.csv", "Engineering tickets per period"
+    export_metrics_csv(record_data, "engineering_data/tickets_per_person.csv", "Tickets per period", "Total tickets")
+    export_metrics_csv(record_data, "engineering_data/points_per_person.csv", "Points per period", "Total points")
+    export_metrics_csv(
+        record_data,
+        "engineering_data/average_points_per_person.csv",
+        "Average Points per period",
+        "Average points weekly",
+    )
+    export_metrics_csv(
+        record_data,
+        "engineering_data/in_progress_time_per_person.csv",
+        "Average in-progress time",
+        "Average in-progress [h]",
+    )
+    export_metrics_csv(
+        record_data,
+        "engineering_data/in_review_time_per_person.csv",
+        "Average in-review time",
+        "Average in-review [h]",
     )
 
 
