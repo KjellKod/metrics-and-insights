@@ -161,8 +161,11 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     timezone_str = "US/Mountain"
 
     # Convert given start_date & end_date to datetime and make them timezone aware
+    print(f"start_date -- end_date: {start_date} -- {end_date}")
     start_date = pytz.timezone(timezone_str).localize(datetime.combine(start_date, datetime.min.time()))
     end_date = pytz.timezone(timezone_str).localize(datetime.combine(end_date, datetime.max.time()))
+
+    print(f"start_date2 -- end_date2: {start_date} -- {end_date}")
 
     # Filter out the issues that are not within the required date-time range
     filtered_issues_data = [

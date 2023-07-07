@@ -117,10 +117,10 @@ def main():
     args, resolution_date = parse_arguments()
 
     engineering_users = [
-        # "Luke Dean",
+        "Luke Dean",
         "Liz Schwab",
-        # "Luis Chávez",
-        # "Ragan Webber",
+        "Luis Chávez",
+        "Ragan Webber",
     ]
 
     default_metrics = {
@@ -174,6 +174,7 @@ def main():
                 f"project = GAN  AND status in (Closed) "
                 f'and assignee="{person}" '
                 f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined", "Obsolete") '
+                f'and issuetype not in ("Incident", "Epic", "Support Request") '
                 f"and resolutiondate > '{start_date_str}' "
                 f"and resolutiondate <= '{end_date_str}' "
                 f"order by resolved desc"

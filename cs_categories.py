@@ -132,6 +132,7 @@ def main():
         "xops_remove_incomplete_packets" "xops_new_packet",
         "xops_training_tracks",
         "xops_paystubs",
+	"xops_transfer_funds",
     ]
 
     default_metrics = {
