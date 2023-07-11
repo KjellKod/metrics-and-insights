@@ -6,25 +6,7 @@ from datetime import datetime
 from dateutil import parser
 from jira import JIRA
 from jira.resources import Issue
-
-
-def export_tickets_per_category_csv(data, filename, title, category):
-    with open(filename, mode="w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-
-        # Write a title (timeframe)
-        writer.writerow([title])
-
-        # Add the headers
-        writer.writerow([category, "total_tickets"])
-
-        # Add the data
-        for row in data:
-            label, total_tickets = row
-            writer.writerow([label, total_tickets])
-
-    print(f"CSV file {filename} has been generated with {category} and 'total_tickets' columns.")
-
+from dateutil.parser import parse
 
 def export_metrics_csv(data, filename, title, metric_field):
     # Pivot data to wide format
@@ -36,7 +18,13 @@ def export_metrics_csv(data, filename, title, metric_field):
         # Get the date range key from the row dictionary
         date_range_key = [key for key in row.keys() if "-" in key][0]
 
-        pivot_data[row["Person"]][date_range_key] = row[metric_field]  # Update only the necessary field
+        # Split date range string into start and end dates
+        start_date_str, end_date_str = date_range_key.split(" - ")
+
+        # Parse the dates, format them without time, and combine them back together
+        new_date_range = "{} - {}".format(parse(start_date_str).strftime('%m-%d'), parse(end_date_str).strftime('%m-%d'))
+
+        pivot_data[row["Person"]][new_date_range] = row[metric_field]  # Update only the necessary field
 
     with open(filename, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -55,59 +43,33 @@ def export_metrics_csv(data, filename, title, metric_field):
     print(f"CSV file '{filename}' has been generated.")
 
 
-# # Call this function like below:
-# # data = [{"Name": "Luke Dean", "2021-06-01 - 2021-07-15": 10, "2021-07-16 - 2021-07-31": 12}, ...]
-# # export_tickets_per_category_csv(data, 'filename.csv', 'Tickets Per Category')
-# def export_tickets_per_category_and_time_period_csv(data, filename, title):
-#     # Pivot data to wide format
-#     pivot_data = {}
-#     for row in data:
-#         if row["Person"] not in pivot_data:
-#             pivot_data[row["Person"]] = {"Person": row["Person"]}
 
-#         for k, v in row.items():
-#             if k not in ["Person", "Total tickets", "Total in progress"]:
-#                 pivot_data[row["Person"]][k] = v  # Update the existing dictionary instead creating a new one
+def export_group_metrics_csv(data, filename, metric):
+    # Open/create a file with the provided filename in write mode
+    with open(filename, 'w', newline='') as csvfile:
+        # Initialize a writer object with the first row as headers
+        fieldnames = ['Date Range', metric]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        # Write the column headers
+        writer.writeheader()
+        
+        # Loop through each date range in the dictionary
+        for date_range, metrics in data.items():
+            # Extract only the specific metric from the value dictionary
+            metric_value = metrics[metric]
+            
+            # Split date range string into start and end dates
+            start_date_str, end_date_str = date_range.split(" - ")
+            
+            # Parse the dates, format them without time, and combine them back together
+            new_date_range = "{} - {}".format(parse(start_date_str).strftime('%m-%d'), parse(end_date_str).strftime('%m-%d'))
+            
+            # Write the date range and extracted metric to the CSV file
+            writer.writerow({'Date Range': new_date_range, metric: metric_value})
 
-#     with open(filename, mode="w", newline="") as csvfile:
-#         writer = csv.writer(csvfile)
+    print(f"CSV file '{filename}' has been generated.")
 
-#         # Write a title (timeframe)
-#         writer.writerow([title])
-
-#         # Get the headers from the keys of the first dictionary
-#         headers = [k for k in list(pivot_data.values())[0].keys() if k != "Person"]
-#         writer.writerow(["Person"] + headers)  # Person will be the first column
-
-#         # Add the data row by row
-#         for name, row in pivot_data.items():
-#             writer.writerow([name] + [row.get(h, "") for h in headers])  # Use get method with default value ''
-
-#     print(f"CSV file '{filename}' has been generated.")
-
-
-def export_in_progress_time_per_category_csv(data, filename, title, category):
-    with open(filename, mode="w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-
-        # Write a title (timeframe)
-        writer.writerow([title])
-
-        # Add the headers
-        writer.writerow([category, "total_in_progress"])
-
-        # Add the data
-        for row in data:
-            label, total_in_progress = row
-            writer.writerow([category, total_in_progress])
-
-    print(f"CSV file {filename} has been generated {category} and 'total_in_progress' columns.")
-
-
-# def save_jira_data_to_file(data, file_name, overwrite_flag):
-#     file_write_type = "w" if overwrite_flag else "a+"
-#     with open(file_name, file_write_type) as outfile:
-#         json.dump([issue.raw for issue in data], outfile)
 
 
 def save_jira_data_to_file(data, file_name, overwrite_flag):

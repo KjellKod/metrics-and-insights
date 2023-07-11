@@ -11,9 +11,8 @@ from jira import JIRA
 from jira.resources import Issue
 
 from jira_file_utils import (
-    export_tickets_per_category_csv,
-    export_in_progress_time_per_category_csv,
     export_metrics_csv,
+    export_group_metrics_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
     fetch_issues_from_api,
@@ -54,6 +53,10 @@ def print_records(category, records):
     print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
     print()
 
+def print_group_records(group, records):
+    print(f'Group: {group} {records["total_tickets"]} total tickets')
+    print(f"\tTotal points: {records['total_ticket_points']}")
+    print()
 
 def print_detailed_ticket_data(ticket_data):
     # Assuming you have `ticket_data` object
@@ -124,7 +127,7 @@ def main():
     ]
 
     default_metrics = {
-        "tickets_completed": 0,
+        "total_tickets": 0,
         "total_in_progress": 0,
         "total_in_review": 0,
         "average_in_progress": 0,
@@ -158,8 +161,12 @@ def main():
     data = {}
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
     record_data = []
+    group_metrics = []
     overwrite_flag = {person: True for person in engineering_users}
+
     for i in range(len(intervals) - 1):
+        #group_measurements = group_interval_metrics.copy() # copy, not referene the dictionary
+
         start_date = datetime.strptime(intervals[i], "%Y-%m-%d").date()
         end_date = datetime.strptime(intervals[i + 1], "%Y-%m-%d").date()
         # Convert start_date and end_date to datetime objects and set them to PDT
@@ -189,9 +196,7 @@ def main():
             if args.verbose:
                 print_detailed_ticket_data(ticket_data)
 
-            total_points = sum(
-                ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values()
-            )
+            total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
             weeks = (date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()).days // 7
             print(f"weeks: {weeks}")
             average_points_weekly = format(total_points / interval, ".1f")
@@ -203,14 +208,9 @@ def main():
                     "average_ticket_points_weekly": average_points_weekly,
                 }
             )
-
             num_tickets = len(ticket_data)
-            avg_in_progress = format(
-                (time_records[person]["total_in_progress"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f"
-            )
-            avg_in_review = format(
-                (time_records[person]["total_in_review"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f"
-            )
+            avg_in_progress = format((time_records[person]["total_in_progress"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f")
+            avg_in_review = format((time_records[person]["total_in_review"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f")
             record_data.append(
                 {
                     "Person": person,
@@ -225,7 +225,23 @@ def main():
 
             data[person] = time_records[person]
             print(f"total tickets: {len(ticket_data)}")
-            print(f"dump: {json.dumps(time_records , indent=4)}")
+
+
+    # Initialize an empty dictionary for storing the aggregated data
+    group_metrics_by_kjell = {}
+
+    # Loop over each record in the record_data array
+    for record in record_data:
+        # Extract the date_range, total_tickets and total_points from the current record
+        date_range = next((k for k in record.keys() if '-' in k), None)
+
+        # If the date range is not in the group_metrics dictionary, add it with default values
+        if date_range not in group_metrics_by_kjell:
+            group_metrics_by_kjell[date_range] = {"Total tickets": 0, "Total points": 0}
+
+        # Add the total_tickets and total_points from the current record to the corresponding date range in the group_metrics dictionary
+        group_metrics_by_kjell[date_range]["Total tickets"] += record["Total tickets"]
+        group_metrics_by_kjell[date_range]["Total points"] += record["Total points"]
 
     # Convert data dictionary into list of dicts
     data_list = [{**{"person": person}, **values} for person, values in data.items()]
@@ -243,28 +259,22 @@ def main():
     # [("person1", 3600), ("person2", 1800), ...]
     data_list_2 = [(person, values["total_in_progress"]) for person, values in data.items()]
     data_list_2.sort(key=lambda x: x[1], reverse=True)
-
-    # Assuming "item" is your dictionary
-    # print(f"Total DUMP: {json.dumps(data_list_2, indent=4)}")
-
-    # Export two separate CSV files
-    # Export the two CSV files
     resolution_date_formatted = f"{resolution_date}"
 
-    # Export the two CSV files with the formatted titles
-    export_tickets_per_category_csv(
-        data_list_1,
-        "engineering_data/tickets_per_person.csv",
-        f"Engineering tickets since {resolution_date_formatted}",
-        "person",
-    )
-    export_in_progress_time_per_category_csv(
-        data_list_2,
-        "engineering_data/in_progress_time_per_person.csv",
-        f"engineering time, in-progress, since {resolution_date_formatted}",
-        "person",
-    )
-    print(f"Total DUMP: {json.dumps(record_data, indent=4)}")
+    # # Export the two CSV files with the formatted titles
+    # export_tickets_per_category_csv(
+    #     data_list_1,
+    #     "engineering_data/tickets_per_person.csv",
+    #     f"Engineering tickets since {resolution_date_formatted}",
+    #     "person", "total_tickets"
+    # )
+    # export_tickets_per_category_csv(
+    #     data_list_2,
+    #     "engineering_data/in_progress_time_per_person.csv",
+    #     f"engineering time, in-progress, since {resolution_date_formatted}",
+    #     "person", "in-progress"
+    # )
+    # print(f"Total DUMP: {json.dumps(record_data, indent=4)}")
 
     # Now use the updated data list to create CSV
     export_metrics_csv(record_data, "engineering_data/tickets_per_person.csv", "Tickets per period", "Total tickets")
@@ -277,16 +287,20 @@ def main():
     )
     export_metrics_csv(
         record_data,
-        "engineering_data/in_progress_time_per_person.csv",
+        "engineering_data/average_in_progress_time_per_person.csv",
         "Average in-progress time",
         "Average in-progress [h]",
     )
     export_metrics_csv(
         record_data,
-        "engineering_data/in_review_time_per_person.csv",
+        "engineering_data/average_in_review_time_per_person.csv",
         "Average in-review time",
         "Average in-review [h]",
     )
+
+    export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_tickets.csv", "Total tickets")
+    export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_points.csv", "Total points")
+
 
 
 if __name__ == "__main__":
