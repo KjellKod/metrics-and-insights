@@ -199,27 +199,27 @@ def main():
             total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
             weeks = (date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()).days // 7
             print(f"weeks: {weeks}")
-            average_points_weekly = format(total_points / interval, ".1f")
+            average_points_per_time_period = format(total_points / interval, ".1f")
 
             time_records = update_aggregated_results(time_records, ticket_data, person)
             time_records[person].update(
                 {
                     "total_ticket_points": total_points,
-                    "average_ticket_points_weekly": average_points_weekly,
+                    "average_points_per_time_period": average_points_per_time_period,
                 }
             )
             num_tickets = len(ticket_data)
-            avg_in_progress = format((time_records[person]["total_in_progress"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f")
-            avg_in_review = format((time_records[person]["total_in_review"] / 3600) / num_tickets if num_tickets != 0 else 0, ".1f")
+            avg_in_progress = format((time_records[person]["total_in_progress"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
+            avg_in_review = format((time_records[person]["total_in_review"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
             record_data.append(
                 {
                     "Person": person,
                     f"{start_date} - {end_date}": len(ticket_data),
                     "Total tickets": time_records[person]["total_tickets"],
                     "Total points": time_records[person]["total_ticket_points"],
-                    "Average points weekly": time_records[person]["average_ticket_points_weekly"],
-                    "Average in-progress [h]": avg_in_progress,
-                    "Average in-review [h]": avg_in_review,
+                    "Average points per Time Period": time_records[person]["average_points_per_time_period"],
+                    "Average in-progress [day]": avg_in_progress,
+                    "Average in-review [day]": avg_in_review,
                 }
             )
 
@@ -261,46 +261,27 @@ def main():
     data_list_2.sort(key=lambda x: x[1], reverse=True)
     resolution_date_formatted = f"{resolution_date}"
 
-    # # Export the two CSV files with the formatted titles
-    # export_tickets_per_category_csv(
-    #     data_list_1,
-    #     "engineering_data/tickets_per_person.csv",
-    #     f"Engineering tickets since {resolution_date_formatted}",
-    #     "person", "total_tickets"
-    # )
-    # export_tickets_per_category_csv(
-    #     data_list_2,
-    #     "engineering_data/in_progress_time_per_person.csv",
-    #     f"engineering time, in-progress, since {resolution_date_formatted}",
-    #     "person", "in-progress"
-    # )
-    # print(f"Total DUMP: {json.dumps(record_data, indent=4)}")
-
     # Now use the updated data list to create CSV
-    export_metrics_csv(record_data, "engineering_data/tickets_per_person.csv", "Tickets per period", "Total tickets")
-    export_metrics_csv(record_data, "engineering_data/points_per_person.csv", "Points per period", "Total points")
+    export_metrics_csv(record_data, "engineering_data/tickets_per_person.csv", "Total tickets")
+    export_metrics_csv(record_data, "engineering_data/points_per_person.csv", "Total points")
     export_metrics_csv(
         record_data,
         "engineering_data/average_points_per_person.csv",
-        "Average Points per period",
-        "Average points weekly",
+        "Average points per Time Period",
     )
     export_metrics_csv(
         record_data,
         "engineering_data/average_in_progress_time_per_person.csv",
-        "Average in-progress time",
-        "Average in-progress [h]",
+        "Average in-progress [day]",
     )
     export_metrics_csv(
         record_data,
         "engineering_data/average_in_review_time_per_person.csv",
-        "Average in-review time",
-        "Average in-review [h]",
+        "Average in-review [day]",
     )
 
     export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_tickets.csv", "Total tickets")
     export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_points.csv", "Total points")
-
 
 
 if __name__ == "__main__":

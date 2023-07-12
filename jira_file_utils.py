@@ -8,7 +8,7 @@ from jira import JIRA
 from jira.resources import Issue
 from dateutil.parser import parse
 
-def export_metrics_csv(data, filename, title, metric_field):
+def export_metrics_csv(data, filename, metric_field):
     # Pivot data to wide format
     pivot_data = {}
     for row in data:
@@ -30,7 +30,7 @@ def export_metrics_csv(data, filename, title, metric_field):
         writer = csv.writer(csvfile)
 
         # Write a title (timeframe)
-        writer.writerow([title])
+        writer.writerow([metric_field])
 
         # Get the headers from the keys of the first dictionary
         headers = [k for k in list(pivot_data.values())[0].keys() if k != "Person"]
@@ -188,12 +188,6 @@ def fetch_issues_from_api(jira, query):
         start_index += max_results
 
     return issues
-
-
-# def printIssues(issues):
-#     for issue in issues:
-#         print(issue.key)
-
 
 def printIssues(issues):
     for issue in issues:
