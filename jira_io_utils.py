@@ -8,6 +8,18 @@ from jira import JIRA
 from jira.resources import Issue
 from dateutil.parser import parse
 
+
+def get_jira_instance():
+    user = os.environ.get("USER_EMAIL")
+    api_key = os.environ.get("JIRA_API_KEY")
+    link = os.environ.get("JIRA_LINK")
+    options = {
+        "server": link,
+    }
+    jira = JIRA(options=options, basic_auth=(user, api_key))
+    return jira
+
+
 def export_metrics_csv(data, filename, metric_field):
     # Pivot data to wide format
     pivot_data = {}
@@ -22,9 +34,14 @@ def export_metrics_csv(data, filename, metric_field):
         start_date_str, end_date_str = date_range_key.split(" - ")
 
         # Parse the dates, format them without time, and combine them back together
-        new_date_range = "{} - {}".format(parse(start_date_str).strftime('%m-%d'), parse(end_date_str).strftime('%m-%d'))
+        new_date_range = "{} - {}".format(
+            parse(start_date_str).strftime("%m-%d"),
+            parse(end_date_str).strftime("%m-%d"),
+        )
 
-        pivot_data[row["Person"]][new_date_range] = row[metric_field]  # Update only the necessary field
+        pivot_data[row["Person"]][new_date_range] = row[
+            metric_field
+        ]  # Update only the necessary field
 
     with open(filename, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -38,38 +55,41 @@ def export_metrics_csv(data, filename, metric_field):
 
         # Add the data row by row
         for name, row in pivot_data.items():
-            writer.writerow([name] + [row.get(h, "") for h in headers])  # Use get method with default value ''
+            writer.writerow(
+                [name] + [row.get(h, "") for h in headers]
+            )  # Use get method with default value ''
 
     print(f"CSV file '{filename}' has been generated.")
-
 
 
 def export_group_metrics_csv(data, filename, metric):
     # Open/create a file with the provided filename in write mode
-    with open(filename, 'w', newline='') as csvfile:
+    with open(filename, "w", newline="") as csvfile:
         # Initialize a writer object with the first row as headers
-        fieldnames = ['Date Range', metric]
+        fieldnames = ["Date Range", metric]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
+
         # Write the column headers
         writer.writeheader()
-        
+
         # Loop through each date range in the dictionary
         for date_range, metrics in data.items():
             # Extract only the specific metric from the value dictionary
             metric_value = metrics[metric]
-            
+
             # Split date range string into start and end dates
             start_date_str, end_date_str = date_range.split(" - ")
-            
+
             # Parse the dates, format them without time, and combine them back together
-            new_date_range = "{} - {}".format(parse(start_date_str).strftime('%m-%d'), parse(end_date_str).strftime('%m-%d'))
-            
+            new_date_range = "{} - {}".format(
+                parse(start_date_str).strftime("%m-%d"),
+                parse(end_date_str).strftime("%m-%d"),
+            )
+
             # Write the date range and extracted metric to the CSV file
-            writer.writerow({'Date Range': new_date_range, metric: metric_value})
+            writer.writerow({"Date Range": new_date_range, metric: metric_value})
 
     print(f"CSV file '{filename}' has been generated.")
-
 
 
 def save_jira_data_to_file(data, file_name, overwrite_flag):
@@ -97,8 +117,12 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
 
     # Convert given start_date & end_date to datetime and make them timezone aware
     print(f"start_date -- end_date: {start_date} -- {end_date}")
-    start_date = pytz.timezone(timezone_str).localize(datetime.combine(start_date, datetime.min.time()))
-    end_date = pytz.timezone(timezone_str).localize(datetime.combine(end_date, datetime.max.time()))
+    start_date = pytz.timezone(timezone_str).localize(
+        datetime.combine(start_date, datetime.min.time())
+    )
+    end_date = pytz.timezone(timezone_str).localize(
+        datetime.combine(end_date, datetime.max.time())
+    )
 
     print(f"start_date2 -- end_date2: {start_date} -- {end_date}")
 
@@ -106,11 +130,20 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     filtered_issues_data = [
         raw_issue
         for raw_issue in raw_issues_data
-        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) > start_date
-        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) <= end_date
+        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(
+            pytz.timezone(timezone_str)
+        )
+        > start_date
+        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(
+            pytz.timezone(timezone_str)
+        )
+        <= end_date
     ]
 
-    issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
+    issues = [
+        Issue(jira_instance._options, jira_instance._session, raw)
+        for raw in filtered_issues_data
+    ]
     return issues
 
 
@@ -137,9 +170,13 @@ def fetch_issues_from_api(jira, query):
 
     return issues
 
+
 def printIssues(issues):
     for issue in issues:
-        print(f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}")
+        print(
+            f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}"
+        )
+
 
 def print_records(category, records):
     print(f'Person: {category} {records["total_tickets"]} tickets completed')
@@ -150,10 +187,12 @@ def print_records(category, records):
     print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
     print()
 
+
 def print_group_records(group, records):
     print(f'Group: {group} {records["total_tickets"]} total tickets')
     print(f"\tTotal points: {records['total_ticket_points']}")
     print()
+
 
 def print_detailed_ticket_data(ticket_data):
     # Assuming you have `ticket_data` object
@@ -168,8 +207,21 @@ def print_detailed_ticket_data(ticket_data):
             f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
         )
 
-        
-def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_date, end_date):
+
+def print_sorted_person_data(time_records):
+    data_list = [
+        {**{"person": person}, **values} for person, values in time_records.items()
+    ]
+    # Sort and print the records
+    sorted_data = sorted(data_list, key=lambda x: x["total_tickets"], reverse=True)
+
+    for item in sorted_data:
+        print_records(item["person"], item)
+
+
+def retrieve_jira_issues(
+    args, jira, query, tag, path, overwrite_flag, start_date, end_date
+):
     issues = {}
     jira_file = f"{path}/{tag}_data.json"
     if args.load:
@@ -183,7 +235,9 @@ def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_dat
         if issues is None:
             print("Failed to load JIRA data from file")
             return []  # Return an empty list or handle the error accordingly
-        print(f"Load jira from file,  {start_date} to {end_date}: {len(issues)} tickets from {jira_file}")
+        print(
+            f"Load jira from file,  {start_date} to {end_date}: {len(issues)} tickets from {jira_file}"
+        )
     else:
         issues = fetch_issues_from_api(jira, query)
         print(f'Fetched {len(issues)} issues for  "{tag}"...')
