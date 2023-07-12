@@ -322,7 +322,8 @@ def calculate_group_metrics(record_data):
 
 def process_jira_content_in_intervals(
     args,
-    engineering_users,
+    query_mode,  # labels, or assignee
+    query_data,  # xops_labels, or engineering_users
     jira,
     custom_fields_map,
     timezone_choice,
@@ -331,7 +332,7 @@ def process_jira_content_in_intervals(
 ):
     time_records = {}
     record_data = []
-    overwrite_flag = {person: True for person in engineering_users}
+    overwrite_flag = {item: True for item in query_data}
     for i in range(len(intervals) - 1):
         # group_measurements = group_interval_metrics.copy() # copy, not referene the dictionary
         start_date = datetime.strptime(intervals[i], "%Y-%m-%d").date()
@@ -347,10 +348,10 @@ def process_jira_content_in_intervals(
         start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
         end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
 
-        for person in engineering_users:
+        for query_item in query_data:
             query = (
                 f"project = GAN  AND status in (Closed) "
-                f'and assignee="{person}" '
+                f'and {query_mode}="{query_item}" '
                 f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined", "Obsolete") '
                 f'and issuetype not in ("Incident", "Epic", "Support Request") '
                 f"and resolutiondate > '{start_date_str}' "
@@ -365,7 +366,7 @@ def process_jira_content_in_intervals(
                 avg_in_progress,
                 avg_in_review,
             ) = calculate_individual_metrics(
-                person,
+                query_item,
                 overwrite_flag,
                 args,
                 jira,
@@ -376,14 +377,14 @@ def process_jira_content_in_intervals(
                 time_records,
                 interval,
             )
-            total_tickets = time_records[person]["total_tickets"]
+            total_tickets = time_records[query_item]["total_tickets"]
             record_data.append(
                 {
-                    "Person": person,
+                    "Person": query_item,
                     f"{start_date} - {end_date}": total_tickets,
                     "Total tickets": total_tickets,
-                    "Total points": time_records[person]["total_ticket_points"],
-                    "Average points per Time Period": time_records[person][
+                    "Total points": time_records[query_item]["total_ticket_points"],
+                    "Average points per Time Period": time_records[query_item][
                         "average_points_per_time_period"
                     ],
                     "Average in-progress [day]": avg_in_progress,

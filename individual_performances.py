@@ -167,6 +167,7 @@ def main():
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
     record_data, time_records = process_jira_content_in_intervals(
         args,
+        "assignee",
         engineering_users,
         jira,
         custom_fields_map,
