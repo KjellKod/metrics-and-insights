@@ -1,5 +1,6 @@
 from collections import defaultdict
 from jira_time_utils import parse_date, business_time_spent_in_seconds
+from jira_io_utils import print_detailed_ticket_data, retrieve_jira_issues
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
 
@@ -205,3 +206,52 @@ def update_aggregated_results(time_records, ticket_data, label):
     }
 
     return time_records
+
+def calculate_individual_metrics(person, overwrite_flag, args, jira, query, start_date, end_date, custom_fields_map, time_records, interval):
+    issues = retrieve_jira_issues(
+        args, jira, query, person, "engineering_data", overwrite_flag[person], start_date, end_date
+    )
+    overwrite_flag[person] = False  # Switch flag after first write operation
+    print(f'Processing {len(issues)} issues with "{person}"...')
+    ticket_data = process_issues(jira, issues, custom_fields_map)
+
+    if args.verbose:
+        print_detailed_ticket_data(ticket_data)
+
+    total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
+    average_points_per_time_period = format(total_points / interval, ".1f")
+
+    time_records = update_aggregated_results(time_records, ticket_data, person)
+    time_records[person].update(
+        {
+            "total_ticket_points": total_points,
+            "average_points_per_time_period": average_points_per_time_period,
+        }
+    )
+
+
+    num_tickets = len(ticket_data)
+    assert time_records[person]["total_tickets"] == num_tickets, "Mismatch between total tickets in time_records and ticket_data length"
+    avg_in_progress = format((time_records[person]["total_in_progress"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
+    avg_in_review = format((time_records[person]["total_in_review"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
+    
+    return overwrite_flag, time_records, average_points_per_time_period, avg_in_progress, avg_in_review
+
+def calculate_group_metrics(record_data):
+    # Initialize an empty dictionary for storing the aggregated data
+    group_metrics = {}
+
+    # Loop over each record in the record_data array
+    for record in record_data:
+        # Extract the date_range, total_tickets and total_points from the current record
+        date_range = next((k for k in record.keys() if '-' in k), None)
+
+        # If the date range is not in the group_metrics dictionary, add it with default values
+        if date_range not in group_metrics:
+            group_metrics[date_range] = {"Total tickets": 0, "Total points": 0}
+
+        # Add the total_tickets and total_points from the current record to the corresponding date range in the group_metrics dictionary
+        group_metrics[date_range]["Total tickets"] += record["Total tickets"]
+        group_metrics[date_range]["Total points"] += record["Total points"]
+
+    return group_metrics

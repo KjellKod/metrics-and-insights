@@ -89,33 +89,6 @@ def save_jira_data_to_file(data, file_name, overwrite_flag):
             json.dump(file_data, outfile)
 
 
-# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
-#     with open(f"{file_name}", "r") as infile:
-#         raw_issues_data = json.load(infile)
-
-#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in raw_issues_data]
-#     return issues
-
-
-# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
-#     with open(f"{file_name}", "r") as infile:
-#         raw_issues_data = json.load(infile)
-
-#     # Convert given start_date & end_date to datetime
-#     start_date = datetime.combine(start_date, datetime.min.time())
-#     end_date = datetime.combine(end_date, datetime.max.time())
-
-#     Filter out the issues that are not within the required date-time range
-#     filtered_issues_data = [
-#         raw_issue
-#         for raw_issue in raw_issues_data
-#         if start_date <= datetime.strptime(raw_issue["fields"]["resolutiondate"], "%Y-%m-%dT%H:%M:%S.%f%z") <= end_date
-#     ]
-
-#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
-#     return issues
-
-
 def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     with open(f"{file_name}", "r") as infile:
         raw_issues_data = json.load(infile)
@@ -139,31 +112,6 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
 
     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
     return issues
-
-
-# def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
-#     with open(f"{file_name}", "r") as infile:
-#         raw_issues_data = json.load(infile)
-
-#     # Convert given start_date & end_date to datetime
-#     start_date = datetime.combine(start_date, datetime.min.time()).replace(
-#         tzinfo=pytz.timezone("America/Denver")
-#     )  # assuming start_date/end_date is 'naive'
-#     end_date = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=pytz.timezone("America/Denver"))
-
-#     # Filter out the issues that are not within the required date-time range
-#     filtered_issues_data = [
-#         raw_issue
-#         for raw_issue in raw_issues_data
-#         if start_date
-#         < utc_to_pdt(
-#             parser.parse(raw_issue["fields"]["resolutiondate"])
-#         )  # directly parse the date string into an aware datetime object and convert to PDT
-#         < end_date
-#     ]
-
-#     issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
-#     return issues
 
 
 def fetch_issues_from_api(jira, query):
@@ -193,7 +141,34 @@ def printIssues(issues):
     for issue in issues:
         print(f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}")
 
+def print_records(category, records):
+    print(f'Person: {category} {records["total_tickets"]} tickets completed')
+    print(f"\tTotal points: {records['total_ticket_points']}")
+    print(f"\tTotal Time In Progress   (m): {records['total_in_progress']/60:7.2f}")
+    print(f"\tTotal Time In Review     (m): {records['total_in_review']/60:7.2f}")
+    print(f"\tAverage In Progress (m): {records['average_in_progress']/60:7.2f}")
+    print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
+    print()
 
+def print_group_records(group, records):
+    print(f'Group: {group} {records["total_tickets"]} total tickets')
+    print(f"\tTotal points: {records['total_ticket_points']}")
+    print()
+
+def print_detailed_ticket_data(ticket_data):
+    # Assuming you have `ticket_data` object
+    pretty_ticket_data = json.dumps(ticket_data, indent=4, default=datetime_serializer)
+    print(pretty_ticket_data)
+
+    for key, ticket in ticket_data.items():
+        in_progress_duration = ticket["in_progress_s"]
+        in_progress_hms = seconds_to_hms(in_progress_duration)
+        in_progress_str = f"{in_progress_hms[0]} hours, {in_progress_hms[1]} minutes, {in_progress_hms[2]} seconds"
+        print(
+            f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
+        )
+
+        
 def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_date, end_date):
     issues = {}
     jira_file = f"{path}/{tag}_data.json"

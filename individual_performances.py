@@ -10,13 +10,16 @@ import numpy as np
 from jira import JIRA
 from jira.resources import Issue
 
-from jira_file_utils import (
+from jira_io_utils import (
     export_metrics_csv,
     export_group_metrics_csv,
     save_jira_data_to_file,
     load_jira_data_from_file,
     fetch_issues_from_api,
     retrieve_jira_issues,
+    print_records,
+    print_group_records,
+    print_detailed_ticket_data,
 )
 
 from jira_time_utils import (
@@ -41,35 +44,9 @@ from jira_content_utility import (
     process_issues,
     extract_closed_date,
     update_aggregated_results,
+    calculate_individual_metrics,
+    calculate_group_metrics,
 )
-
-
-def print_records(category, records):
-    print(f'Person: {category} {records["total_tickets"]} tickets completed')
-    print(f"\tTotal points: {records['total_ticket_points']}")
-    print(f"\tTotal Time In Progress   (m): {records['total_in_progress']/60:7.2f}")
-    print(f"\tTotal Time In Review     (m): {records['total_in_review']/60:7.2f}")
-    print(f"\tAverage In Progress (m): {records['average_in_progress']/60:7.2f}")
-    print(f"\tAverage In Review   (m): {records['average_in_review']/60:7.2f}")
-    print()
-
-def print_group_records(group, records):
-    print(f'Group: {group} {records["total_tickets"]} total tickets')
-    print(f"\tTotal points: {records['total_ticket_points']}")
-    print()
-
-def print_detailed_ticket_data(ticket_data):
-    # Assuming you have `ticket_data` object
-    pretty_ticket_data = json.dumps(ticket_data, indent=4, default=datetime_serializer)
-    print(pretty_ticket_data)
-
-    for key, ticket in ticket_data.items():
-        in_progress_duration = ticket["in_progress_s"]
-        in_progress_hms = seconds_to_hms(in_progress_duration)
-        in_progress_str = f"{in_progress_hms[0]} hours, {in_progress_hms[1]} minutes, {in_progress_hms[2]} seconds"
-        print(
-            f'ticket {key}, closing_date: {ticket["resolutiondate"]}, in_progress: {in_progress_duration}s [{in_progress_str}]'
-        )
 
 
 def parse_arguments():
@@ -161,7 +138,6 @@ def main():
     data = {}
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
     record_data = []
-    group_metrics = []
     overwrite_flag = {person: True for person in engineering_users}
 
     for i in range(len(intervals) - 1):
@@ -186,36 +162,14 @@ def main():
                 f"and resolutiondate <= '{end_date_str}' "
                 f"order by resolved desc"
             )
-            issues = retrieve_jira_issues(
-                args, jira, query, person, "engineering_data", overwrite_flag[person], start_date, end_date
-            )
-            overwrite_flag[person] = False  # Switch flag after first write operation
-            print(f'Processing {len(issues)} issues with "{person}"...')
-            ticket_data = process_issues(jira, issues, custom_fields_map)
-
-            if args.verbose:
-                print_detailed_ticket_data(ticket_data)
-
-            total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
-            weeks = (date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()).days // 7
-            print(f"weeks: {weeks}")
-            average_points_per_time_period = format(total_points / interval, ".1f")
-
-            time_records = update_aggregated_results(time_records, ticket_data, person)
-            time_records[person].update(
-                {
-                    "total_ticket_points": total_points,
-                    "average_points_per_time_period": average_points_per_time_period,
-                }
-            )
-            num_tickets = len(ticket_data)
-            avg_in_progress = format((time_records[person]["total_in_progress"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
-            avg_in_review = format((time_records[person]["total_in_review"] / (8* 3600)) / num_tickets if num_tickets != 0 else 0, ".1f")
+            # Call the new calculate_individual_metrics from here
+            overwrite_flag, time_records, average_points_per_time_period, avg_in_progress, avg_in_review = calculate_individual_metrics(person, overwrite_flag, args, jira, query, start_date, end_date, custom_fields_map, time_records, interval)
+            total_tickets = time_records[person]["total_tickets"]
             record_data.append(
                 {
                     "Person": person,
-                    f"{start_date} - {end_date}": len(ticket_data),
-                    "Total tickets": time_records[person]["total_tickets"],
+                    f"{start_date} - {end_date}": total_tickets,
+                    "Total tickets": total_tickets,
                     "Total points": time_records[person]["total_ticket_points"],
                     "Average points per Time Period": time_records[person]["average_points_per_time_period"],
                     "Average in-progress [day]": avg_in_progress,
@@ -224,24 +178,11 @@ def main():
             )
 
             data[person] = time_records[person]
-            print(f"total tickets: {len(ticket_data)}")
+            print(f"total tickets: {total_tickets}")
 
 
     # Initialize an empty dictionary for storing the aggregated data
-    group_metrics_by_kjell = {}
-
-    # Loop over each record in the record_data array
-    for record in record_data:
-        # Extract the date_range, total_tickets and total_points from the current record
-        date_range = next((k for k in record.keys() if '-' in k), None)
-
-        # If the date range is not in the group_metrics dictionary, add it with default values
-        if date_range not in group_metrics_by_kjell:
-            group_metrics_by_kjell[date_range] = {"Total tickets": 0, "Total points": 0}
-
-        # Add the total_tickets and total_points from the current record to the corresponding date range in the group_metrics dictionary
-        group_metrics_by_kjell[date_range]["Total tickets"] += record["Total tickets"]
-        group_metrics_by_kjell[date_range]["Total points"] += record["Total points"]
+    group_metrics  = calculate_group_metrics(record_data)
 
     # Convert data dictionary into list of dicts
     data_list = [{**{"person": person}, **values} for person, values in data.items()]
@@ -280,8 +221,8 @@ def main():
         "Average in-review [day]",
     )
 
-    export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_tickets.csv", "Total tickets")
-    export_group_metrics_csv(group_metrics_by_kjell, "engineering_data/total_points.csv", "Total points")
+    export_group_metrics_csv(group_metrics, "engineering_data/total_tickets.csv", "Total tickets")
+    export_group_metrics_csv(group_metrics, "engineering_data/total_points.csv", "Total points")
 
 
 if __name__ == "__main__":
