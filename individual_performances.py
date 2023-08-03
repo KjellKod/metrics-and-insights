@@ -52,11 +52,8 @@ from jira_content_utility import (
 )
 
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Query with custom timeframe.")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Display detailed ticket data"
-    )
+def parse_arguments(parser):
+    parser.add_argument("-v", "--verbose", action="store_true", help="Display detailed ticket data")
     parser.add_argument(
         "-l",
         "--load",
@@ -83,28 +80,46 @@ def parse_arguments():
         help="Enter how many weeks back from today to set the resolution date",
     )
 
+    # Add an argument
+    parser.add_argument(
+        "metrics",
+        metavar="metrics",
+        type=str,
+        choices=["xops", "engineering"],
+        help='Choose between "xops" mode or "engineering" metrics mode',
+    )
+
     # Parse the arguments
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
 
-    # Get the resolution date parameter
-    if args.resolution_date:
-        resolution_date = args.resolution_date
-    elif args.weeks_back:
-        resolution_date = get_resolution_date(args.weeks_back)
-    else:
+        # Get the resolution date parameter
+        if args.resolution_date:
+            resolution_date = args.resolution_date
+        elif args.weeks_back:
+            resolution_date = get_resolution_date(args.weeks_back)
+        else:
+            raise argparse.ArgumentTypeError("Failed to parse resolution date")
+
+        # Check if 'xops' or 'engineering' have been provided. If not, raise an exception
+        if args.metrics.lower() not in ["xops", "engineering"]:
+            raise argparse.ArgumentTypeError("Must choose either 'xops' or 'engineering' for metrics mode!")
+
+        # If both --resolution-date and --weeks-back were provided, raise an exception
+        if args.resolution_date and args.weeks_back:
+            raise argparse.ArgumentTypeError("Can only choose either --resolution-date or --weeks-back, not both!")
+
+    except (argparse.ArgumentError, argparse.ArgumentTypeError) as err:
+        print(str(err))
         parser.print_help()
-        exit(1)
+        exit(2)
 
-    return args, resolution_date
+    return args, resolution_date, parser
 
 
 def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode):
-    export_metrics_csv(
-        record_data, f"{storage_location}/tickets_per_{query_mode}.csv", "Total tickets"
-    )
-    export_metrics_csv(
-        record_data, f"{storage_location}/points_per_{query_mode}.csv", "Total points"
-    )
+    export_metrics_csv(record_data, f"{storage_location}/tickets_per_{query_mode}.csv", "Total tickets")
+    export_metrics_csv(record_data, f"{storage_location}/points_per_{query_mode}.csv", "Total points")
     export_metrics_csv(
         record_data,
         f"{storage_location}/average_points_per_{query_mode}.csv",
@@ -121,12 +136,8 @@ def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mo
         "Average in-review [day]",
     )
 
-    export_group_metrics_csv(
-        group_metrics, f"{storage_location}/total_tickets.csv", "Total tickets"
-    )
-    export_group_metrics_csv(
-        group_metrics, f"{storage_location}/total_points.csv", "Total points"
-    )
+    export_group_metrics_csv(group_metrics, f"{storage_location}/total_tickets.csv", "Total tickets")
+    export_group_metrics_csv(group_metrics, f"{storage_location}/total_points.csv", "Total points")
 
 
 def setup_variables():
@@ -173,7 +184,19 @@ def setup_variables():
 
 
 def main():
-    args, resolution_date = parse_arguments()
+    parser = argparse.ArgumentParser(
+        description="Specify metrics xops/engineering and for which timeframe. You can save all the JIRA data or load previously saved data"
+    )
+    try:
+        (
+            args,
+            resolution_date,
+        ) = parse_arguments(parser)
+    except SystemExit:
+        print("\n")
+        parser.print_help()
+        exit(2)
+
     engineering_users, xops_labels, default_metrics = setup_variables()
 
     # Perform JQL query and handle pagination if needed
@@ -187,9 +210,20 @@ def main():
     interval = 3  # set this to the number of weeks you want each time period to be
 
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
-    query_mode = "labels"  # "labels", "assignee"
-    query_data = xops_labels  # engineering_users, xops_labels
-    storage_location = "xops_data"  # , "engineering_data", "xops_data"
+
+    # According to the chosen mode, change the variables
+    if args.mode == "engineering":
+        query_mode = "assignee"
+        query_data = engineering_users
+        storage_location = "engineering_data"
+
+    elif args.mode == "xops":
+        query_mode = "labels"
+        query_data = xops_labels
+        storage_location = "xops_data"
+
+    # Rest of your code continues
+
     record_data, time_records = process_jira_content_in_intervals(
         args,
         query_mode,  # "assignee",  # labels
