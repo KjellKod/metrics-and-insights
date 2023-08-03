@@ -80,10 +80,8 @@ def parse_arguments(parser):
         help="Enter how many weeks back from today to set the resolution date",
     )
 
-    # Add an argument
     parser.add_argument(
-        "metrics",
-        metavar="metrics",
+        "--metrics",
         type=str,
         choices=["xops", "engineering"],
         help='Choose between "xops" mode or "engineering" metrics mode',
@@ -102,7 +100,7 @@ def parse_arguments(parser):
             raise argparse.ArgumentTypeError("Failed to parse resolution date")
 
         # Check if 'xops' or 'engineering' have been provided. If not, raise an exception
-        if args.metrics.lower() not in ["xops", "engineering"]:
+        if args.metrics is None or args.metrics.lower() not in ["xops", "engineering"]:
             raise argparse.ArgumentTypeError("Must choose either 'xops' or 'engineering' for metrics mode!")
 
         # If both --resolution-date and --weeks-back were provided, raise an exception
@@ -114,7 +112,7 @@ def parse_arguments(parser):
         parser.print_help()
         exit(2)
 
-    return args, resolution_date, parser
+    return args, resolution_date
 
 
 def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode):
@@ -212,12 +210,12 @@ def main():
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
 
     # According to the chosen mode, change the variables
-    if args.mode == "engineering":
+    if args.metrics == "engineering":
         query_mode = "assignee"
         query_data = engineering_users
         storage_location = "engineering_data"
 
-    elif args.mode == "xops":
+    elif args.metrics == "xops":
         query_mode = "labels"
         query_data = xops_labels
         storage_location = "xops_data"
