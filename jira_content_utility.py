@@ -242,13 +242,14 @@ def calculate_individual_metrics(
     custom_fields_map,
     time_records,
     interval,
+    storage_location,
 ):
     issues = retrieve_jira_issues(
         args,
         jira,
         query,
         person,
-        "engineering_data",
+        storage_location,  # "engineering_data",
         overwrite_flag[person],
         start_date,
         end_date,
@@ -329,6 +330,7 @@ def process_jira_content_in_intervals(
     timezone_choice,
     interval,
     intervals,
+    storage_location,
 ):
     time_records = {}
     record_data = []
@@ -376,6 +378,7 @@ def process_jira_content_in_intervals(
                 custom_fields_map,
                 time_records,
                 interval,
+                storage_location,
             )
             total_tickets = time_records[query_item]["total_tickets"]
             record_data.append(

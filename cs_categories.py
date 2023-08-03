@@ -69,7 +69,9 @@ def print_detailed_ticket_data(ticket_data):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Query with custom timeframe.")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Display detailed ticket data")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Display detailed ticket data"
+    )
     parser.add_argument(
         "-l",
         "--load",
@@ -132,7 +134,8 @@ def main():
         "xops_remove_incomplete_packets" "xops_new_packet",
         "xops_training_tracks",
         "xops_paystubs",
-	"xops_transfer_funds",
+        "xops_transfer_funds",
+        "xops_company_message",
     ]
 
     default_metrics = {
@@ -175,8 +178,13 @@ def main():
         if args.verbose:
             print_detailed_ticket_data(ticket_data)
 
-        total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
-        weeks = (date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()).days // 7
+        total_points = sum(
+            ticket["points"] if ticket["points"] is not None else 0
+            for ticket in ticket_data.values()
+        )
+        weeks = (
+            date.today() - datetime.strptime(resolution_date, "%Y-%m-%d").date()
+        ).days // 7
         average_points_weekly = total_points / max(1, weeks)
 
         time_records = update_aggregated_results(xops_time_records, ticket_data, label)
@@ -204,7 +212,9 @@ def main():
     data_list_1.sort(key=lambda x: x[1], reverse=True)
 
     # [("label1", 3600), ("label2", 1800), ...]
-    data_list_2 = [(label, values["total_in_progress"]) for label, values in data.items()]
+    data_list_2 = [
+        (label, values["total_in_progress"]) for label, values in data.items()
+    ]
     data_list_2.sort(key=lambda x: x[1], reverse=True)
 
     # Export two separate CSV files
@@ -213,7 +223,10 @@ def main():
 
     # Export the two CSV files with the formatted titles
     export_tickets_per_category_csv(
-        data_list_1, "xops_data/tickets_per_label.csv", f"xops tickets since {resolution_date_formatted}", "label"
+        data_list_1,
+        "xops_data/tickets_per_label.csv",
+        f"xops tickets since {resolution_date_formatted}",
+        "label",
     )
     export_in_progress_time_per_category_csv(
         data_list_2,

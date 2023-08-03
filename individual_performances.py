@@ -98,34 +98,34 @@ def parse_arguments():
     return args, resolution_date
 
 
-def export_metrics_to_csv(record_data, group_metrics):
+def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode):
     export_metrics_csv(
-        record_data, "engineering_data/tickets_per_person.csv", "Total tickets"
+        record_data, f"{storage_location}/tickets_per_{query_mode}.csv", "Total tickets"
     )
     export_metrics_csv(
-        record_data, "engineering_data/points_per_person.csv", "Total points"
+        record_data, f"{storage_location}/points_per_{query_mode}.csv", "Total points"
     )
     export_metrics_csv(
         record_data,
-        "engineering_data/average_points_per_person.csv",
+        f"{storage_location}/average_points_per_{query_mode}.csv",
         "Average points per Time Period",
     )
     export_metrics_csv(
         record_data,
-        "engineering_data/average_in_progress_time_per_person.csv",
+        f"{storage_location}/average_in_progress_time_per_{query_mode}.csv",
         "Average in-progress [day]",
     )
     export_metrics_csv(
         record_data,
-        "engineering_data/average_in_review_time_per_person.csv",
+        f"{storage_location}/average_in_review_time_per_{query_mode}.csv",
         "Average in-review [day]",
     )
 
     export_group_metrics_csv(
-        group_metrics, "engineering_data/total_tickets.csv", "Total tickets"
+        group_metrics, f"{storage_location}/total_tickets.csv", "Total tickets"
     )
     export_group_metrics_csv(
-        group_metrics, "engineering_data/total_points.csv", "Total points"
+        group_metrics, f"{storage_location}/total_points.csv", "Total points"
     )
 
 
@@ -135,6 +135,28 @@ def setup_variables():
         "Liz Schwab",
         "Luis Chávez",
         "Ragan Webber",
+    ]
+
+    xops_labels = [
+        "xops_packet_update",
+        "xops_new_packet",
+        "xops_ch_sms_whatsapp",
+        "xops_ch_change_name",
+        "xops_ch_message_troubleshoot",
+        "xops_enable_remittances",
+        "xops_remove_profile",
+        "xops_ch_portal",
+        "xops_ch_assorted",
+        "xops_assorted",
+        "xops_company_employee_id_counter",
+        "xops_raffle",
+        "xops_reports",
+        "xops_carholder_assorted",
+        "xops_remove_incomplete_packets" "xops_new_packet",
+        "xops_training_tracks",
+        "xops_paystubs",
+        "xops_transfer_funds",
+        "xops_company_message",
     ]
 
     default_metrics = {
@@ -147,12 +169,12 @@ def setup_variables():
         "average_ticket_points_weekly": 0,
     }
 
-    return engineering_users, default_metrics
+    return engineering_users, xops_labels, default_metrics
 
 
 def main():
     args, resolution_date = parse_arguments()
-    engineering_users, default_metrics = setup_variables()
+    engineering_users, xops_labels, default_metrics = setup_variables()
 
     # Perform JQL query and handle pagination if needed
     jira = get_jira_instance()
@@ -165,15 +187,19 @@ def main():
     interval = 3  # set this to the number of weeks you want each time period to be
 
     intervals = get_week_intervals(minimal_date, maximal_date, interval)
+    query_mode = "labels"  # "labels", "assignee"
+    query_data = xops_labels  # engineering_users, xops_labels
+    storage_location = "xops_data"  # , "engineering_data", "xops_data"
     record_data, time_records = process_jira_content_in_intervals(
         args,
-        "assignee",
-        engineering_users,
+        query_mode,  # "assignee",  # labels
+        query_data,  # engineering_users, xops_labels
         jira,
         custom_fields_map,
         timezone_choice,
         interval,
         intervals,
+        storage_location,  # xops_data
     )
 
     # Initialize an empty dictionary for storing the aggregated data
@@ -181,7 +207,7 @@ def main():
     print_sorted_person_data(time_records)
 
     # Now use the updated data list to create CSV
-    export_metrics_to_csv(record_data, group_metrics)
+    export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode)
 
 
 if __name__ == "__main__":
