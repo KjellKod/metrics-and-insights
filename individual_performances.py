@@ -9,6 +9,7 @@ import pytz
 import numpy as np
 from jira import JIRA
 from jira.resources import Issue
+from pathlib import Path
 
 from jira_io_utils import (
     get_jira_instance,
@@ -220,7 +221,11 @@ def main():
         query_data = xops_labels
         storage_location = "xops_data"
 
-    # Rest of your code continues
+    # Create target Directory if don't exist
+    directory = Path(storage_location)
+    if not directory.exists():
+        directory.mkdir(parents=True, exist_ok=True)
+        print("Directory ", directory, " created ")
 
     record_data, time_records = process_jira_content_in_intervals(
         args,
