@@ -1,18 +1,21 @@
+"""
+interpret, manage and use jira imported data
+"""
+
 from collections import defaultdict
+from datetime import datetime
 from jira_time_utils import parse_date, business_time_spent_in_seconds
 from jira_io_utils import print_detailed_ticket_data, retrieve_jira_issues
-from datetime import datetime
 
 g_status_list = ["In Progress", "In Review", "Pending Release"]
 
 
 def parse_status_changes(histories):
+    """retrieve json ticket history and extract the states"""
     status_changes = []
 
     # Sort histories by created timestamp in ascending order (chronologically)
-    sorted_histories = sorted(
-        histories, key=lambda history: parse_date(history.created)
-    )
+    sorted_histories = sorted(histories, key=lambda history: parse_date(history.created))
 
     for history in sorted_histories:
         for item in history.items:
@@ -28,6 +31,7 @@ def parse_status_changes(histories):
 
 
 def calculate_status_intervals(status_changes, status_to_measure):
+    """retrieve ticket status intervals and append them even if they are not done in usual order"""
     status_intervals = []
     status_start = None
 
@@ -48,6 +52,7 @@ def calculate_status_intervals(status_changes, status_to_measure):
 
 
 def find_status_timestamps(status_changes, *statuses):
+    """retrieve status change timestamp"""
     timestamps = {status: None for status in statuses}
 
     for change in status_changes:
@@ -59,6 +64,7 @@ def find_status_timestamps(status_changes, *statuses):
 
 
 def save_status_timing_results(result_dict, issue_key, status, intervals):
+    """save status timeing and duration"""
     if issue_key not in result_dict:
         result_dict[issue_key] = {}
 
@@ -79,6 +85,7 @@ def save_status_timing_results(result_dict, issue_key, status, intervals):
 
 
 def extract_status_durations(jira, jira_issue, result_dict):
+    """retrieve status durations"""
     issue = jira.issue(jira_issue.key, expand="changelog")
 
     status_changes = parse_status_changes(issue.changelog.histories)
@@ -87,25 +94,15 @@ def extract_status_durations(jira, jira_issue, result_dict):
         intervals = calculate_status_intervals(status_changes, status)
         save_status_timing_results(result_dict, issue.key, status, intervals)
 
-    for key, ticket in result_dict.items():
-        in_progress_sum = sum(
-            [
-                interval["adjusted_duration_s"]
-                for interval in ticket.get("In Progress", [])
-            ]
-        )
-        in_review_sum = sum(
-            [
-                interval["adjusted_duration_s"]
-                for interval in ticket.get("In Review", [])
-            ]
-        )
+    for _, ticket in result_dict.items():
+        in_progress_sum = sum([interval["adjusted_duration_s"] for interval in ticket.get("In Progress", [])])
+        in_review_sum = sum([interval["adjusted_duration_s"] for interval in ticket.get("In Review", [])])
         ticket["in_progress_s"] = in_progress_sum
         ticket["in_review_s"] = in_review_sum
 
 
-# Function to fetch custom fields and map them by ID
 def get_custom_fields_mapping(jira):
+    """Function to fetch custom fields and map them by ID"""
     custom_field_map = {}
     fields = jira.fields()
     for field in fields:
@@ -115,8 +112,8 @@ def get_custom_fields_mapping(jira):
     return custom_field_map
 
 
-# extract metadata with from the ticket
 def extract_ticket_data(issue, custom_fields_map, result_dict):
+    """extract metadata with from the ticket"""
     result_dict[issue.key] = {}
     result_dict[issue.key]["ID"] = issue.key
     result_dict[issue.key]["summary"] = issue.fields.summary
@@ -127,28 +124,27 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
     result_dict[issue.key]["resolutiondate"] = issue.fields.resolutiondate
     result_dict[issue.key]["description"] = issue.fields.description
 
+    # yes, these if cases are a mess, that's because JIRA json contenet IS a mess.
+    # maybe you can clean it up but most of the special handling is now here, in one location
+    # and fairly easy to see
     for field_id, field_value in issue.raw["fields"].items():
         # Get field name or use ID as fallback
         field_name = custom_fields_map.get(field_id, field_id)
 
+        # value_str is unused but very helpful for debugging in case you run into issues.
+        # I'd suggest to keep it in case changes would happen since the JIRA content parsing is messy
         if field_value is None:
             value_str = "None"
         elif isinstance(field_value, (str, int, float)):
             value_str = str(field_value)
         # Add support for issuetype display
         if field_name == "issuetype":
-            result_dict[issue.key]["type"] = field_value.get(
-                "name", f"<class '{field_value.__class__.__name__}'>"
-            )
+            result_dict[issue.key]["type"] = field_value.get("name", f"<class '{field_value.__class__.__name__}'>")
             continue
         # Add support for assignee display -->  assignee (assignee): <class 'dict'>
         elif field_name == "assignee":
             result_dict[issue.key]["assignee"] = (
-                field_value.get(
-                    "displayName", f"<class '{field_value.__class__.__name__}'>"
-                )
-                if field_value
-                else None
+                field_value.get("displayName", f"<class '{field_value.__class__.__name__}'>") if field_value else None
             )
             continue
         elif field_name == "resolution":
@@ -170,8 +166,8 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
                 result_dict[issue.key]["component"].append(component_name)
 
 
-# Process issues to calculate In-Progress time, In-Review time, etc.
 def process_issues(jira, issues, custom_fields_map):
+    """Process issues to calculate In-Progress time, In-Review time, etc."""
     ticket_data = {}
 
     for issue in issues:
@@ -182,6 +178,7 @@ def process_issues(jira, issues, custom_fields_map):
 
 
 def extract_closed_date(ticket_data):
+    """extract what date the ticket was closed"""
     closed_dates = defaultdict(dict)
 
     for key, ticket in ticket_data.items():
@@ -195,12 +192,12 @@ def extract_closed_date(ticket_data):
 
 
 def update_aggregated_results(time_records, ticket_data, label):
+    """update final metrics for the ticket"""
     total_adjusted_in_progress_seconds = 0
     total_adjusted_in_review_seconds = 0
     total_tickets = len(ticket_data)
-    total_ticket_points = 0
 
-    for key, ticket in ticket_data.items():
+    for _, ticket in ticket_data.items():
         in_progress_intervals = ticket.get("In Progress", [])
         in_review_intervals = ticket.get("In Review", [])
 
@@ -212,15 +209,10 @@ def update_aggregated_results(time_records, ticket_data, label):
             adjusted_duration_s = interval["adjusted_duration_s"]
             total_adjusted_in_review_seconds += adjusted_duration_s
 
-    average_in_progress_s = (
-        total_adjusted_in_progress_seconds / total_tickets if total_tickets > 0 else 0
-    )
-    average_in_review_s = (
-        total_adjusted_in_review_seconds / total_tickets if total_tickets > 0 else 0
-    )
+    average_in_progress_s = total_adjusted_in_progress_seconds / total_tickets if total_tickets > 0 else 0
+    average_in_review_s = total_adjusted_in_review_seconds / total_tickets if total_tickets > 0 else 0
 
     time_records[label] = {
-        "total_tickets": len(ticket_data),
         "total_in_progress": total_adjusted_in_progress_seconds,
         "total_in_review": total_adjusted_in_review_seconds,
         "average_in_progress": average_in_progress_s,
@@ -244,6 +236,7 @@ def calculate_individual_metrics(
     interval,
     storage_location,
 ):
+    """retrieving the indiidual metrics"""
     issues = retrieve_jira_issues(
         args,
         jira,
@@ -261,10 +254,7 @@ def calculate_individual_metrics(
     if args.verbose:
         print_detailed_ticket_data(ticket_data)
 
-    total_points = sum(
-        ticket["points"] if ticket["points"] is not None else 0
-        for ticket in ticket_data.values()
-    )
+    total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
     average_points_per_time_period = format(total_points / interval, ".1f")
 
     time_records = update_aggregated_results(time_records, ticket_data, person)
@@ -280,15 +270,11 @@ def calculate_individual_metrics(
         time_records[person]["total_tickets"] == num_tickets
     ), "Mismatch between total tickets in time_records and ticket_data length"
     avg_in_progress = format(
-        (time_records[person]["total_in_progress"] / (8 * 3600)) / num_tickets
-        if num_tickets != 0
-        else 0,
+        (time_records[person]["total_in_progress"] / (8 * 3600)) / num_tickets if num_tickets != 0 else 0,
         ".1f",
     )
     avg_in_review = format(
-        (time_records[person]["total_in_review"] / (8 * 3600)) / num_tickets
-        if num_tickets != 0
-        else 0,
+        (time_records[person]["total_in_review"] / (8 * 3600)) / num_tickets if num_tickets != 0 else 0,
         ".1f",
     )
 
@@ -302,6 +288,7 @@ def calculate_individual_metrics(
 
 
 def calculate_group_metrics(record_data):
+    """retrieving/calculating engineering group metrics"""
     # Initialize an empty dictionary for storing the aggregated data
     group_metrics = {}
 
@@ -332,6 +319,7 @@ def process_jira_content_in_intervals(
     intervals,
     storage_location,
 ):
+    """process jira content in 3w intervals or else the data will be cut down and skipped once its too big"""
     time_records = {}
     record_data = []
     overwrite_flag = {item: True for item in query_data}
@@ -340,12 +328,8 @@ def process_jira_content_in_intervals(
         start_date = datetime.strptime(intervals[i], "%Y-%m-%d").date()
         end_date = datetime.strptime(intervals[i + 1], "%Y-%m-%d").date()
         # Convert start_date and end_date to datetime objects and set them to PDT
-        start_date = timezone_choice.localize(
-            datetime.combine(start_date, datetime.min.time())
-        )
-        end_date = timezone_choice.localize(
-            datetime.combine(end_date, datetime.max.time())
-        )
+        start_date = timezone_choice.localize(datetime.combine(start_date, datetime.min.time()))
+        end_date = timezone_choice.localize(datetime.combine(end_date, datetime.max.time()))
         # then sigh, fix it again to be in format that JIRA api likes
         start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
         end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
@@ -364,7 +348,7 @@ def process_jira_content_in_intervals(
             (
                 overwrite_flag,
                 time_records,
-                average_points_per_time_period,
+                _,  # average_points_per_time_period
                 avg_in_progress,
                 avg_in_review,
             ) = calculate_individual_metrics(
@@ -387,9 +371,7 @@ def process_jira_content_in_intervals(
                     f"{start_date} - {end_date}": total_tickets,
                     "Total tickets": total_tickets,
                     "Total points": time_records[query_item]["total_ticket_points"],
-                    "Average points per Time Period": time_records[query_item][
-                        "average_points_per_time_period"
-                    ],
+                    "Average points per Time Period": time_records[query_item]["average_points_per_time_period"],
                     "Average in-progress [day]": avg_in_progress,
                     "Average in-review [day]": avg_in_review,
                 }

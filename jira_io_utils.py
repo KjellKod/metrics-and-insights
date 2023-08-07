@@ -1,3 +1,6 @@
+"""
+file read/write, API retrieval utility
+"""
 import os
 import csv
 import json
@@ -39,9 +42,7 @@ def export_metrics_csv(data, filename, metric_field):
             parse(end_date_str).strftime("%m-%d"),
         )
 
-        pivot_data[row["Person"]][new_date_range] = row[
-            metric_field
-        ]  # Update only the necessary field
+        pivot_data[row["Person"]][new_date_range] = row[metric_field]  # Update only the necessary field
 
     with open(filename, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -55,9 +56,7 @@ def export_metrics_csv(data, filename, metric_field):
 
         # Add the data row by row
         for name, row in pivot_data.items():
-            writer.writerow(
-                [name] + [row.get(h, "") for h in headers]
-            )  # Use get method with default value ''
+            writer.writerow([name] + [row.get(h, "") for h in headers])  # Use get method with default value ''
 
     print(f"CSV file '{filename}' has been generated.")
 
@@ -117,12 +116,8 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
 
     # Convert given start_date & end_date to datetime and make them timezone aware
     print(f"start_date -- end_date: {start_date} -- {end_date}")
-    start_date = pytz.timezone(timezone_str).localize(
-        datetime.combine(start_date, datetime.min.time())
-    )
-    end_date = pytz.timezone(timezone_str).localize(
-        datetime.combine(end_date, datetime.max.time())
-    )
+    start_date = pytz.timezone(timezone_str).localize(datetime.combine(start_date, datetime.min.time()))
+    end_date = pytz.timezone(timezone_str).localize(datetime.combine(end_date, datetime.max.time()))
 
     print(f"start_date2 -- end_date2: {start_date} -- {end_date}")
 
@@ -130,20 +125,11 @@ def load_jira_data_from_file(file_name, jira_instance, start_date, end_date):
     filtered_issues_data = [
         raw_issue
         for raw_issue in raw_issues_data
-        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(
-            pytz.timezone(timezone_str)
-        )
-        > start_date
-        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(
-            pytz.timezone(timezone_str)
-        )
-        <= end_date
+        if parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) > start_date
+        and parser.parse(raw_issue["fields"]["resolutiondate"]).astimezone(pytz.timezone(timezone_str)) <= end_date
     ]
 
-    issues = [
-        Issue(jira_instance._options, jira_instance._session, raw)
-        for raw in filtered_issues_data
-    ]
+    issues = [Issue(jira_instance._options, jira_instance._session, raw) for raw in filtered_issues_data]
     return issues
 
 
@@ -173,9 +159,7 @@ def fetch_issues_from_api(jira, query):
 
 def printIssues(issues):
     for issue in issues:
-        print(
-            f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}"
-        )
+        print(f"{issue.key}\t Resolution: {issue.fields.resolution.name}: {issue.fields.resolutiondate}")
 
 
 def print_records(category, records):
@@ -209,9 +193,7 @@ def print_detailed_ticket_data(ticket_data):
 
 
 def print_sorted_person_data(time_records):
-    data_list = [
-        {**{"person": person}, **values} for person, values in time_records.items()
-    ]
+    data_list = [{**{"person": person}, **values} for person, values in time_records.items()]
     # Sort and print the records
     sorted_data = sorted(data_list, key=lambda x: x["total_tickets"], reverse=True)
 
@@ -219,9 +201,7 @@ def print_sorted_person_data(time_records):
         print_records(item["person"], item)
 
 
-def retrieve_jira_issues(
-    args, jira, query, tag, path, overwrite_flag, start_date, end_date
-):
+def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_date, end_date):
     issues = {}
     jira_file = f"{path}/{tag}_data.json"
     if args.load:
@@ -235,9 +215,7 @@ def retrieve_jira_issues(
         if issues is None:
             print("Failed to load JIRA data from file")
             return []  # Return an empty list or handle the error accordingly
-        print(
-            f"Load jira from file,  {start_date} to {end_date}: {len(issues)} tickets from {jira_file}"
-        )
+        print(f"Load jira from file,  {start_date} to {end_date}: {len(issues)} tickets from {jira_file}")
     else:
         issues = fetch_issues_from_api(jira, query)
         print(f'Fetched {len(issues)} issues for  "{tag}"...')
