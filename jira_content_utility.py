@@ -140,13 +140,11 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
         # Add support for issuetype display
         if field_name == "issuetype":
             result_dict[issue.key]["type"] = field_value.get("name", f"<class '{field_value.__class__.__name__}'>")
-            continue
         # Add support for assignee display -->  assignee (assignee): <class 'dict'>
         elif field_name == "assignee":
             result_dict[issue.key]["assignee"] = (
                 field_value.get("displayName", f"<class '{field_value.__class__.__name__}'>") if field_value else None
             )
-            continue
         elif field_name == "resolution":
             if isinstance(field_value, dict):
                 result_dict[issue.key]["resolution"] = field_value
