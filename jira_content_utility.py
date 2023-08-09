@@ -15,7 +15,9 @@ def parse_status_changes(histories):
     status_changes = []
 
     # Sort histories by created timestamp in ascending order (chronologically)
-    sorted_histories = sorted(histories, key=lambda history: parse_date(history.created))
+    sorted_histories = sorted(
+        histories, key=lambda history: parse_date(history.created)
+    )
 
     for history in sorted_histories:
         for item in history.items:
@@ -95,8 +97,18 @@ def extract_status_durations(jira, jira_issue, result_dict):
         save_status_timing_results(result_dict, issue.key, status, intervals)
 
     for _, ticket in result_dict.items():
-        in_progress_sum = sum([interval["adjusted_duration_s"] for interval in ticket.get("In Progress", [])])
-        in_review_sum = sum([interval["adjusted_duration_s"] for interval in ticket.get("In Review", [])])
+        in_progress_sum = sum(
+            [
+                interval["adjusted_duration_s"]
+                for interval in ticket.get("In Progress", [])
+            ]
+        )
+        in_review_sum = sum(
+            [
+                interval["adjusted_duration_s"]
+                for interval in ticket.get("In Review", [])
+            ]
+        )
         ticket["in_progress_s"] = in_progress_sum
         ticket["in_review_s"] = in_review_sum
 
@@ -139,11 +151,17 @@ def extract_ticket_data(issue, custom_fields_map, result_dict):
             value_str = str(field_value)
         # Add support for issuetype display
         if field_name == "issuetype":
-            result_dict[issue.key]["type"] = field_value.get("name", f"<class '{field_value.__class__.__name__}'>")
+            result_dict[issue.key]["type"] = field_value.get(
+                "name", f"<class '{field_value.__class__.__name__}'>"
+            )
         # Add support for assignee display -->  assignee (assignee): <class 'dict'>
         elif field_name == "assignee":
             result_dict[issue.key]["assignee"] = (
-                field_value.get("displayName", f"<class '{field_value.__class__.__name__}'>") if field_value else None
+                field_value.get(
+                    "displayName", f"<class '{field_value.__class__.__name__}'>"
+                )
+                if field_value
+                else None
             )
         elif field_name == "resolution":
             if isinstance(field_value, dict):
@@ -207,8 +225,12 @@ def update_aggregated_results(time_records, ticket_data, label):
             adjusted_duration_s = interval["adjusted_duration_s"]
             total_adjusted_in_review_seconds += adjusted_duration_s
 
-    average_in_progress_s = total_adjusted_in_progress_seconds / total_tickets if total_tickets > 0 else 0
-    average_in_review_s = total_adjusted_in_review_seconds / total_tickets if total_tickets > 0 else 0
+    average_in_progress_s = (
+        total_adjusted_in_progress_seconds / total_tickets if total_tickets > 0 else 0
+    )
+    average_in_review_s = (
+        total_adjusted_in_review_seconds / total_tickets if total_tickets > 0 else 0
+    )
 
     time_records[label] = {
         "total_in_progress": total_adjusted_in_progress_seconds,
@@ -252,7 +274,10 @@ def calculate_individual_metrics(
     if args.verbose:
         print_detailed_ticket_data(ticket_data)
 
-    total_points = sum(ticket["points"] if ticket["points"] is not None else 0 for ticket in ticket_data.values())
+    total_points = sum(
+        ticket["points"] if ticket["points"] is not None else 0
+        for ticket in ticket_data.values()
+    )
     average_points_per_time_period = format(total_points / interval, ".1f")
 
     time_records = update_aggregated_results(time_records, ticket_data, person)
@@ -268,11 +293,15 @@ def calculate_individual_metrics(
         time_records[person]["total_tickets"] == num_tickets
     ), "Mismatch between total tickets in time_records and ticket_data length"
     avg_in_progress = format(
-        (time_records[person]["total_in_progress"] / (8 * 3600)) / num_tickets if num_tickets != 0 else 0,
+        (time_records[person]["total_in_progress"] / (8 * 3600)) / num_tickets
+        if num_tickets != 0
+        else 0,
         ".1f",
     )
     avg_in_review = format(
-        (time_records[person]["total_in_review"] / (8 * 3600)) / num_tickets if num_tickets != 0 else 0,
+        (time_records[person]["total_in_review"] / (8 * 3600)) / num_tickets
+        if num_tickets != 0
+        else 0,
         ".1f",
     )
 
@@ -326,8 +355,12 @@ def process_jira_content_in_intervals(
         start_date = datetime.strptime(intervals[i], "%Y-%m-%d").date()
         end_date = datetime.strptime(intervals[i + 1], "%Y-%m-%d").date()
         # Convert start_date and end_date to datetime objects and set them to PDT
-        start_date = timezone_choice.localize(datetime.combine(start_date, datetime.min.time()))
-        end_date = timezone_choice.localize(datetime.combine(end_date, datetime.max.time()))
+        start_date = timezone_choice.localize(
+            datetime.combine(start_date, datetime.min.time())
+        )
+        end_date = timezone_choice.localize(
+            datetime.combine(end_date, datetime.max.time())
+        )
         # then sigh, fix it again to be in format that JIRA api likes
         start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
         end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
@@ -337,7 +370,7 @@ def process_jira_content_in_intervals(
                 f"project = GAN  AND status in (Closed) "
                 f'and {query_mode}="{query_item}" '
                 f'and resolution NOT IN ("Duplicate", "Won\'t Do", "Declined", "Obsolete") '
-                f'and issuetype not in ("Incident", "Epic", "Support Request") '
+                f'and issuetype not in ("Incident", "Epic") '
                 f"and resolutiondate > '{start_date_str}' "
                 f"and resolutiondate <= '{end_date_str}' "
                 f"order by resolved desc"
@@ -369,7 +402,9 @@ def process_jira_content_in_intervals(
                     f"{start_date} - {end_date}": total_tickets,
                     "Total tickets": total_tickets,
                     "Total points": time_records[query_item]["total_ticket_points"],
-                    "Average points per Time Period": time_records[query_item]["average_points_per_time_period"],
+                    "Average points per Time Period": time_records[query_item][
+                        "average_points_per_time_period"
+                    ],
                     "Average in-progress [day]": avg_in_progress,
                     "Average in-review [day]": avg_in_review,
                 }

@@ -10,6 +10,7 @@ Use the -h option to see what your input options are.
 """
 
 import sys
+import os
 import argparse
 from pathlib import Path
 from datetime import date
@@ -33,10 +34,20 @@ from jira_content_utility import (
     calculate_group_metrics,
 )
 
+# JIRA_LINK="https://ganaz.atlassian.net"
+required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK"]
+# Check each one
+for var in required_env_vars:
+    if var not in os.environ:
+        print(f"Error: The environment variable {var} is not set.")
+        exit(1)
+
 
 def parse_arguments(parser):
     """parse arguments for metric retrieval script, xops or engineering, since a specific time or weeks back"""
-    parser.add_argument("-v", "--verbose", action="store_true", help="Display detailed ticket data")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Display detailed ticket data"
+    )
     parser.add_argument(
         "-l",
         "--load",
@@ -85,11 +96,15 @@ def parse_arguments(parser):
 
         # Check if 'xops' or 'engineering' have been provided. If not, raise an exception
         if args.metrics is None or args.metrics.lower() not in ["xops", "engineering"]:
-            raise argparse.ArgumentTypeError("Must choose  'xops' or 'engineering' for metrics")
+            raise argparse.ArgumentTypeError(
+                "Must choose  'xops' or 'engineering' for metrics"
+            )
 
         # If both --resolution-date and --weeks-back were provided, raise an exception
         if args.resolution_date and args.weeks_back:
-            raise argparse.ArgumentTypeError("Choose one of '--resolution-date' or '--weeks-back'")
+            raise argparse.ArgumentTypeError(
+                "Choose one of '--resolution-date' or '--weeks-back'"
+            )
 
     except (argparse.ArgumentError, argparse.ArgumentTypeError) as err:
         print(str(err))
@@ -101,8 +116,12 @@ def parse_arguments(parser):
 
 def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode):
     """export metrics to CSV"""
-    export_metrics_csv(record_data, f"{storage_location}/tickets_per_{query_mode}.csv", "Total tickets")
-    export_metrics_csv(record_data, f"{storage_location}/points_per_{query_mode}.csv", "Total points")
+    export_metrics_csv(
+        record_data, f"{storage_location}/tickets_per_{query_mode}.csv", "Total tickets"
+    )
+    export_metrics_csv(
+        record_data, f"{storage_location}/points_per_{query_mode}.csv", "Total points"
+    )
     export_metrics_csv(
         record_data,
         f"{storage_location}/average_points_per_{query_mode}.csv",
@@ -119,8 +138,12 @@ def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mo
         "Average in-review [day]",
     )
 
-    export_group_metrics_csv(group_metrics, f"{storage_location}/total_tickets.csv", "Total tickets")
-    export_group_metrics_csv(group_metrics, f"{storage_location}/total_points.csv", "Total points")
+    export_group_metrics_csv(
+        group_metrics, f"{storage_location}/total_tickets.csv", "Total tickets"
+    )
+    export_group_metrics_csv(
+        group_metrics, f"{storage_location}/total_points.csv", "Total points"
+    )
 
 
 def setup_variables():
@@ -146,7 +169,7 @@ def setup_variables():
         "xops_company_employee_id_counter",
         "xops_raffle",
         "xops_reports",
-        "xops_carholder_assorted",
+        "xops_cardholder_assorted",
         "xops_remove_incomplete_packets",
         "xops_new_packet",
         "xops_training_tracks",
