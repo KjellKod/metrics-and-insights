@@ -1,9 +1,9 @@
 """
-Providing metrics for xops jobs or engineering (team individual)
+Providing metrics for category jobs or engineering (team individual)
 The following environmental variables must be set
 export JIRA_API_KEY="...stuff..."
-export USER_EMAIL="yourname@ganaz.com"
-export JIRA_LINK="https://ganaz.atlassian.net"
+export USER_EMAIL="yourname@org.com"
+export JIRA_LINK="https://org.atlassian.net"
 
 Use the -h option to see what your input options are. 
 
@@ -34,7 +34,7 @@ from jira_content_utility import (
     calculate_group_metrics,
 )
 
-# JIRA_LINK="https://ganaz.atlassian.net"
+# JIRA_LINK="https://org.atlassian.net"
 required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK"]
 # Check each one
 for var in required_env_vars:
@@ -44,7 +44,7 @@ for var in required_env_vars:
 
 
 def parse_arguments(parser):
-    """parse arguments for metric retrieval script, xops or engineering, since a specific time or weeks back"""
+    """parse arguments for metric retrieval script, category or engineering, since a specific time or weeks back"""
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Display detailed ticket data"
     )
@@ -78,8 +78,8 @@ def parse_arguments(parser):
     parser.add_argument(
         "--metrics",
         type=str,
-        choices=["xops", "engineering"],
-        help='Choose between "xops" mode or "engineering" metrics mode',
+        choices=["category", "engineering"],
+        help='Choose between "category" mode or "engineering" metrics mode',
     )
 
     # Parse the arguments
@@ -94,10 +94,13 @@ def parse_arguments(parser):
         else:
             raise argparse.ArgumentTypeError("Failed to parse resolution date")
 
-        # Check if 'xops' or 'engineering' have been provided. If not, raise an exception
-        if args.metrics is None or args.metrics.lower() not in ["xops", "engineering"]:
+        # Check if 'category' or 'engineering' have been provided. If not, raise an exception
+        if args.metrics is None or args.metrics.lower() not in [
+            "category",
+            "engineering",
+        ]:
             raise argparse.ArgumentTypeError(
-                "Must choose  'xops' or 'engineering' for metrics"
+                "Must choose  'category' or 'engineering' for metrics"
             )
 
         # If both --resolution-date and --weeks-back were provided, raise an exception
@@ -149,33 +152,13 @@ def export_metrics_to_csv(record_data, group_metrics, storage_location, query_mo
 def setup_variables():
     """helper setup"""
     engineering_users = [
-        "Luke Dean",
-        "Liz Schwab",
-        "Luis Chávez",
-        "Ragan Webber",
+        "John Doe",
+        "Jane Doe",
     ]
 
-    xops_labels = [
-        "xops_packet_update",
-        "xops_new_packet",
-        "xops_ch_sms_whatsapp",
-        "xops_ch_change_name",
-        "xops_ch_message_troubleshoot",
-        "xops_enable_remittances",
-        "xops_remove_profile",
-        "xops_ch_portal",
-        "xops_ch_assorted",
-        "xops_assorted",
-        "xops_company_employee_id_counter",
-        "xops_raffle",
-        "xops_reports",
-        "xops_cardholder_assorted",
-        "xops_remove_incomplete_packets",
-        "xops_new_packet",
-        "xops_training_tracks",
-        "xops_paystubs",
-        "xops_transfer_funds",
-        "xops_company_message",
+    category_labels = [
+        "category_customer_help",
+        "category_debug_help",
     ]
 
     default_metrics = {
@@ -188,13 +171,13 @@ def setup_variables():
         "average_ticket_points_weekly": 0,
     }
 
-    return engineering_users, xops_labels, default_metrics
+    return engineering_users, category_labels, default_metrics
 
 
 def main():
     """execute the metrics retrieval and saving/printing"""
     parser = argparse.ArgumentParser(
-        description="Specify metrics xops/engineering and for which timeframe. You can save all the JIRA data or load previously saved data"
+        description="Specify metrics category/engineering and for which timeframe. You can save all the JIRA data or load previously saved data"
     )
     try:
         (
@@ -206,7 +189,7 @@ def main():
         parser.print_help()
         sys.exit(2)
 
-    engineering_users, xops_labels, _ = setup_variables()
+    engineering_users, category_labels, _ = setup_variables()
 
     # Perform JQL query and handle pagination if needed
     jira = get_jira_instance()
@@ -222,10 +205,10 @@ def main():
         query_data = engineering_users
         storage_location = "engineering_data"
 
-    elif args.metrics == "xops":
+    elif args.metrics == "category":
         query_mode = "labels"
-        query_data = xops_labels
-        storage_location = "xops_data"
+        query_data = category_labels
+        storage_location = "category_data"
 
     # Create target Directory if don't exist
     directory = Path(storage_location)
@@ -236,13 +219,13 @@ def main():
     record_data, time_records = process_jira_content_in_intervals(
         args,
         query_mode,  # "assignee",  # labels
-        query_data,  # engineering_users, xops_labels
+        query_data,  # engineering_users, category_labels
         jira,
         custom_fields_map,
         pytz.timezone("US/Mountain"),
         interval,
         intervals,
-        storage_location,  # xops_data
+        storage_location,  # category_data
     )
 
     # Initialize an empty dictionary for storing the aggregated data

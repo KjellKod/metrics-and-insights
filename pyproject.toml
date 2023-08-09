@@ -1,3 +1,0 @@
-[tool.black]
-line-length = 120  # replace '120' with your desired value.
-
