@@ -76,6 +76,9 @@ def business_time_spent_in_seconds(start, end):
 
 def get_week_intervals(minimal_date, maximal_date, interval):
     """extract week intervals"""
+    if not isinstance(interval, int) or interval <= 0:
+        raise ValueError("invalid week interval")
+    
     minimal_date = datetime.strptime(minimal_date, "%Y-%m-%d")
     maximal_date = datetime.strptime(maximal_date, "%Y-%m-%d")
 

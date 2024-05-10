@@ -13,8 +13,16 @@ import pytz
 from jira_time_utils import seconds_to_hms, datetime_serializer
 
 
+
+
 def get_jira_instance():
-    """create the jira instance"""
+    """
+    Create the jira instance
+    An easy way to set up your environment variables is through your .zshrc or .bashrc file 
+    export USER_EMAIL="your_email@example.com"
+    export JIRA_API_KEY="your_jira_api_key"
+    export JIRA_LINK="https://your_jira_instance.atlassian.net":
+    """
     user = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
     link = os.environ.get("JIRA_LINK")
