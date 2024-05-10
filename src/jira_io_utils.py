@@ -38,8 +38,8 @@ def export_metrics_csv(data, filename, metric_field):
     # Pivot data to wide format
     pivot_data = {}
     for row in data:
-        if row["Person"] not in pivot_data:
-            pivot_data[row["Person"]] = {"Person": row["Person"]}
+        if row["Name"] not in pivot_data:
+            pivot_data[row["Name"]] = {"Name": row["Name"]}
 
         # Get the date range key from the row dictionary
         date_range_key = [key for key in row.keys() if "-" in key][0]
@@ -50,7 +50,7 @@ def export_metrics_csv(data, filename, metric_field):
         # Parse the dates, format them without time, and combine them back together
         new_date_range = f"{parse(start_date_str).strftime('%m-%d')} - " f"{parse(end_date_str).strftime('%m-%d')}"
 
-        pivot_data[row["Person"]][new_date_range] = row[metric_field]
+        pivot_data[row["Name"]][new_date_range] = row[metric_field]
 
     with open(filename, mode="w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
@@ -59,8 +59,8 @@ def export_metrics_csv(data, filename, metric_field):
         writer.writerow([metric_field])
 
         # Get the headers from the keys of the first dictionary
-        headers = [k for k in list(pivot_data.values())[0].keys() if k != "Person"]
-        writer.writerow(["Person"] + headers)  # Person will be the first column
+        headers = [k for k in list(pivot_data.values())[0].keys() if k != "Name"]
+        writer.writerow(["Name"] + headers)  # Name will be the first column
 
         # Add the data row by row
         for name, row in pivot_data.items():
@@ -176,8 +176,8 @@ def print_issues(issues):
 
 
 def print_records(category, records):
-    """print personal records"""
-    print(f'Person: {category} {records["total_tickets"]} tickets completed')
+    """print Nameal records"""
+    print(f'Name: {category} {records["total_tickets"]} tickets completed')
     print(f"\tTotal points: {records['total_ticket_points']}")
     print(f"\tTotal Time In Progress   (m): {records['total_in_progress']/60:7.2f}")
     print(f"\tTotal Time In Review     (m): {records['total_in_review']/60:7.2f}")
@@ -207,14 +207,14 @@ def print_detailed_ticket_data(ticket_data):
         )
 
 
-def print_sorted_person_data(time_records):
-    """print person data in order"""
-    data_list = [{**{"person": person}, **values} for person, values in time_records.items()]
+def print_sorted_Name_data(time_records):
+    """print Name data in order"""
+    data_list = [{**{"Name": Name}, **values} for Name, values in time_records.items()]
     # Sort and print the records
     sorted_data = sorted(data_list, key=lambda x: x["total_tickets"], reverse=True)
 
     for item in sorted_data:
-        print_records(item["person"], item)
+        print_records(item["Name"], item)
 
 
 def retrieve_jira_issues(args, jira, query, tag, path, overwrite_flag, start_date, end_date):

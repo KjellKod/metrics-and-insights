@@ -1,0 +1,18 @@
+certifi==2024.2.2
+charset-normalizer==3.3.2
+defusedxml==0.7.1
+idna==3.7
+jira==3.8.0
+-e git+ssh://git@github.com/KjellKod/jiradoodles.git@8c73059f377038a10d67b3efcd62216401766543#egg=jiradoodles
+numpy==1.26.4
+oauthlib==3.2.2
+packaging==24.0
+pillow==10.3.0
+python-dateutil==2.9.0.post0
+pytz==2024.1
+requests==2.31.0
+requests-oauthlib==2.0.0
+requests-toolbelt==1.0.0
+six==1.16.0
+typing_extensions==4.11.0
+urllib3==2.2.1

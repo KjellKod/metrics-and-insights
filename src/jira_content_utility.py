@@ -244,7 +244,7 @@ def update_aggregated_results(time_records, ticket_data, label):
 
 
 def calculate_individual_metrics(
-    person,
+    Name,
     overwrite_flag,
     args,
     jira,
@@ -261,14 +261,14 @@ def calculate_individual_metrics(
         args,
         jira,
         query,
-        person,
+        Name,
         storage_location,  # "engineering_data",
-        overwrite_flag[person],
+        overwrite_flag[Name],
         start_date,
         end_date,
     )
-    overwrite_flag[person] = False  # Switch flag after first write operation
-    print(f'Processing {len(issues)} issues with "{person}"...')
+    overwrite_flag[Name] = False  # Switch flag after first write operation
+    print(f'Processing {len(issues)} issues with "{Name}"...')
     ticket_data = process_issues(jira, issues, custom_fields_map)
 
     if args.verbose:
@@ -280,8 +280,8 @@ def calculate_individual_metrics(
     )
     average_points_per_time_period = format(total_points / interval, ".1f")
 
-    time_records = update_aggregated_results(time_records, ticket_data, person)
-    time_records[person].update(
+    time_records = update_aggregated_results(time_records, ticket_data, Name)
+    time_records[Name].update(
         {
             "total_ticket_points": total_points,
             "average_points_per_time_period": average_points_per_time_period,
@@ -290,16 +290,16 @@ def calculate_individual_metrics(
 
     num_tickets = len(ticket_data)
     assert (
-        time_records[person]["total_tickets"] == num_tickets
+        time_records[Name]["total_tickets"] == num_tickets
     ), "Mismatch between total tickets in time_records and ticket_data length"
     avg_in_progress = format(
-        (time_records[person]["total_in_progress"] / (8 * 3600)) / num_tickets
+        (time_records[Name]["total_in_progress"] / (8 * 3600)) / num_tickets
         if num_tickets != 0
         else 0,
         ".1f",
     )
     avg_in_review = format(
-        (time_records[person]["total_in_review"] / (8 * 3600)) / num_tickets
+        (time_records[Name]["total_in_review"] / (8 * 3600)) / num_tickets
         if num_tickets != 0
         else 0,
         ".1f",
@@ -398,7 +398,7 @@ def process_jira_content_in_intervals(
             total_tickets = time_records[query_item]["total_tickets"]
             record_data.append(
                 {
-                    "Person": query_item,
+                    "Name": query_item,
                     f"{start_date} - {end_date}": total_tickets,
                     "Total tickets": total_tickets,
                     "Total points": time_records[query_item]["total_ticket_points"],

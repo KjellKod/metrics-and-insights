@@ -20,7 +20,7 @@ from jira_io_utils import (
     get_jira_instance,
     export_metrics_csv,
     export_group_metrics_csv,
-    print_sorted_person_data,
+    print_sorted_Name_data,
 )
 
 from jira_time_utils import (
@@ -230,7 +230,7 @@ def main():
 
     # Initialize an empty dictionary for storing the aggregated data
     group_metrics = calculate_group_metrics(record_data)
-    print_sorted_person_data(time_records)
+    print_sorted_Name_data(time_records)
 
     # Now use the updated data list to create CSV
     export_metrics_to_csv(record_data, group_metrics, storage_location, query_mode)
