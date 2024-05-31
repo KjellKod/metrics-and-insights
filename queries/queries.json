@@ -1,0 +1,10 @@
+[
+    {
+        "description": "Done in sprint 2024-Q2-S3-Panda",
+        "jql": "project=ONF AND Sprint=2024-Q2-S3-Panda AND status in (Closed, Resolved, Done, Released, 'To Release')"
+    },
+    
+    {    "description": "Done in sprint 2024-Q2-S4-Panda",
+        "jql": "project=ONF AND Sprint=2024-Q2-S4-Panda AND status in (Closed, Resolved, Done, Released, 'To Release')"
+    }
+]
