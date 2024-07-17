@@ -6,8 +6,8 @@ from collections import defaultdict
 access_token = os.environ.get('GITHUB_TOKEN_READONLY_WEB')
 
 # Set the repository owner and name
-owner = 'onfleet'
-repo = 'web'
+owner = os.environ.get('GITHUB_METRIC_OWNER')
+repo = on.environ.get('GITHUB_METRIC_REPO')
 
 # Set the API endpoint URL
 url = f'https://api.github.com/repos/{owner}/{repo}/tags'
