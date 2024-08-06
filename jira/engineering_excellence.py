@@ -42,12 +42,16 @@ def print_engineering_excellence():
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
 
-    jql_query = f"(project = ENG OR project = ONF) AND status = Done AND resolutiondate >= {start_date} AND resolutiondate <= {end_date} ORDER BY resolutiondate ASC"
+    # original jql_query = f"(project = ENG OR project = ONF) AND status = Done AND updatedDate >= {start_date} AND updatedDate <= {end_date} ORDER BY updatedDate ASC"
+    # TODO the query below for released tickets work the one above does not really work.
+    jql_query = f"project in (ONF, ENG, MOB) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+
+
     issues = jira.search_issues(jql_query, maxResults=None)
     month_data = defaultdict(lambda: {"engineering_excellence": 0, "other": 0})
 
     for issue in issues:
-        resolution_date = datetime.strptime(issue.fields.resolutiondate, "%Y-%m-%dT%H:%M:%S.%f%z")
+        resolution_date = datetime.strptime(issue.fields.updated, "%Y-%m-%dT%H:%M:%S.%f%z")
         month_key = resolution_date.strftime("%Y-%m")
 
         engineering_excellence = issue.fields.customfield_10079
