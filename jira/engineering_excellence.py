@@ -9,6 +9,9 @@ api_key = os.environ.get('JIRA_API_KEY')
 jira_url = os.environ.get('JIRA_LINK')
 
 required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK"]
+for var in required_env_vars:    
+    if os.environ.get(var) is None:
+        raise ValueError(f"Environment variable {var} is not set.")
 
 # JQL query
 #jql_query = 'project = ENG AND issueType = Release AND created > "2024-01-01" AND status = "Released" ORDER BY updated DESC'
