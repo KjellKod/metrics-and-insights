@@ -34,7 +34,8 @@ def get_jira_instance():
 def get_tickets_from_jira(start_date, end_date):
     # Get the Jira instance
     jira = get_jira_instance()
-    jql_query = f"project in (ONF, ENG, MOB, 'INT') AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    jql_query2 = f"project in (MOB) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    jql_query = f"project in (ONF, ENG, 'INT') AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     
     max_results = 100
     start_at = 0
@@ -114,6 +115,18 @@ def calculate_average_cycle_time_per_month(cycle_times_per_month):
             print("No completed tickets found.")
             print("---")
 
+def calculate_total_average_cycle_time(cycle_times_per_month):
+    all_cycle_times = []
+    for cycle_times in cycle_times_per_month.values():
+        all_cycle_times.extend(cycle_times)
+
+    if all_cycle_times:
+        total_average_cycle_time = sum(all_cycle_times) / len(all_cycle_times)
+        total_average_cycle_time_days = total_average_cycle_time / (60 * 60 * 24)  # Convert seconds to days
+        print(f"Total Average Cycle Time: {total_average_cycle_time_days:.2f} days")
+    else:
+        print("No completed tickets found to calculate average cycle time.")
+
 def calculate_monthly_cycle_time(start_date, end_date):
     tickets = get_tickets_from_jira(start_date, end_date)
     cycle_times_per_month = defaultdict(list)
@@ -128,7 +141,8 @@ def calculate_monthly_cycle_time(start_date, end_date):
     calculate_cycle_time(cycle_times_per_month)
     calculate_average_cycle_time_per_month(cycle_times_per_month)
     calculate_median_cycle_time_per_month(cycle_times_per_month)
-
+    calculate_total_average_cycle_time(cycle_times_per_month)
+    calculate_total_median_cycle_time(cycle_times_per_month)
 
 def calculate_median_cycle_time_per_month(cycle_times_per_month):
     for month, cycle_times in cycle_times_per_month.items():
@@ -147,6 +161,19 @@ def calculate_median_cycle_time_per_month(cycle_times_per_month):
             print(f"Month: {month}")
             print("No completed tickets found.")
             print("---")
+            
+def calculate_total_median_cycle_time(cycle_times_per_month):
+    all_cycle_times = []
+    for cycle_times in cycle_times_per_month.values():
+        all_cycle_times.extend(cycle_times)
+
+    if all_cycle_times:
+        median_cycle_time = statistics.median(all_cycle_times)
+        median_cycle_time_days = median_cycle_time / (60 * 60 * 24)  # Convert seconds to days
+        print(f"Total Median Cycle Time: {median_cycle_time_days:.2f} days")
+    else:
+        print("No completed tickets found to calculate median cycle time.")
+
 
 def get_days_and_hours(business_day: timedelta):
     total_days = business_day.days
