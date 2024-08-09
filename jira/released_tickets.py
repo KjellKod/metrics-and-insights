@@ -74,7 +74,7 @@ def process_issues(issues):
 
 # Get the Jira instance
 jira = get_jira_instance()
-jql_query = f"project in (ONF, ENG, MOB) AND status in (Released) and (updatedDate >= 2024-01-01 and updatedDate <= 2024-12-31) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+jql_query = f"project in (ONF, ENG, MOB, 'INT') AND status in (Released) and (updatedDate >= 2024-01-01 and updatedDate <= 2024-12-31) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
 # Run the JQL queries
 jql_issues = search_issues(jql_query)
