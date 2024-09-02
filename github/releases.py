@@ -7,7 +7,7 @@ access_token = os.environ.get('GITHUB_TOKEN_READONLY_WEB')
 
 # Set the repository owner and name
 owner = os.environ.get('GITHUB_METRIC_OWNER')
-repo = on.environ.get('GITHUB_METRIC_REPO')
+repo = os.environ.get('GITHUB_METRIC_REPO')
 
 # Set the API endpoint URL
 url = f'https://api.github.com/repos/{owner}/{repo}/tags'
@@ -21,7 +21,7 @@ headers = {
 # Set the query parameters
 params = {
     'per_page': 100,  # Number of items per page
-    'since': '2022-12-31T23:59:59Z'  # Filter releases after 2023-12
+    'since': '2023-12-31T23:59:59Z'  # Filter releases after 2023-12
 }
 
 # Create a dictionary to store releases by year and month
