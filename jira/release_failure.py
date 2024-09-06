@@ -11,7 +11,7 @@ def get_jira_instance():
 
 def get_release_tickets(start_date, end_date):
     jira = get_jira_instance()
-    jql_query = f"project = ENG AND summary ~ 'Production Release' AND created >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
+    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
     return jira.search_issues(jql_query, maxResults=1000, expand='changelog')
 
 def extract_linked_tickets(issue):
@@ -23,15 +23,27 @@ def extract_linked_tickets(issue):
             linked_keys.append(link.inwardIssue.key)
     return linked_keys
 
+
 def count_failed_releases(issue):
-    fail_count = 0
+    release_events = []
+    last_released_index = None
 
-    for history in issue.changelog.histories:
+    # Reverse the order of histories to process from oldest to most recent
+    for history in reversed(issue.changelog.histories):
         for item in history.items:
-            if item.field == "status" and item.fromString == "Released" and item.toString != "Released":
-                fail_count += 1  # Increment fail count immediately upon leaving "Released"
+            if item.field == "status":
+                if item.toString == "Released":
+                    release_date = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
+                    release_events.append((release_date, False))
+                    last_released_index = len(release_events) - 1
+                if item.fromString == "Released" and item.toString != "Released":
+                    if last_released_index is not None:
+                        release_events[last_released_index] = (release_events[last_released_index][0], True)
+                        last_released_index = None  # Reset the index after marking as failed
 
-    return fail_count
+    fail_count = sum(1 for _, failed in release_events if failed)
+    return fail_count, release_events
+
 
 def analyze_release_tickets(start_date, end_date):
     release_tickets = get_release_tickets(start_date, end_date)
@@ -40,26 +52,33 @@ def analyze_release_tickets(start_date, end_date):
     linked_tickets_count_per_month = defaultdict(int)  # To store the total linked tickets considering multiple failures
 
     for ticket in release_tickets:
-        month_key = datetime.strptime(ticket.fields.created, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y-%m")
         linked_tickets = extract_linked_tickets(ticket)
-        fail_count = count_failed_releases(ticket)
-        release_info[month_key].append({
-            "release_ticket": ticket.key,
-            "linked_tickets": linked_tickets,
-            "fail_count": fail_count
-        })
-        failed_releases_per_month[month_key] += fail_count
-        linked_tickets_count_per_month[month_key] += len(linked_tickets) * fail_count  # Multiply by fail_count
+        fail_count, release_events = count_failed_releases(ticket)
+        
+        # Sort release events by date
+        release_events.sort(key=lambda x: x[0])
+        
+        for release_date, failed in release_events:
+            month_key = release_date.strftime("%Y-%m")
+            release_info[month_key].append({
+                "release_ticket": ticket.key,
+                "release_date": release_date.strftime("%Y-%m-%d"),
+                "linked_tickets": linked_tickets,
+                "failed": failed
+            })
+            if failed:
+                failed_releases_per_month[month_key] += 1
+                linked_tickets_count_per_month[month_key] += len(linked_tickets)
 
     # Print the collected information
-    for month, tickets in release_info.items():
+    for month in sorted(release_info.keys()):
         print(f"Month: {month}")
-        for info in tickets:
-            print(f"Release Ticket: {info['release_ticket']}, Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])}), Failed Releases: {info['fail_count']}")
+        for info in sorted(release_info[month], key=lambda x: x['release_date']):
+            fail_message = "FAILED RELEASE  " if info['failed'] else "\t\t"
+            print(f"{fail_message} {info['release_ticket']} [{info['release_date']}], Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])})")
         print(f"Total Failed Releases for {month}: {failed_releases_per_month[month]}")
         print(f"Total Linked Tickets for Failed Releases in {month}: {linked_tickets_count_per_month[month]}")
         print("---")
-
 
 def main():
     current_year = datetime.now().year
