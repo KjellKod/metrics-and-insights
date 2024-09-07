@@ -107,7 +107,7 @@ def extract_engineering_excellence(start_date, end_date):
 
 def main():
     current_year = datetime.now().year
-    start_date = f"{current_year}-09-01"
+    start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     team_data = extract_engineering_excellence(start_date, end_date)
     print_team_metrics(team_data)
