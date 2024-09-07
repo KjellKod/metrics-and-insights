@@ -1,67 +1,62 @@
-install the jiradoodles package in edit mode will fix unit test issues
-=====================
-pip install -e .
-
-run unit test
-============
-python3 -m unittest discover -s test
-
-
-
-
-jira_metrics/
+```
+├── github/               # Scripts for extracting metrics from GitHub
+│   ├── releases.py
 │
-├── bin/                    # Directory for executable scripts
-│   ├── extract_metadata.py
-│   ├── extract_performance.py
-│   └── ...
+├── jira/                 # Scripts for extracting metrics from Jira
+│   ├── engineering_excellence.py
+│   ├── cycle_time.py
+│   ├── release_failure.py
+│   ├── released_tickets.py
 │
-├── jira_metrics/           # Main package directory
-│   ├── __init__.py         # Makes jira_metrics a Python package
-│   ├── config.py           # Configuration settings and constants
-│   ├── utilities/          # Utility modules
-│   │   ├── __init__.py
-│   │   ├── time_utils.py
-│   │   ├── io_utils.py
-│   │   ├── json_utils.py
-│   │   ├── jira_query.py
-│   │   └── ...
-│   ├── metrics/            # Modules for specific metrics extraction
-│   │   ├── __init__.py
-
-│   │   ├── sprint_metadata.py
-│   │   ├── performance_metrics.py
-│   │   └── ...
-│   └── data/               # For storing local data files, if necessary
-│
-├── tests/                  # Test suite
-│   ├── __init__.py
-│   ├── test_time_utils.py
-│   ├── test_io_utils.py
-│   ├── test_json_utils.py
-│   ├── test_jira_query.py
-│   └── ...
-│
-├── .gitignore              # Specifies intentionally untracked files to ignore
-├── requirements.txt        # Fixed versions of dependencies
-└── README.md               # Project overview and setup instructions
+├── tests/                # Test suite
+│   ├── __init__.py       
+│   ├── test_engineering_excellence.py
+| 
+├── .gitignore            # to ignore
+├── requirements.txt      # dependencies
+└── README.md             # overview
+```
 
 
-Key Components
-bin/: This directory contains executable scripts that users can run. Each script uses functionalities from the jira_metrics package. These scripts are the entry points for different tasks like extracting metadata or performance metrics.
-jira_metrics/: The main package containing all the modular code.
-config.py: Central configuration file for managing constants like API keys, URLs, etc.
-utilities/: Utility modules that provide common functionalities like handling time and dates, I/O operations, and Jira queries.
-metrics/: Modules dedicated to extracting specific metrics from Jira.
-tests/: Contains all unit tests. Each utility and metrics module should have corresponding test modules here.
 
-Development Practices
-Modularity: Keep the code modular. Each utility should have a single responsibility and should be independent as much as possible.
-Testing: Aim for high test coverage. Mock external dependencies like Jira API responses.
-Documentation: Each module, class, and method should have clear docstrings explaining what it does. The README should provide clear setup and usage instructions.
-Version Control: Use Git for version control. Include a .gitignore file to exclude unnecessary files (like __pycache__).
+## Key Components##
+*github/*
+Scripts for extracting metrics from GitHub based on the release tags 
+- releases.py: Script to retrieve and categorize GitHub releases by year and month.
 
-Setup Files
-init_.py: Necessary in each directory that you want to treat as a Python package. This can be empty or can include package imports.
-requirements.txt: List all the dependencies with versions that are known to work with your application.
-This structure should provide a solid foundation for building and scaling your Jira metrics extraction tool while keeping the code organized and maintainable.
+*jira/*
+Scripts for extracting metrics from Jira.
+
+engineering_excellence.py: Script to extract engineering excellence metrics from Jira.
+- cycle_time.py: Script to calculate cycle time metrics from Jira, based on when coding is finished until it's marked as released. 
+- release_failure.py: Script extract all `Release` tickets, the linked tickets part of that release and whether or not the release was a failure. 
+- released_tickets.py: Retrieve calculate amount of released tickets month-by-month.
+- Setup and Usage
+
+## Environmental Variables## 
+Some scripts require environmental variables to be set.You can set these in your .zshrc or .bashrc file:
+
+```
+export USER_EMAIL="your_email@example.com"
+xport JIRA_API_KEY="your_jira_api_key"
+export JIRA_LINK="https://your_jira_instance.atlassian.net"
+export GITHUB_TOKEN_READONLY_WEB="your_github_token"
+export GITHUB_METRIC_OWNER="your_github_repo_owner"
+export GITHUB_METRIC_REPO="your_github_repo_name"
+```
+
+
+## Example Usage ##
+Extracting GitHub Releases
+To retrieve and categorize GitHub releases, ensure your environmental variables are set and run:
+
+`python3 github/releases.py`
+
+
+
+## Tests ## 
+In each functionality directory, if it has a test directory you can run all of the tests like this 
+`python3 -m unittest discover -s tests -p "*.py"`
+
+Or more verbose with `-v` flag. You can also specify the individual file. 
+`python3 -m unittest discover -v -s tests -p test_engineering_excellence.py`

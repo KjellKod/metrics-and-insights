@@ -43,49 +43,36 @@ def get_resolution_date(ticket):
                 return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
     return None
 
-def print_engineering_excellence(): 
-    jira = get_jira_instance()
-    current_year = datetime.now().year
-    start_date = f"{current_year}-09-01"
-    end_date = f"{current_year}-12-31"
 
-    # Modified JQL query to filter tickets that changed to "Released" status within the given timeframe
-    jql_query = f"project in (ONF, ENG, MOB) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+def get_team(ticket):
+    if ticket.fields.project.key == "MOB":
+        return "mobile"
+    team_field = ticket.fields.customfield_10075
+    return team_field.value.strip() if team_field else "unknown"
 
-    print(jql_query) 
+def get_work_type(ticket):
+    work_type = ticket.fields.customfield_10079
+    return work_type.value.strip() if work_type else "Other"
 
-    released_tickets = jira.search_issues(jql_query, maxResults=1000, expand='changelog')
-    team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "other": 0}))
-    print(f"Total number of tickets retrieved: {len(released_tickets)}")
+def update_team_data(team_data, team, month_key, work_type_value):
+    if work_type_value in ["Debt Reduction", "Critical"]:
+        team_data[team][month_key]["engineering_excellence"] += 1
+    else:
+        team_data[team][month_key]["other"] += 1
 
-    for ticket in released_tickets:
-        resolution_date = get_resolution_date(ticket)
-        if not resolution_date:
-            print(f"Ticket {ticket.key} has no resolution date")
-            continue
-        month_key = resolution_date.strftime("%Y-%m")
-        work_type = ticket.fields.customfield_10079
-        team_field = ticket.fields.customfield_10075
+def categorize_ticket(ticket, team_data):
+    resolution_date = get_resolution_date(ticket)
+    if not resolution_date:
+        print(f"Ticket {ticket.key} has no resolution date")
+        return
 
-        if ticket.fields.project.key == "MOB":
-            team = "mobile"
-        elif team_field is not None:
-            team = team_field.value.strip()
-        else:
-            team = "unknown"
+    month_key = resolution_date.strftime("%Y-%m")
+    team = get_team(ticket)
+    work_type_value = get_work_type(ticket)
+    update_team_data(team_data, team, month_key, work_type_value)
 
-        if work_type is not None:
-            work_type_value = work_type.value.strip()
-        else:
-            work_type_value = "Other"
 
-        if work_type_value in ["Debt Reduction", "Critical"]:
-            team_data[team][month_key]["engineering_excellence"] += 1
-            #print(f"{ticket.key} - {work_type_value} - {team}")
-        else:
-            team_data[team][month_key]["other"] += 1
-            #print(f"{month_key} {ticket.key} - {work_type_value} - {team}")
-
+def print_team_metrics(team_data):
     for team, months in sorted(team_data.items()):
         print(f"Team {team.capitalize()}")
         for month, data in sorted(months.items()):
@@ -100,7 +87,32 @@ def print_engineering_excellence():
             print(f"  {month} Total tickets: {total_tickets}, product focus: {data['other']} [{product_focus_percent:.2f}%], engineering excellence: {data['engineering_excellence']} [{engineering_excellence_percent:.2f}%]")
 
 
+def extract_engineering_excellence(start_date, end_date): 
+    jira = get_jira_instance()
 
-print_engineering_excellence()
+    # Modified JQL query to filter tickets that changed to "Released" status within the given timeframe
+    jql_query = f"project in (ONF, ENG, MOB) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+
+    print(jql_query) 
+
+    released_tickets = jira.search_issues(jql_query, maxResults=1000, expand='changelog')
+    team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "other": 0}))
+    print(f"Total number of tickets retrieved: {len(released_tickets)}")
+
+    for ticket in released_tickets:
+        categorize_ticket(ticket, team_data)
+    print_team_metrics(team_data)
+    return team_data
+
+
+def main():
+    current_year = datetime.now().year
+    start_date = f"{current_year}-09-01"
+    end_date = f"{current_year}-12-31"
+    team_data = extract_engineering_excellence(start_date, end_date)
+    print_team_metrics(team_data)
+
+if __name__ == "__main__":
+    main()
     
     
