@@ -8,8 +8,9 @@ import pytz
 username = os.environ.get('USER_EMAIL')
 api_key = os.environ.get('JIRA_API_KEY')
 jira_url = os.environ.get('JIRA_LINK')
+projects = os.environ.get('JIRA_PROJECTS').split(',')
 
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK"]
+required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
 for var in required_env_vars:    
     if os.environ.get(var) is None:
         raise ValueError(f"Environment variable {var} is not set.")
@@ -94,7 +95,7 @@ def process_issues(issues, start_date_str):
 
 # Get the Jira instance
 jira = get_jira_instance()
-jql_query = f"project in (ONF, ENG, MOB, 'INT') AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
 # Run the JQL queries
 jql_issues = search_issues(jql_query)
