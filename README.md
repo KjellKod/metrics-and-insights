@@ -27,7 +27,7 @@ Scripts for extracting metrics from GitHub based on the release tags
 *jira/*
 Scripts for extracting metrics from Jira.
 
-engineering_excellence.py: Script to extract engineering excellence metrics from Jira.
+- engineering_excellence.py: Script to extract engineering excellence metrics from Jira. It shows for each team and month the product focus, engineering excellence focus (debt reductino, critical work) and the annual average SO FAR of ee
 - cycle_time.py: Script to calculate cycle time metrics from Jira, based on when coding is finished until it's marked as released. 
 - release_failure.py: Script extract all `Release` tickets, the linked tickets part of that release and whether or not the release was a failure. 
 - released_tickets.py: Retrieve calculate amount of released tickets month-by-month.
@@ -43,6 +43,10 @@ export JIRA_LINK="https://your_jira_instance.atlassian.net"
 export GITHUB_TOKEN_READONLY_WEB="your_github_token"
 export GITHUB_METRIC_OWNER="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
+export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
+export TEAM_ONE="first_team" 
+# -- used for when the `team` field isn't defined for a `ONE` project
+# example export TEAM_INT="mint"
 ```
 
 
