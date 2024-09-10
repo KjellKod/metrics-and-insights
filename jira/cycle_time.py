@@ -59,46 +59,81 @@ def get_tickets_from_jira(start_date, end_date):
         start_at += max_results
     return total_tickets
 
-def calculate_cycle_time_seconds(start_date_str, issue):
+def validate_issue(issue):
     if not isinstance(issue, Issue):
         print(f"Unexpected type: {type(issue)}  -- ignoring")
-        return None, None 
+        return False
+    return True
 
+def localize_start_date(start_date_str):
     pst = pytz.timezone('America/Los_Angeles')
-    start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
-    print(f"--\nProcessing: {issue.key}")
-    changelog = issue.changelog
+    return pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
+
+def log_process_process_changelog(changelog):
+    # Create the complete log string first
+    log_string = ""
+    count = 0
+    for history in reversed(changelog.histories):
+        for item in history.items:
+            if item.field == "status":
+                status = item.toString
+                count = count +1 
+                log_string += f"{count} -- {history.author}, {history.created}, {item.fromString} ---> {status}\n"
+    return log_string 
+
+
+def process_changelog(changelog, start_date):
+    code_review_statuses = {"code review", "in code review", "to review", "to code review", "in review", "in design review"}
     code_review_timestamp = None
     released_timestamp = None
-    code_review_statuses = {"code review", "in code review", "to review", "to code review", "in review", "in design review"}
 
-    log_string = ""
+
+    # we look at in chronological order and the FIRST time we go into code-review
+    for history in reversed(changelog.histories):
+        for item in history.items:
+            if item.field == "status":
+                status = item.toString
+                if status.lower() in code_review_statuses:
+                    code_review_timestamp = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
+                    break
+    # look at the histories in reverse-chronological order to find the LAST time it was released. 
     for history in changelog.histories:
         for item in history.items:
             if item.field == "status":
                 status = item.toString
-                log_string += f"{history.author}, {history.created}, {item.fromString} ---> {status}\n" 
-                if status.lower() in code_review_statuses:   
-                    code_review_timestamp = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
-                elif status.lower() == "released":
+                if status.lower() == "released":
                     released_timestamp = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
-                    # handle jira bulk migrations
                     if start_date > released_timestamp:
                         return None, None
                     break
+    return code_review_timestamp, released_timestamp
+
+def calculate_business_time(code_review_timestamp, released_timestamp):
+    business_seconds = business_time_spent_in_seconds(code_review_timestamp, released_timestamp)
+    business_days = business_seconds / (seconds_to_hours * hours_to_days)
+    return business_seconds, business_days
+
+def log_cycle_time(issue_key, log_string, business_seconds, business_days, code_review_timestamp, released_timestamp):
+    log_string += f"Cycle time in business hours: {business_seconds / seconds_to_hours:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+    log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
+    log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+    return log_string
+
+def calculate_cycle_time_seconds(start_date_str, issue):
+    if not validate_issue(issue):
+        return None, None
+
+    start_date = localize_start_date(start_date_str)
+    code_review_timestamp, released_timestamp = process_changelog(issue.changelog, start_date)
+    log_string = log_process_process_changelog(issue.changelog)
 
     if released_timestamp and code_review_timestamp:
-        business_seconds = business_time_spent_in_seconds(code_review_timestamp, released_timestamp)
-        business_days = business_seconds/(seconds_to_hours * hours_to_days)
-        log_string += f"Cycle time in business hours: {business_seconds / seconds_to_hours:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
-        log_string +=f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
-        print(log_string)
+        business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)
+        log_string = log_cycle_time(issue.key, log_string, business_seconds, business_days, code_review_timestamp, released_timestamp)
         month_key = released_timestamp.strftime("%Y-%m")
+        print(f"Processing {issue.key}\n{log_string}")
         return business_seconds, month_key
     return None, None
-
-
-
 
 def calculate_monthly_cycle_time(start_date, end_date):
     tickets = get_tickets_from_jira(start_date, end_date)
@@ -174,15 +209,6 @@ def calculate_monthly_cycle_time(start_date, end_date):
 #     else:
 #         print("No completed tickets found to calculate median cycle time.")
 
-
-# def get_days_and_hours(business_day: timedelta):
-#     total_days = business_day.days
-#     total_seconds = business_day.seconds
-#     extra_hours = total_seconds // 3600  # Convert remaining seconds to hours
-#     return total_days, extra_hours
-
-
-
 def business_time_spent_in_seconds(start, end):
     """extract only the time spent during business hours from a jira time range -- only count 8h"""
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
@@ -208,55 +234,6 @@ def business_time_spent_in_seconds(start, end):
             current = current.replace(hour=0, minute=0)
 
     return total_business_seconds
-
-
-
-# def business_days_between(start_date, end_date):
-#     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
-#     business_days = 0
-
-#     current_date = start_date
-#     while current_date <= end_date:
-#         if current_date.weekday() in weekdays:
-#             business_days += 1
-#         current_date += timedelta(days=1)
-
-#     return business_days
-
-
-# #only accounts for time within regular PST business hours
-# def business_hours_between(start_timestamp, end_timestamp):
-#     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
-#     business_hours = 0
-
-#     current_timestamp = start_timestamp
-#     while current_timestamp < end_timestamp:
-#         if current_timestamp.weekday() in weekdays:
-#             # Calculate the remaining hours in the current day
-#             end_of_day = datetime.combine(current_timestamp.date(), datetime.max.time(), current_timestamp.tzinfo)
-#             if end_of_day > end_timestamp:
-#                 end_of_day = end_timestamp
-
-#             # Calculate the start of the business day
-#             start_of_day = datetime.combine(current_timestamp.date(), datetime.min.time(), current_timestamp.tzinfo)
-#             start_of_business_day = start_of_day.replace(hour=9, minute=0, second=0, microsecond=0)
-#             end_of_business_day = start_of_day.replace(hour=17, minute=0, second=0, microsecond=0)
-
-#             if current_timestamp < start_of_business_day:
-#                 current_timestamp = start_of_business_day
-
-#             if current_timestamp < end_of_business_day:
-#                 if end_of_day > end_of_business_day:
-#                     end_of_day = end_of_business_day
-
-#                 business_hours += (end_of_day - current_timestamp).total_seconds() / 3600.0
-
-#         current_timestamp += timedelta(days=1)
-#         current_timestamp = current_timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
-
-#     return business_hours
-
-
 
 def main():
     current_year = datetime.now().year
