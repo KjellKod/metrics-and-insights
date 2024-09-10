@@ -1,14 +1,22 @@
 import unittest
 import sys
 import os
-from unittest.mock import MagicMock
-from datetime import datetime
+from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone, timedelta
 import pytz
 from jira.resources import Issue
+"""
+python3 -m unittest discover -v -s tests -p test_cycle_time.py
+"""
+
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from cycle_time import process_changelog
+from cycle_time import process_changelog, calculate_cycle_time_seconds
+
+# Define the PST timezone
+PST = timezone(timedelta(hours=-8))
+
 
 class TestProcessChangelog(unittest.TestCase):
 
@@ -110,5 +118,64 @@ class TestProcessChangelog(unittest.TestCase):
         self.assertIsNotNone(released_timestamp)
         self.assertEqual(code_review_timestamp, expected_code_review_timestamp)
         self.assertEqual(released_timestamp, expected_released_timestamp)
+
+class TestCalculateCycleTimeSeconds(unittest.TestCase):
+    @patch('cycle_time.validate_issue')
+    @patch('cycle_time.localize_start_date')
+    @patch('cycle_time.process_changelog')
+    @patch('cycle_time.log_process_process_changelog')
+    @patch('cycle_time.calculate_business_time')
+    @patch('cycle_time.log_cycle_time')
+    def test_calculate_cycle_time_seconds(self, mock_log_cycle_time, mock_calculate_business_time, mock_log_process_process_changelog, mock_process_changelog, mock_localize_start_date, mock_validate_issue):
+        # Mocking the dependencies
+        mock_validate_issue.return_value = True
+        mock_localize_start_date.return_value = datetime(2022, 12, 31, 10, 0, tzinfo=PST)
+        mock_process_changelog.return_value = (
+            datetime(2022, 12, 31, 10, 0, tzinfo=PST),
+            datetime(2022, 12, 31, 15, 0, tzinfo=PST)
+        )
+        mock_log_process_process_changelog.return_value = "Log string"
+        mock_calculate_business_time.return_value = (18000, 2.5)  # 5 hours in seconds, 2.5 business days
+        mock_log_cycle_time.return_value = "Updated log string"
+
+        # Creating a mock issue
+        mock_issue = MagicMock()
+        mock_issue.key = "ISSUE-123"
+        mock_issue.changelog = []
+
+        # Calling the function under test
+        business_seconds, month_key = calculate_cycle_time_seconds("2022-12-31T10:00:00.000-0800", mock_issue)
+
+        # Asserting the results
+        self.assertEqual(business_seconds, 18000)
+        self.assertEqual(month_key, "2022-12")
+
+        # Asserting the mocks were called with expected arguments
+        mock_validate_issue.assert_called_once_with(mock_issue)
+        mock_localize_start_date.assert_called_once_with("2022-12-31T10:00:00.000-0800")
+        mock_process_changelog.assert_called_once_with(mock_issue.changelog, mock_localize_start_date.return_value)
+        mock_log_process_process_changelog.assert_called_once_with(mock_issue.changelog)
+        mock_calculate_business_time.assert_called_once_with(
+            datetime(2022, 12, 31, 10, 0, tzinfo=PST),
+            datetime(2022, 12, 31, 15, 0, tzinfo=PST)
+        )
+        mock_log_cycle_time.assert_called_once_with(
+            "ISSUE-123",
+            "Log string",
+            18000,
+            2.5,
+            datetime(2022, 12, 31, 10, 0, tzinfo=PST),
+            datetime(2022, 12, 31, 15, 0, tzinfo=PST)
+        )
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
