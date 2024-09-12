@@ -2,13 +2,15 @@ import os
 from jira import JIRA
 from collections import defaultdict
 from datetime import datetime
+import pytz
 
 # Jira API endpoint
 username = os.environ.get('USER_EMAIL')
 api_key = os.environ.get('JIRA_API_KEY')
 jira_url = os.environ.get('JIRA_LINK')
+projects = os.environ.get('JIRA_PROJECTS').split(',')
 
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK"]
+required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
 for var in required_env_vars:    
     if os.environ.get(var) is None:
         raise ValueError(f"Environment variable {var} is not set.")
@@ -44,8 +46,9 @@ def search_issues(jql):
     max_results = 100
     total_issues = []
 
+    print(f"jql: {jql}")
     while True:
-        pagination_issues = jira.search_issues(jql, startAt=start_at, maxResults=max_results)
+        pagination_issues = jira.search_issues(jql, startAt=start_at, maxResults=max_results, expand='changelog')
         print(f"Received {len(pagination_issues)} tickets")
         total_issues.extend(pagination_issues)
         
@@ -57,12 +60,30 @@ def search_issues(jql):
     print(f"Received a total of {len(total_issues)} tickets")
     return total_issues
 
-def process_issues(issues):
+
+def get_resolution_date(ticket):
+    # we will not look at reversed(ticket.changelog.histories) since if the release was reverted,
+    # we will not consider it as a successful release
+    for history in ticket.changelog.histories:
+        for item in history.items:
+            if item.field == "status" and item.toString == "Released":
+                print(f"Found resolution date: {history.created}")
+                return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
+    return None
+
+def process_issues(issues, start_date_str):
+    # Convert start_date_str to a datetime object and make it offset-aware with PST timezone
+    pst = pytz.timezone('America/Los_Angeles')
+    start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
     month_data = defaultdict(lambda: {"released_tickets_count": 0, "released_tickets": []})
 
     for issue in issues:
-        updated_date = datetime.strptime(issue.fields.updated, "%Y-%m-%dT%H:%M:%S.%f%z")
-        month_key = updated_date.strftime("%Y-%m")
+        released_date = get_resolution_date(issue)
+        # Check if the updated_date is greater than or equal to start_date
+        if released_date < start_date:
+            continue
+        
+        month_key = released_date.strftime("%Y-%m")
         issue_key = issue.key
         
         month_data[month_key]["released_tickets_count"] += 1
@@ -74,13 +95,12 @@ def process_issues(issues):
 
 # Get the Jira instance
 jira = get_jira_instance()
-jql_query = f"project in (ONF, ENG, MOB, 'INT') AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
 # Run the JQL queries
 jql_issues = search_issues(jql_query)
-
 # Process the issues
-jql_month_data = process_issues(jql_issues)
+jql_month_data = process_issues(jql_issues, start_date)
 
 # Output the data in comma-separated format
 print("\nJQL Query Results:")
