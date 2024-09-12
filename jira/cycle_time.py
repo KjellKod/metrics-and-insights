@@ -1,13 +1,11 @@
 import os
-import statistics
-from collections import defaultdict
-from datetime import datetime, timedelta
-import argparse
-
-import pytz
 from jira import JIRA
 from jira.resources import Issue
-
+from collections import defaultdict
+from datetime import datetime, timedelta
+import statistics 
+import pytz
+import argparse
 
 # Define the argument parser
 parser = argparse.ArgumentParser(description="Process some tickets.")
@@ -219,7 +217,7 @@ def calculate_median_cycle_time(cycle_times):
     return 0
 
 def print_cycle_time_metrics(cycle_times_per_month):
-    # Separate the "all" team from other teams -- we want to see this data last. 
+    # Separate the "all" team from other teams -- we want to see this data
     all_team = cycle_times_per_month.pop("all", None)
     
     # Print metrics for all other teams
