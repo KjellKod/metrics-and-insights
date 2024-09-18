@@ -7,12 +7,17 @@ import statistics
 import pytz
 import argparse
 
-# Define the argument parser
-parser = argparse.ArgumentParser(description="Process some tickets.")
-parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 
-# Parse the arguments
-args = parser.parse_args()
+# Global variable for verbosity
+VERBOSE = False
+
+def parse_arguments():
+    # Define the argument parser
+    global VERBOSE
+    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    args = parser.parse_args()
+    VERBOSE = args.verbose
 
 # Jira API endpoint
 username = os.environ.get('USER_EMAIL')
@@ -28,7 +33,7 @@ hours_to_days = 8
 seconds_to_hours = 3600
 
 def verbose_print(message):
-    if args.verbose:
+    if VERBOSE:
         print(message)
 
 
@@ -240,6 +245,7 @@ def print_cycle_time_metrics(cycle_times_per_month):
 
 
 def main():
+    parse_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"

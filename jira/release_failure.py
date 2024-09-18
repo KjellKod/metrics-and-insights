@@ -2,12 +2,31 @@ import os
 from jira import JIRA
 from collections import defaultdict
 from datetime import datetime
+import argparse
+
+# Global variable for verbosity
+VERBOSE = False
+
+def parse_arguments():
+    # Define the argument parser
+    global VERBOSE
+    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    args = parser.parse_args()
+    VERBOSE = args.verbose
+
+
+def verbose_print(message):
+    if VERBOSE:
+        print(message)
 
 # Setup JIRA connection
 def get_jira_instance():
     options = {"server": os.environ.get("JIRA_LINK")}
     jira = JIRA(options=options, basic_auth=(os.environ.get("USER_EMAIL"), os.environ.get("JIRA_API_KEY")))
     return jira
+
+
 
 def get_release_tickets(start_date, end_date):
     jira = get_jira_instance()
@@ -19,8 +38,6 @@ def extract_linked_tickets(issue):
     for link in issue.fields.issuelinks:
         if hasattr(link, "outwardIssue"):
             linked_keys.append(link.outwardIssue.key)
-        elif hasattr(link, "inwardIssue"):
-            linked_keys.append(link.inwardIssue.key)
     return linked_keys
 
 
@@ -31,7 +48,9 @@ def count_failed_releases(issue):
     # Reverse the order of histories to process from oldest to most recent
     for history in reversed(issue.changelog.histories):
         for item in history.items:
+            # print all item information
             if item.field == "status":
+                verbose_print(f"{issue.key} {item.field}, from: {item.fromString} --> {item.toString}")
                 if item.toString == "Released":
                     release_date = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
                     release_events.append((release_date, False))
@@ -44,12 +63,18 @@ def count_failed_releases(issue):
     fail_count = sum(1 for _, failed in release_events if failed)
     return fail_count, release_events
 
-
 def analyze_release_tickets(start_date, end_date):
     release_tickets = get_release_tickets(start_date, end_date)
+    release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month = process_release_tickets(release_tickets)
+    print_release_info(release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month)
+    print_total_failure_percentage(total_releases_per_month, failed_releases_per_month)
+
+def process_release_tickets(release_tickets):
     release_info = defaultdict(list)
     failed_releases_per_month = defaultdict(int)
-    linked_tickets_count_per_month = defaultdict(int)  # To store the total linked tickets considering multiple failures
+    failed_releaselinked_tickets_count_per_month = defaultdict(int)  # To store the total linked tickets considering multiple failures
+    total_linked_tickets_count_per_month =  defaultdict(int)
+    total_releases_per_month = defaultdict(int) 
 
     for ticket in release_tickets:
         linked_tickets = extract_linked_tickets(ticket)
@@ -66,21 +91,41 @@ def analyze_release_tickets(start_date, end_date):
                 "linked_tickets": linked_tickets,
                 "failed": failed
             })
+            total_releases_per_month[month_key] += 1  # Increment total releases for the month
+            total_linked_tickets_count_per_month[month_key] += len(linked_tickets)  # Increment total linked tickets for the month
             if failed:
                 failed_releases_per_month[month_key] += 1
-                linked_tickets_count_per_month[month_key] += len(linked_tickets)
+                failed_releaselinked_tickets_count_per_month[month_key] += len(linked_tickets)
 
+    return release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month
+
+def print_release_info(release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month):
     # Print the collected information
     for month in sorted(release_info.keys()):
         print(f"Month: {month}")
         for info in sorted(release_info[month], key=lambda x: x['release_date']):
-            fail_message = "FAILED RELEASE  " if info['failed'] else "\t\t"
-            print(f"{fail_message} {info['release_ticket']} [{info['release_date']}], Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])})")
-        print(f"Total Failed Releases for {month}: {failed_releases_per_month[month]}")
-        print(f"Total Linked Tickets for Failed Releases in {month}: {linked_tickets_count_per_month[month]}")
+            fail_message = "FAILED RELEASE  " if info['failed'] else "RELEASE\t\t"
+            if VERBOSE:
+                verbose_print(f"{fail_message} {info['release_ticket']} [{info['release_date']}], Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])})")
+            else:
+                print(f"{fail_message} {info['release_ticket']} [{info['release_date']}]")
+        total_releases = total_releases_per_month[month]
+        failed_releases = failed_releases_per_month[month]
+        failure_percentage = (failed_releases / total_releases) * 100 if total_releases > 0 else 0
+        print(f"Total of {total_releases} releases for {month}, number of failed: {failed_releases}")
+        print(f"Total released tickets {total_linked_tickets_count_per_month[month]}, total failed release linked tickets: {failed_releaselinked_tickets_count_per_month[month]}") 
+        print(f"Release Failure Percentage for {month}: {failure_percentage:.2f}%")
+        print(f"Release Failure Linked Tickets Percentage for {month}: {(failed_releaselinked_tickets_count_per_month[month] / total_linked_tickets_count_per_month[month]) * 100:.2f}%")
         print("---")
 
+def print_total_failure_percentage(total_releases_per_month, failed_releases_per_month):
+    total_releases_all_time = sum(total_releases_per_month.values())
+    total_failed_releases_all_time = sum(failed_releases_per_month.values())
+    total_failure_percentage = (total_failed_releases_all_time / total_releases_all_time) * 100 if total_releases_all_time > 0 else 0
+    print(f"\nTotal release failure percentage for the whole time period: {total_failure_percentage:.2f}%")
+
 def main():
+    parse_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
@@ -88,3 +133,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
