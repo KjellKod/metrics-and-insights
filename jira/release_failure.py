@@ -2,12 +2,31 @@ import os
 from jira import JIRA
 from collections import defaultdict
 from datetime import datetime
+import argparse
+
+# Global variable for verbosity
+VERBOSE = False
+
+def parse_arguments():
+    # Define the argument parser
+    global VERBOSE
+    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    args = parser.parse_args()
+    VERBOSE = args.verbose
+
+
+def verbose_print(message):
+    if VERBOSE:
+        print(message)
 
 # Setup JIRA connection
 def get_jira_instance():
     options = {"server": os.environ.get("JIRA_LINK")}
     jira = JIRA(options=options, basic_auth=(os.environ.get("USER_EMAIL"), os.environ.get("JIRA_API_KEY")))
     return jira
+
+
 
 def get_release_tickets(start_date, end_date):
     jira = get_jira_instance()
@@ -29,7 +48,9 @@ def count_failed_releases(issue):
     # Reverse the order of histories to process from oldest to most recent
     for history in reversed(issue.changelog.histories):
         for item in history.items:
+            # print all item information
             if item.field == "status":
+                verbose_print(f"{issue.key} {item.field}, from: {item.fromString} --> {item.toString}")
                 if item.toString == "Released":
                     release_date = datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
                     release_events.append((release_date, False))
@@ -94,6 +115,7 @@ def analyze_release_tickets(start_date, end_date):
     print(f"\nTotal release failure percentage for the whole time period: {total_failure_percentage:.2f}%")
 
 def main():
+    parse_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
