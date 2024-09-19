@@ -123,10 +123,10 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
     @patch('cycle_time.validate_issue')
     @patch('cycle_time.localize_start_date')
     @patch('cycle_time.process_changelog')
-    @patch('cycle_time.log_process_process_changelog')
+    @patch('cycle_time.log_process_changelog')
     @patch('cycle_time.calculate_business_time')
     @patch('cycle_time.log_cycle_time')
-    def test_calculate_cycle_time_seconds(self, mock_log_cycle_time, mock_calculate_business_time, mock_log_process_process_changelog, mock_process_changelog, mock_localize_start_date, mock_validate_issue):
+    def test_calculate_cycle_time_seconds(self, mock_log_cycle_time, mock_calculate_business_time, mock_log_process_changelog, mock_process_changelog, mock_localize_start_date, mock_validate_issue):
         # Mocking the dependencies
         mock_validate_issue.return_value = True
         mock_localize_start_date.return_value = datetime(2022, 12, 31, 10, 0, tzinfo=PST)
@@ -134,7 +134,7 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
             datetime(2022, 12, 31, 10, 0, tzinfo=PST),
             datetime(2022, 12, 31, 15, 0, tzinfo=PST)
         )
-        mock_log_process_process_changelog.return_value = "Log string"
+        mock_log_process_changelog.return_value = "Log string"
         mock_calculate_business_time.return_value = (18000, 2.5)  # 5 hours in seconds, 2.5 business days
         mock_log_cycle_time.return_value = "Updated log string"
 
@@ -154,7 +154,7 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
         mock_validate_issue.assert_called_once_with(mock_issue)
         mock_localize_start_date.assert_called_once_with("2022-12-31T10:00:00.000-0800")
         mock_process_changelog.assert_called_once_with(mock_issue.changelog, mock_localize_start_date.return_value)
-        mock_log_process_process_changelog.assert_called_once_with(mock_issue.changelog)
+        mock_log_process_changelog.assert_called_once_with(mock_issue.changelog)
         mock_calculate_business_time.assert_called_once_with(
             datetime(2022, 12, 31, 10, 0, tzinfo=PST),
             datetime(2022, 12, 31, 15, 0, tzinfo=PST)

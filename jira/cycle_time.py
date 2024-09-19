@@ -127,7 +127,7 @@ def localize_start_date(start_date_str):
     pst = pytz.timezone('America/Los_Angeles')
     return pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
 
-def log_process_process_changelog(changelog):
+def log_process_changelog(changelog):
     # Create the complete log string first
     log_string = ""
     count = 0
@@ -183,7 +183,7 @@ def calculate_cycle_time_seconds(start_date_str, issue):
 
     start_date = localize_start_date(start_date_str)
     code_review_timestamp, released_timestamp = process_changelog(issue.changelog, start_date)
-    log_string = log_process_process_changelog(issue.changelog)
+    log_string = log_process_changelog(issue.changelog)
 
     if released_timestamp and code_review_timestamp:
         business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)
