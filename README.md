@@ -60,7 +60,9 @@ To retrieve and categorize GitHub releases, ensure your environmental variables 
 
 ## Tests ## 
 In each functionality directory, if it has a test directory you can run all of the tests like this 
+
 `python3 -m unittest discover -s tests -p "*.py"`
 
 Or more verbose with `-v` flag. You can also specify the individual file. 
+
 `python3 -m unittest discover -v -s tests -p test_engineering_excellence.py`
