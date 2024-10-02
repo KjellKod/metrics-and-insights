@@ -68,7 +68,7 @@ def get_tickets_from_jira(start_date, end_date):
         tickets = jira.search_issues(jql_query, startAt=start_at, maxResults=max_results, expand='changelog')
         if len(tickets) == 0:
             break
-       
+        print (f"Received {len(tickets)} tickets")
         total_tickets.extend(tickets)
         start_at += max_results
         if len(tickets) < max_results:
