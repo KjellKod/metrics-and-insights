@@ -6,6 +6,10 @@ import argparse
 
 # Global variable for verbosity
 VERBOSE = False
+EXCEPTIONS = ["ENG-8158"]
+
+def exceptions_check(ticket_key):
+    return ticket_key in EXCEPTIONS
 
 def parse_arguments():
     # Define the argument parser
@@ -60,25 +64,35 @@ def count_failed_releases(issue):
                         release_events[last_released_index] = (release_events[last_released_index][0], True)
                         last_released_index = None  # Reset the index after marking as failed
 
+
+    # Check for exceptions
+    if exceptions_check(issue.key):
+        for i in range(len(release_events)):
+            release_events[i] = (release_events[i][0], False)
+
     fail_count = sum(1 for _, failed in release_events if failed)
     return fail_count, release_events
 
 def analyze_release_tickets(start_date, end_date):
     release_tickets = get_release_tickets(start_date, end_date)
-    release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month = process_release_tickets(release_tickets)
+    release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month, exceptions = process_release_tickets(release_tickets)
     print_release_info(release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month)
     print_total_failure_percentage(total_releases_per_month, failed_releases_per_month)
-
+    print_exceptions(exceptions)
+    
 def process_release_tickets(release_tickets):
     release_info = defaultdict(list)
     failed_releases_per_month = defaultdict(int)
     failed_releaselinked_tickets_count_per_month = defaultdict(int)  # To store the total linked tickets considering multiple failures
     total_linked_tickets_count_per_month =  defaultdict(int)
     total_releases_per_month = defaultdict(int) 
+    exceptions = []
 
     for ticket in release_tickets:
         linked_tickets = extract_linked_tickets(ticket)
         fail_count, release_events = count_failed_releases(ticket)
+        if exceptions_check(ticket.key):
+                exceptions.append(ticket.key)
         
         # Sort release events by date
         release_events.sort(key=lambda x: x[0])
@@ -97,7 +111,7 @@ def process_release_tickets(release_tickets):
                 failed_releases_per_month[month_key] += 1
                 failed_releaselinked_tickets_count_per_month[month_key] += len(linked_tickets)
 
-    return release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month
+    return release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month, exceptions
 
 def print_release_info(release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month):
     # Print the collected information
@@ -123,6 +137,10 @@ def print_total_failure_percentage(total_releases_per_month, failed_releases_per
     total_failed_releases_all_time = sum(failed_releases_per_month.values())
     total_failure_percentage = (total_failed_releases_all_time / total_releases_all_time) * 100 if total_releases_all_time > 0 else 0
     print(f"\nTotal release failure percentage for the whole time period: {total_failure_percentage:.2f}%")
+
+def print_exceptions(exceptions):
+    if exceptions:
+        print(f"\n* Releases that were wrongly tagged as failed and corrected in this script were: {', '.join(exceptions)}")
 
 def main():
     parse_arguments()

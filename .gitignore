@@ -58,6 +58,9 @@ cover/
 *.mo
 *.pot
 
+# csv output
+*.csv
+
 # Django stuff:
 *.log
 local_settings.py
@@ -96,6 +99,9 @@ ipython_config.py
 #   having no cross-platform support, pipenv may install dependencies that don't work, or not
 #   install all needed dependencies.
 #Pipfile.lock
+
+#visual studio 
+.DS_Store
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.

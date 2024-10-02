@@ -68,7 +68,7 @@ def get_tickets_from_jira(start_date, end_date):
         tickets = jira.search_issues(jql_query, startAt=start_at, maxResults=max_results, expand='changelog')
         if len(tickets) == 0:
             break
-       
+        print (f"Received {len(tickets)} tickets")
         total_tickets.extend(tickets)
         start_at += max_results
         if len(tickets) < max_results:
@@ -127,7 +127,7 @@ def localize_start_date(start_date_str):
     pst = pytz.timezone('America/Los_Angeles')
     return pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
 
-def log_process_process_changelog(changelog):
+def log_process_changelog(changelog):
     # Create the complete log string first
     log_string = ""
     count = 0
@@ -183,7 +183,7 @@ def calculate_cycle_time_seconds(start_date_str, issue):
 
     start_date = localize_start_date(start_date_str)
     code_review_timestamp, released_timestamp = process_changelog(issue.changelog, start_date)
-    log_string = log_process_process_changelog(issue.changelog)
+    log_string = log_process_changelog(issue.changelog)
 
     if released_timestamp and code_review_timestamp:
         business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)

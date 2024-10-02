@@ -59,13 +59,15 @@ def get_team(ticket):
 
 def get_work_type(ticket):
     work_type = ticket.fields.customfield_10079
-    return work_type.value.strip() if work_type else "Unknown"
+    return work_type.value.strip() if work_type else "Product"
 
 def update_team_data(team_data, team, month_key, work_type_value):
     if work_type_value in ["Debt Reduction", "Critical"]:
         team_data[team][month_key]["engineering_excellence"] += 1
+        team_data["all"][month_key]["engineering_excellence"] += 1
     else:
-        team_data[team][month_key]["unknown"] += 1
+        team_data[team][month_key]["product"] += 1
+        team_data["all"][month_key]["product"] += 1
 
 def categorize_ticket(ticket, team_data):
     resolution_date = get_resolution_date(ticket)
@@ -87,9 +89,9 @@ def print_team_metrics(team_data):
         cumulative_total = 0
         
         for month, data in sorted(months.items()):
-            total_tickets = data["engineering_excellence"] + data["unknown"]
+            total_tickets = data["engineering_excellence"] + data["product"]
             if total_tickets > 0:
-                product_focus_percent = (data["unknown"] / total_tickets) * 100
+                product_focus_percent = (data["product"] / total_tickets) * 100
                 engineering_excellence_percent = (data["engineering_excellence"] / total_tickets) * 100
             else:
                 product_focus_percent = 0
@@ -104,7 +106,7 @@ def print_team_metrics(team_data):
             else:
                 annual_ee_average = 0
 
-            print(f"  {month} Total tickets: {total_tickets}, product focus: {data['unknown']} [{product_focus_percent:.2f}%], engineering excellence: {data['engineering_excellence']} [{engineering_excellence_percent:.2f}%], annual ee average: {annual_ee_average:.2f}%")
+            print(f"  {month} Total tickets: {total_tickets}, product focus: {data['product']} [{product_focus_percent:.2f}%], engineering excellence: {data['engineering_excellence']} [{engineering_excellence_percent:.2f}%], annual ee average: {annual_ee_average:.2f}%")
 
 
 def search_issues(jql):
@@ -128,7 +130,7 @@ def search_issues(jql):
 
 def extract_engineering_excellence(jql_query, start_date, end_date): 
     released_tickets = search_issues(jql_query)
-    team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "unknown": 0}))
+    team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0}))
     print(f"Total number of tickets retrieved: {len(released_tickets)}")
 
     for ticket in released_tickets:
