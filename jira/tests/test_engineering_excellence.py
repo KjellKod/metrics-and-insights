@@ -122,26 +122,26 @@ class TestTicketFunctions(unittest.TestCase):
         mock_print.assert_called_with("Ticket TICKET-1 has no resolution date")
 
 
-def test_categorize_ticket_with_resolution_date(self):
-        self.ticket.key = "TICKET-2"
-        self.ticket.changelog.histories = [
-            MagicMock(created="2023-10-01T12:34:56.789+0000", items=[
-                MagicMock(field="status", toString="Released")
-            ])
-        ]
-        self.ticket.fields.project.key = "MOB"
-        self.ticket.fields.customfield_10079.value = "Debt Reduction"
-        team_data = {
-            "mobile": {
-                "2023-10": {
-                    "engineering_excellence": 0,
-                    "product": 0
+        def test_categorize_ticket_with_resolution_date(self):
+                self.ticket.key = "TICKET-2"
+                self.ticket.changelog.histories = [
+                    MagicMock(created="2023-10-01T12:34:56.789+0000", items=[
+                        MagicMock(field="status", toString="Released")
+                    ])
+                ]
+                self.ticket.fields.project.key = "MOB"
+                self.ticket.fields.customfield_10079.value = "Debt Reduction"
+                team_data = {
+                    "mobile": {
+                        "2023-10": {
+                            "engineering_excellence": 0,
+                            "product": 0
+                        }
+                    }
                 }
-            }
-        }
-        categorize_ticket(self.ticket, team_data)
-        self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 1)
-        self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
+                categorize_ticket(self.ticket, team_data)
+                self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 1)
+                self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
 
 
 class TestEngineeringExcellence(unittest.TestCase):
