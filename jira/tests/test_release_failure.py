@@ -67,7 +67,7 @@ class TestReleaseFailure(unittest.TestCase):
             MagicMock(spec=['outwardIssue'], outwardIssue=MagicMock(key='LINKED-2')),
         ]
 
-        release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month = process_release_tickets([mock_ticket])
+        release_info, failed_releases_per_month, failed_releaselinked_tickets_count_per_month, total_linked_tickets_count_per_month, total_releases_per_month, exceptions = process_release_tickets([mock_ticket])
         
         self.assertEqual(len(release_info), 1)
         self.assertEqual(failed_releases_per_month['2023-01'], 1)

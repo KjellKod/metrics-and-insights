@@ -86,9 +86,9 @@ class TestTicketFunctions(unittest.TestCase):
         self.ticket.fields.customfield_10075.value = "Backend"
         self.assertEqual(get_team(self.ticket), "Backend")
 
-    def test_get_work_type_unknown(self):
+    def test_get_work_type_product(self):
         self.ticket.fields.customfield_10079 = None
-        self.assertEqual(get_work_type(self.ticket), "Unknown")
+        self.assertEqual(get_work_type(self.ticket), "Product")
 
     def test_get_work_type_specific(self):
         self.ticket.fields.customfield_10079.value = "Feature"
@@ -96,29 +96,22 @@ class TestTicketFunctions(unittest.TestCase):
 
     def test_update_team_data_engineering_excellence(self):
         team_data = {
+            "all": {
+                "2023-10": {
+                    "engineering_excellence": 0,
+                    "product": 0
+                }
+            },
             "mobile": {
                 "2023-10": {
                     "engineering_excellence": 0,
-                    "unknown": 0
+                    "product": 0
                 }
             }
         }
         update_team_data(team_data, "mobile", "2023-10", "Debt Reduction")
         self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 1)
-        self.assertEqual(team_data["mobile"]["2023-10"]["unknown"], 0)
-
-    def test_update_team_data_unknown(self):
-        team_data = {
-            "mobile": {
-                "2023-10": {
-                    "engineering_excellence": 0,
-                    "unknown": 0
-                }
-            }
-        }
-        update_team_data(team_data, "mobile", "2023-10", "Feature")
-        self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 0)
-        self.assertEqual(team_data["mobile"]["2023-10"]["unknown"], 1)
+        self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
 
     @patch('builtins.print')
     def test_categorize_ticket_no_resolution_date(self, mock_print):
@@ -142,13 +135,13 @@ def test_categorize_ticket_with_resolution_date(self):
             "mobile": {
                 "2023-10": {
                     "engineering_excellence": 0,
-                    "unknown": 0
+                    "product": 0
                 }
             }
         }
         categorize_ticket(self.ticket, team_data)
         self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 1)
-        self.assertEqual(team_data["mobile"]["2023-10"]["unknown"], 0)
+        self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
 
 
 class TestEngineeringExcellence(unittest.TestCase):
@@ -191,7 +184,7 @@ class TestEngineeringExcellence(unittest.TestCase):
         mock_jira.search_issues.assert_called_once_with(jql_query, startAt=0, maxResults=100, expand='changelog')
 
         # Check that the team_data dictionary was populated correctly
-        expected_team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "unknown": 0}))
+        expected_team_data = defaultdict(lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0}))
         expected_team_data['mock_team']['2023-10']['engineering_excellence'] = 1
 
         self.assertEqual(team_data, expected_team_data)
