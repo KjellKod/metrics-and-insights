@@ -71,3 +71,6 @@ In each functionality directory, if it has a test directory you can run all of t
 Or more verbose with `-v` flag. You can also specify the individual file. 
 
 `python3 -m unittest discover -v -s tests -p test_engineering_excellence.py`
+
+## Branches
+[Trick to update your branch to latest on main, in the github UI](https://github.com/USERNAME/REPOSITORY_NAME/compare/feature-branch...main)
