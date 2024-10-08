@@ -17,7 +17,12 @@
 └── README.md             # overview
 ```
 
+## Requirements
+Install the necessary python frameworks with: 
+`pip install --upgrade -r requirements.txt`
 
+If you do python dependency changes, please add them later in your virtual environment with 
+`pip3 freeze requirements.txt`
 
 ## Key Components##
 *github/*

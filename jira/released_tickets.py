@@ -5,13 +5,13 @@ from datetime import datetime
 import pytz
 
 # Jira API endpoint
-username = os.environ.get('USER_EMAIL')
-api_key = os.environ.get('JIRA_API_KEY')
-jira_url = os.environ.get('JIRA_LINK')
-projects = os.environ.get('JIRA_PROJECTS').split(',')
+username = os.environ.get("USER_EMAIL")
+api_key = os.environ.get("JIRA_API_KEY")
+jira_url = os.environ.get("JIRA_LINK")
+projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-for var in required_env_vars:    
+for var in required_env_vars:
     if os.environ.get(var) is None:
         raise ValueError(f"Environment variable {var} is not set.")
 
@@ -21,11 +21,10 @@ start_date = f"{current_year}-01-01"
 end_date = f"{current_year}-12-31"
 
 
-
 def get_jira_instance():
     """
     Create the jira instance
-    An easy way to set up your environment variables is through your .zshrc or .bashrc file 
+    An easy way to set up your environment variables is through your .zshrc or .bashrc file
     export USER_EMAIL="your_email@example.com"
     export JIRA_API_KEY="your_jira_api_key"
     export JIRA_LINK="https://your_jira_instance.atlassian.net"
@@ -40,7 +39,6 @@ def get_jira_instance():
     return jira
 
 
-
 def search_issues(jql):
     start_at = 0
     max_results = 100
@@ -48,13 +46,15 @@ def search_issues(jql):
 
     print(f"jql: {jql}")
     while True:
-        pagination_issues = jira.search_issues(jql, startAt=start_at, maxResults=max_results, expand='changelog')
+        pagination_issues = jira.search_issues(
+            jql, startAt=start_at, maxResults=max_results, expand="changelog"
+        )
         print(f"Received {len(pagination_issues)} tickets")
         total_issues.extend(pagination_issues)
-        
+
         if len(pagination_issues) < max_results:
             break
-        
+
         start_at += max_results
 
     print(f"Received a total of {len(total_issues)} tickets")
@@ -71,26 +71,28 @@ def get_resolution_date(ticket):
                 return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
     return None
 
+
 def process_issues(issues, start_date_str):
     # Convert start_date_str to a datetime object and make it offset-aware with PST timezone
-    pst = pytz.timezone('America/Los_Angeles')
+    pst = pytz.timezone("America/Los_Angeles")
     start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
-    month_data = defaultdict(lambda: {"released_tickets_count": 0, "released_tickets": []})
+    month_data = defaultdict(
+        lambda: {"released_tickets_count": 0, "released_tickets": []}
+    )
 
     for issue in issues:
         released_date = get_resolution_date(issue)
         # Check if the updated_date is greater than or equal to start_date
         if released_date < start_date:
             continue
-        
+
         month_key = released_date.strftime("%Y-%m")
         issue_key = issue.key
-        
+
         month_data[month_key]["released_tickets_count"] += 1
         month_data[month_key]["released_tickets"].append(f"{issue_key}")
 
     return month_data
-
 
 
 # Get the Jira instance
