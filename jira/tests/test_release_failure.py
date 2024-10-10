@@ -83,7 +83,7 @@ class TestReleaseFailure(unittest.TestCase):
             failed_releaselinked_tickets_count_per_month,
             total_linked_tickets_count_per_month,
             total_releases_per_month,
-            exceptions,
+            _,
         ) = process_release_tickets([mock_ticket])
 
         self.assertEqual(len(release_info), 1)

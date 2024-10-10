@@ -183,7 +183,7 @@ class TestEngineeringExcellence(unittest.TestCase):
         mock_categorize_ticket.side_effect = mock_categorize
 
         # Call the function with the test dates
-        team_data = extract_engineering_excellence(jql_query, start_date, end_date)
+        team_data = extract_engineering_excellence(jql_query)
 
         # Check that the JQL query was constructed correctly
         mock_jira.search_issues.assert_called_once_with(

@@ -15,6 +15,7 @@ def exceptions_check(ticket_key):
 
 def parse_arguments():
     # Define the argument parser
+    # pylint: disable=global-statement
     global VERBOSE
     parser = argparse.ArgumentParser(description="Process some tickets.")
     parser.add_argument(
