@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       JIRA_PROJECTS: "project1, project2"
+      JIRA_API_KEY: "nothing here"
       
     steps:
     - uses: actions/checkout@v4
