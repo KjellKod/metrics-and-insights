@@ -15,6 +15,7 @@ jobs:
     env:
       JIRA_PROJECTS: "project1, project2"
       JIRA_API_KEY: "nothing here"
+      USER_EMAIL: "nothing@here.com"
       
     steps:
     - uses: actions/checkout@v4
