@@ -1,0 +1,41 @@
+name: Python unit testing
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  test: 
+    runs-on: ubuntu-latest
+    env:
+      USER_EMAIL: "your_email@example.com"
+      JIRA_API_KEY: "your_jira_api_key"
+      JIRA_LINK: "https://your_jira_instance.atlassian.net"
+      GITHUB_TOKEN_READONLY_WEB: "your_github_token"
+      GITHUB_METRIC_OWNER: "your_github_repo_owner"
+      GITHUB_METRIC_REPO: "your_github_repo_name"
+      JIRA_PROJECTS: "MYPROJECT, ENG, ETC"
+      TEAM_MOB: "Mobile" 
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.13"
+
+    - name: Install dependencies
+      run: |
+        pip3 install --upgrade pip
+        if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
+        pip3 install pytest
+
+    - name: Test with pytest
+      run: |
+        pytest -v  # Use -v for verbose output
