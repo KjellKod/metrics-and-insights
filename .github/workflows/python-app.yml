@@ -20,7 +20,7 @@ jobs:
       GITHUB_METRIC_OWNER: "your_github_repo_owner"
       GITHUB_METRIC_REPO: "your_github_repo_name"
       JIRA_PROJECTS: "MYPROJECT, ENG, ETC"
-      TEAM_ONE: "first_team" 
+      TEAM_MOB: "Mobile" 
       
     steps:
     - uses: actions/checkout@v4
