@@ -10,9 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test: 
     runs-on: ubuntu-latest
-
+    env:
+      JIRA_PROJECTS: "project1, project2"
+      
     steps:
     - uses: actions/checkout@v4
     
