@@ -16,11 +16,6 @@ from release_failure import (
 )
 
 
-"""
-python3 -m unittest discover -v -s tests -p test_failed_releases.py
-"""
-
-
 class TestReleaseFailure(unittest.TestCase):
 
     def test_extract_linked_tickets(self):

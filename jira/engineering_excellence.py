@@ -5,15 +5,7 @@ from collections import defaultdict
 import json
 
 # Jira API endpoint
-username = os.environ.get("USER_EMAIL")
-api_key = os.environ.get("JIRA_API_KEY")
-jira_url = os.environ.get("JIRA_LINK")
 projects = os.environ.get("JIRA_PROJECTS").split(",")
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-
-for var in required_env_vars:
-    if os.environ.get(var) is None:
-        raise ValueError(f"Environment variable {var} is not set.")
 
 
 def get_jira_instance():
@@ -31,6 +23,10 @@ def get_jira_instance():
     options = {
         "server": link,
     }
+    required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
+    for var in required_env_vars:
+        if os.environ.get(var) is None:
+            raise ValueError(f"Environment variable {var} is not set.")
     jira = JIRA(options=options, basic_auth=(user, api_key))
     return jira
 
