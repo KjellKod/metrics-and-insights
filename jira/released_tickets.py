@@ -4,21 +4,17 @@ from collections import defaultdict
 from datetime import datetime
 import pytz
 
-# Jira API endpoint
-username = os.environ.get("USER_EMAIL")
-api_key = os.environ.get("JIRA_API_KEY")
-jira_url = os.environ.get("JIRA_LINK")
-projects = os.environ.get("JIRA_PROJECTS").split(",")
 
+projects = os.environ.get("JIRA_PROJECTS").split(",")
 required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
 for var in required_env_vars:
     if os.environ.get(var) is None:
         raise ValueError(f"Environment variable {var} is not set.")
 
 # JQL query
-current_year = datetime.now().year
-start_date = f"{current_year}-01-01"
-end_date = f"{current_year}-12-31"
+CURRENT_YEAR = datetime.now().year
+START_DATE = f"{CURRENT_YEAR}-01-01"
+END_DATE = f"{CURRENT_YEAR}-12-31"
 
 
 def get_jira_instance():
@@ -75,7 +71,7 @@ def get_resolution_date(ticket):
 def process_issues(issues, start_date_str):
     # Convert start_date_str to a datetime object and make it offset-aware with PST timezone
     pst = pytz.timezone("America/Los_Angeles")
-    start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
+    START_DATE = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
     month_data = defaultdict(
         lambda: {"released_tickets_count": 0, "released_tickets": []}
     )
@@ -83,7 +79,7 @@ def process_issues(issues, start_date_str):
     for issue in issues:
         released_date = get_resolution_date(issue)
         # Check if the updated_date is greater than or equal to start_date
-        if released_date < start_date:
+        if released_date < START_DATE:
             continue
 
         month_key = released_date.strftime("%Y-%m")
@@ -97,12 +93,12 @@ def process_issues(issues, start_date_str):
 
 # Get the Jira instance
 jira = get_jira_instance()
-jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {START_DATE} and updatedDate <= {END_DATE} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
 # Run the JQL queries
 jql_issues = search_issues(jql_query)
 # Process the issues
-jql_month_data = process_issues(jql_issues, start_date)
+jql_month_data = process_issues(jql_issues, START_DATE)
 
 # Output the data in comma-separated format
 print("\nJQL Query Results:")

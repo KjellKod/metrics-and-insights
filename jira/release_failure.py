@@ -1,8 +1,9 @@
 import os
-from jira import JIRA
+import argparse
 from collections import defaultdict
 from datetime import datetime
-import argparse
+from jira import JIRA
+
 
 # Global variable for verbosity
 VERBOSE = False
@@ -124,7 +125,7 @@ def process_release_tickets(release_tickets):
 
     for ticket in release_tickets:
         linked_tickets = extract_linked_tickets(ticket)
-        fail_count, release_events = count_failed_releases(ticket)
+        _, release_events = count_failed_releases(ticket)
         if exceptions_check(ticket.key):
             exceptions.append(ticket.key)
 

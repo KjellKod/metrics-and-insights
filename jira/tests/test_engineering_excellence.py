@@ -177,7 +177,7 @@ class TestEngineeringExcellence(unittest.TestCase):
         jql_query = f"project in (ONF, ENG, MOB) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
         # Mock the categorize_ticket function to update the team_data dictionary
-        def mock_categorize(ticket, team_data):
+        def mock_categorize(_, team_data):
             team_data["mock_team"]["2023-10"]["engineering_excellence"] += 1
 
         mock_categorize_ticket.side_effect = mock_categorize
