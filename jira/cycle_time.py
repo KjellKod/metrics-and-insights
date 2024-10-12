@@ -1,11 +1,11 @@
 import os
-from jira import JIRA
-from jira.resources import Issue
 from collections import defaultdict
 from datetime import datetime, timedelta
 import statistics
-import pytz
 import argparse
+import pytz
+from jira import JIRA
+from jira.resources import Issue
 
 
 # Global variable for verbosity
@@ -13,6 +13,7 @@ VERBOSE = False
 
 
 def parse_arguments():
+    # pylint: disable=global-statement
     # Define the argument parser
     global VERBOSE
     parser = argparse.ArgumentParser(description="Process some tickets.")
@@ -23,18 +24,14 @@ def parse_arguments():
     VERBOSE = args.verbose
 
 
-# Jira API endpoint
-username = os.environ.get("USER_EMAIL")
-api_key = os.environ.get("JIRA_API_KEY")
-jira_url = os.environ.get("JIRA_LINK")
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
 for var in required_env_vars:
     if os.environ.get(var) is None:
         raise ValueError(f"Environment variable {var} is not set.")
 
-hours_to_days = 8
-seconds_to_hours = 3600
+HOURS_TO_DAYS = 8
+SECONDS_TO_HOURS = 3600
 
 
 def verbose_print(message):
@@ -100,8 +97,7 @@ def get_team(ticket):
 
     if default_team:
         return default_team.strip().lower().capitalize()
-    else:
-        return project_key.strip().lower().capitalize()
+    return project_key.strip().lower().capitalize()
 
 
 def business_time_spent_in_seconds(start, end):
@@ -194,7 +190,7 @@ def calculate_business_time(code_review_timestamp, released_timestamp):
     business_seconds = business_time_spent_in_seconds(
         code_review_timestamp, released_timestamp
     )
-    business_days = business_seconds / (seconds_to_hours * hours_to_days)
+    business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
     return business_seconds, business_days
 
 
@@ -206,7 +202,7 @@ def log_cycle_time(
     code_review_timestamp,
     released_timestamp,
 ):
-    log_string += f"Cycle time in business hours: {business_seconds / seconds_to_hours:.2f} --> days: {business_seconds / (seconds_to_hours * 8):.2f}\n"
+    log_string += f"{issue_key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
     log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
     log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
     return log_string
@@ -244,13 +240,13 @@ def calculate_monthly_cycle_time(start_date, end_date):
     tickets = get_tickets_from_jira(start_date, end_date)
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
-    for index, issue in enumerate(tickets):
+    for _, issue in enumerate(tickets):
         cycle_time, month_key = calculate_cycle_time_seconds(start_date, issue)
         if cycle_time:
             team = get_team(issue)
             cycle_times_per_month[team][month_key].append(cycle_time)
             verbose_print(
-                f"Processing ticket key issue.key, cycle time: {cycle_time} seconds --> in days: {cycle_time/(seconds_to_hours * hours_to_days):.2f}"
+                f"Processing ticket key issue.key, cycle time: {cycle_time} seconds --> in days: {cycle_time/(SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f}"
             )
             cycle_times_per_month["all"][month_key].append(cycle_time)
 
@@ -262,7 +258,7 @@ def calculate_average_cycle_time(cycle_times):
         verbose_print(f"Collected #{len(cycle_times)} cycle times: {cycle_times}")
         for cycle_time in cycle_times:
             verbose_print(
-                f"Cycle time: {cycle_time} seconds --> in workhour-days: {cycle_time/(seconds_to_hours * hours_to_days):.2f}"
+                f"Cycle time: {cycle_time} seconds --> in workhour-days: {cycle_time/(SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f}"
             )
         return sum(cycle_times) / len(cycle_times)
     return 0
@@ -285,10 +281,10 @@ def print_cycle_time_metrics(cycle_times_per_month):
             average_cycle_time_s = calculate_average_cycle_time(cycle_times)
             median_cycle_time_s = calculate_median_cycle_time(cycle_times)
             average_cycle_time_days = average_cycle_time_s / (
-                seconds_to_hours * hours_to_days
+                SECONDS_TO_HOURS * HOURS_TO_DAYS
             )  # business seconds --> hours to business days
             print(
-                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (seconds_to_hours * hours_to_days):.2f} days"
+                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f} days"
             )
 
     # Print metrics for the "all" team last
@@ -298,10 +294,10 @@ def print_cycle_time_metrics(cycle_times_per_month):
             average_cycle_time_s = calculate_average_cycle_time(cycle_times)
             median_cycle_time_s = calculate_median_cycle_time(cycle_times)
             average_cycle_time_days = average_cycle_time_s / (
-                seconds_to_hours * hours_to_days
+                SECONDS_TO_HOURS * HOURS_TO_DAYS
             )  # business seconds --> hours to business days
             print(
-                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (seconds_to_hours * hours_to_days):.2f} days"
+                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f} days"
             )
 
 

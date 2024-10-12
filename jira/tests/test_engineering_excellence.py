@@ -9,6 +9,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # import functions to test- execute with
 #  python3 -m unittest discover -s test -p "test_engineering_excellence.py"
+# pylint: disable=wrong-import-position,import-error
 from engineering_excellence import (
     get_resolution_date,
     get_team,
@@ -122,24 +123,25 @@ class TestTicketFunctions(unittest.TestCase):
         categorize_ticket(self.ticket, team_data)
         mock_print.assert_called_with("Ticket TICKET-1 has no resolution date")
 
-        def test_categorize_ticket_with_resolution_date(self):
-            self.ticket.key = "TICKET-2"
-            self.ticket.changelog.histories = [
-                MagicMock(
-                    created="2023-10-01T12:34:56.789+0000",
-                    items=[MagicMock(field="status", toString="Released")],
-                )
-            ]
-            self.ticket.fields.project.key = "MOB"
-            self.ticket.fields.customfield_10079.value = "Debt Reduction"
-            team_data = {
-                "mobile": {"2023-10": {"engineering_excellence": 0, "product": 0}}
-            }
-            categorize_ticket(self.ticket, team_data)
-            self.assertEqual(
-                team_data["mobile"]["2023-10"]["engineering_excellence"], 1
+    def test_categorize_ticket_with_resolution_date(self):
+        self.ticket.key = "TICKET-2"
+        self.ticket.changelog.histories = [
+            MagicMock(
+                created="2023-10-01T12:34:56.789+0000",
+                items=[MagicMock(field="status", toString="Released")],
             )
-            self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
+        ]
+        self.ticket.fields.project.key = "MOB"
+        self.ticket.fields.customfield_10075.value = "Mobile"
+        self.ticket.fields.customfield_10079.value = "Debt Reduction"
+
+        team_data = {
+            "all": {"2023-10": {"engineering_excellence": 0, "product": 0}},
+            "Mobile": {"2023-10": {"engineering_excellence": 0, "product": 0}},
+        }
+        categorize_ticket(self.ticket, team_data)
+        self.assertEqual(team_data["Mobile"]["2023-10"]["engineering_excellence"], 1)
+        self.assertEqual(team_data["Mobile"]["2023-10"]["product"], 0)
 
 
 class TestEngineeringExcellence(unittest.TestCase):
@@ -177,13 +179,13 @@ class TestEngineeringExcellence(unittest.TestCase):
         jql_query = f"project in (ONF, ENG, MOB) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 
         # Mock the categorize_ticket function to update the team_data dictionary
-        def mock_categorize(ticket, team_data):
+        def mock_categorize(_, team_data):
             team_data["mock_team"]["2023-10"]["engineering_excellence"] += 1
 
         mock_categorize_ticket.side_effect = mock_categorize
 
         # Call the function with the test dates
-        team_data = extract_engineering_excellence(jql_query, start_date, end_date)
+        team_data = extract_engineering_excellence(jql_query)
 
         # Check that the JQL query was constructed correctly
         mock_jira.search_issues.assert_called_once_with(

@@ -1,19 +1,10 @@
-from datetime import datetime
 import os
-from jira import JIRA
+from datetime import datetime
 from collections import defaultdict
-import json
+from jira import JIRA
 
 # Jira API endpoint
-username = os.environ.get("USER_EMAIL")
-api_key = os.environ.get("JIRA_API_KEY")
-jira_url = os.environ.get("JIRA_LINK")
 projects = os.environ.get("JIRA_PROJECTS").split(",")
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-
-for var in required_env_vars:
-    if os.environ.get(var) is None:
-        raise ValueError(f"Environment variable {var} is not set.")
 
 
 def get_jira_instance():
@@ -31,6 +22,10 @@ def get_jira_instance():
     options = {
         "server": link,
     }
+    required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
+    for var in required_env_vars:
+        if os.environ.get(var) is None:
+            raise ValueError(f"Environment variable {var} is not set.")
     jira = JIRA(options=options, basic_auth=(user, api_key))
     return jira
 
@@ -54,9 +49,9 @@ def get_team(ticket):
 
     if default_team:
         return default_team.strip().lower().capitalize()
-    else:
-        # Environment variable for project {project_key} not found. Using project key as team
-        return project_key.strip().lower().capitalize()
+
+    # Environment variable for project {project_key} not found. Using project key as team
+    return project_key.strip().lower().capitalize()
 
 
 def get_work_type(ticket):
@@ -138,7 +133,7 @@ def search_issues(jql):
     return total_issues
 
 
-def extract_engineering_excellence(jql_query, start_date, end_date):
+def extract_engineering_excellence(jql_query):
     released_tickets = search_issues(jql_query)
     team_data = defaultdict(
         lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0})
@@ -158,7 +153,7 @@ def main():
     jql_query = f"project in ({', '.join(projects)})  AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     print(jql_query)
 
-    team_data = extract_engineering_excellence(jql_query, start_date, end_date)
+    team_data = extract_engineering_excellence(jql_query)
     print_team_metrics(team_data)
 
 

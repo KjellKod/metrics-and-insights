@@ -1,6 +1,7 @@
+# pylint: disable=missing-timeout
 import os
-import requests
 from collections import defaultdict
+import requests
 
 # Retrieve the access token from the environment variable
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
@@ -10,7 +11,7 @@ owner = os.environ.get("GITHUB_METRIC_OWNER")
 repo = os.environ.get("GITHUB_METRIC_REPO")
 
 # Set the API endpoint URL
-url = f"https://api.github.com/repos/{owner}/{repo}/tags"
+URL = f"https://api.github.com/repos/{owner}/{repo}/tags"
 
 # Set the request headers
 headers = {
@@ -22,15 +23,16 @@ headers = {
 params = {
     "per_page": 100,  # Number of items per page
     "since": "2023-12-31T23:59:59Z",  # Filter releases after 2023-12
+    "timeout": 10,  # Timeout in seconds
 }
 
 # Create a dictionary to store releases by year and month
 releases_by_month = defaultdict(list)
 
 # Retrieve releases from all pages
-while url:
+while URL:
     # Send a GET request to retrieve the tags
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(URL, headers=headers, params=params)
 
     # Check if the request was successful
     if response.status_code == 200:
@@ -46,9 +48,9 @@ while url:
 
         # Check if there are more pages
         if "next" in response.links:
-            url = response.links["next"]["url"]
+            URL = response.links["next"]["url"]
         else:
-            url = None
+            URL = None
     else:
         print(f"Error: {response.status_code} - {response.text}")
         break

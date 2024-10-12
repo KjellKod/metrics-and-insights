@@ -7,18 +7,13 @@ from io import StringIO
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
+# pylint: disable=wrong-import-position,import-error
 from release_failure import (
     extract_linked_tickets,
     count_failed_releases,
     process_release_tickets,
     print_total_failure_percentage,
 )
-
-
-"""
-python3 -m unittest discover -v -s tests -p test_failed_releases.py
-"""
 
 
 class TestReleaseFailure(unittest.TestCase):
@@ -88,7 +83,7 @@ class TestReleaseFailure(unittest.TestCase):
             failed_releaselinked_tickets_count_per_month,
             total_linked_tickets_count_per_month,
             total_releases_per_month,
-            exceptions,
+            _,
         ) = process_release_tickets([mock_ticket])
 
         self.assertEqual(len(release_info), 1)
