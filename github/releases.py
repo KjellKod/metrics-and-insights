@@ -2,6 +2,8 @@
 import os
 from collections import defaultdict
 import requests
+import argparse
+import csv
 
 # Retrieve the access token from the environment variable
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
@@ -65,31 +67,32 @@ for year_month, releases in sorted(releases_by_month.items()):
     print()
 
 
-# # Send a GET request to retrieve the tags
-# response = requests.get(url, headers=headers)
+# Parse command-line arguments
+parser = argparse.ArgumentParser(
+    description="Retrieve and optionally export GitHub releases to CSV."
+)
+parser.add_argument(
+    "-csv", action="store_true", help="Export the release data to a CSV file."
+)
+args = parser.parse_args()
 
-# # Check if the request was successful
-# if response.status_code == 200:
-#     # Parse the JSON response
-#     tags = response.json()
+# Export to CSV if the -csv flag is provided
+if args.csv:
+    with open("releases.csv", "w", newline="") as csvfile:
+        fieldnames = ["Month", "Release Count", "Named Releases"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-#     # Create a dictionary to store releases by year and month
-#     releases_by_month = defaultdict(list)
-
-#     # Sort the releases into the dictionary
-#     for tag in tags:
-#         if tag['name'].startswith('release-'):
-#             release_date = tag['name'].split('release-')[1]
-#             year_month = release_date[:7]
-#             releases_by_month[year_month].append(tag['name'])
-
-#     # Print the releases enumerated by year and month
-#     for year_month, releases in sorted(releases_by_month.items()):
-#         year, month = year_month.split('-')
-#         month_sum = len(releases)
-#         print(f"{year}-{month}: {month_sum}")
-#         for index, release in enumerate(releases, start=1):
-#             print(f"  {index}. {release}")
-#         print()
-# else:
-#     print(f'Error: {response.status_code} - {response.text}')
+        writer.writeheader()
+        for year_month, releases in sorted(releases_by_month.items()):
+            release_count = len(releases)
+            named_releases = "\n".join(releases)
+            writer.writerow(
+                {
+                    "Month": year_month,
+                    "Release Count": release_count,
+                    "Named Releases": named_releases,
+                }
+            )
+    print("Release data has been exported to releases.csv")
+else:
+    print("To save output to a CSV file, use the -csv flag.")
