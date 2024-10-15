@@ -2,6 +2,8 @@ import os
 from collections import defaultdict
 from datetime import datetime
 import pytz
+import argparse
+import csv
 from jira import JIRA
 
 
@@ -100,3 +102,30 @@ for month, data in jql_month_data.items():
     print(f"\nMonth: {month}")
     print(f"Released Tickets Count: {data['released_tickets_count']}")
     print(f"Released Tickets: {', '.join(data['released_tickets'])}")
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(
+    description="Retrieve and optionally export GitHub releases to CSV."
+)
+parser.add_argument(
+    "-csv", action="store_true", help="Export the release data to a CSV file."
+)
+args = parser.parse_args()
+# Export to CSV if the -csv flag is provided
+if args.csv:
+    with open("released_tickets.csv", "w", newline="") as csvfile:
+        fieldnames = ["Month", "Released Ticket Count"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for month, data in jql_month_data.items():
+            writer.writerow(
+                {
+                    "Month": month,
+                    "Released Ticket Count": data["released_tickets_count"],
+                }
+            )
+
+    print("Released ticket data has been exported to released_tickets.csv")
+else:
+    print("No CSV flag provided (-csv), no data exported.")

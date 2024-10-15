@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import statistics
 import argparse
+import csv
 import pytz
 from jira import JIRA
 from jira.resources import Issue
@@ -20,8 +21,12 @@ def parse_arguments():
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
+    parser.add_argument(
+        "-csv", action="store_true", help="Export the release data to a CSV file."
+    )
     args = parser.parse_args()
     VERBOSE = args.verbose
+    return args
 
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
@@ -270,44 +275,72 @@ def calculate_median_cycle_time(cycle_times):
     return 0
 
 
-def print_cycle_time_metrics(cycle_times_per_month):
-    # Separate the "all" team from other teams -- we want to see this data
+def process_cycle_time_metrics(team, months):
+    metrics = []
+    for month, cycle_times in sorted(months.items()):
+        average_cycle_time_s = calculate_average_cycle_time(cycle_times)
+        median_cycle_time_s = calculate_median_cycle_time(cycle_times)
+        median_cycle_time_days = median_cycle_time_s / (
+            SECONDS_TO_HOURS * HOURS_TO_DAYS
+        )
+        average_cycle_time_days = average_cycle_time_s / (
+            SECONDS_TO_HOURS * HOURS_TO_DAYS
+        )
+        metrics.append(
+            {
+                "Team": team.capitalize(),
+                "Month": month,
+                "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
+                "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
+            }
+        )
+        print(
+            f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_days:.2f} days"
+        )
+    return metrics
+
+
+def show_cycle_time_metrics(csv_output, cycle_times_per_month):
+    # Separate the "all" team from other teams
     all_team = cycle_times_per_month.pop("all", None)
 
-    # Print metrics for all other teams
+    all_metrics = []
+
+    # Process metrics for all other teams
     for team, months in sorted(cycle_times_per_month.items()):
         print(f"Team: {team.capitalize()}")
-        for month, cycle_times in sorted(months.items()):
-            average_cycle_time_s = calculate_average_cycle_time(cycle_times)
-            median_cycle_time_s = calculate_median_cycle_time(cycle_times)
-            average_cycle_time_days = average_cycle_time_s / (
-                SECONDS_TO_HOURS * HOURS_TO_DAYS
-            )  # business seconds --> hours to business days
-            print(
-                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f} days"
-            )
+        metrics = process_cycle_time_metrics(team, months)
+        all_metrics.extend(metrics)
 
-    # Print metrics for the "all" team last
+    # Process metrics for the "all" team
     if all_team:
         print("Team: All")
-        for month, cycle_times in sorted(all_team.items()):
-            average_cycle_time_s = calculate_average_cycle_time(cycle_times)
-            median_cycle_time_s = calculate_median_cycle_time(cycle_times)
-            average_cycle_time_days = average_cycle_time_s / (
-                SECONDS_TO_HOURS * HOURS_TO_DAYS
-            )  # business seconds --> hours to business days
-            print(
-                f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f} days"
-            )
+        metrics = process_cycle_time_metrics("All", all_team)
+        all_metrics.extend(metrics)
+
+    if csv_output:
+        with open("cycle_times.csv", "w", newline="") as csvfile:
+            fieldnames = [
+                "Team",
+                "Month",
+                "Median Cycle Time (days)",
+                "Average Cycle Time (days)",
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_metrics)
+        print("Cycle time data has been exported to cycle_times.csv")
+    else:
+        print("To save output to a CSV file, use the -csv flag.")
 
 
 def main():
-    parse_arguments()
+    args = parse_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
-    print_cycle_time_metrics(cycle_times_per_month)
+    show_cycle_time_metrics(args.csv, cycle_times_per_month)
 
 
 if __name__ == "__main__":

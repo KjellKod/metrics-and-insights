@@ -1,10 +1,23 @@
 import os
+import argparse
 from datetime import datetime
 from collections import defaultdict
+import csv
 from jira import JIRA
 
 # Jira API endpoint
 projects = os.environ.get("JIRA_PROJECTS").split(",")
+
+
+def parse_arguments():
+    # pylint: disable=global-statement
+    # Define the argument parser
+    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser.add_argument(
+        "-csv", action="store_true", help="Export the release data to a CSV file."
+    )
+    args = parser.parse_args()
+    return args
 
 
 def get_jira_instance():
@@ -80,7 +93,8 @@ def categorize_ticket(ticket, team_data):
     update_team_data(team_data, team, month_key, work_type_value)
 
 
-def print_team_metrics(team_data):
+def show_team_metrics(team_data, csv_output):
+    all_metrics = []
     for team, months in sorted(team_data.items()):
         print(f"Team {team.capitalize()}")
 
@@ -110,6 +124,34 @@ def print_team_metrics(team_data):
             print(
                 f"  {month} Total tickets: {total_tickets}, product focus: {data['product']} [{product_focus_percent:.2f}%], engineering excellence: {data['engineering_excellence']} [{engineering_excellence_percent:.2f}%], annual ee average: {annual_ee_average:.2f}%"
             )
+            all_metrics.append(
+                {
+                    "Team": team.capitalize(),
+                    "Month": month,
+                    "Product Focus Percentage": f"{product_focus_percent:.2f}%",
+                    "Engineering Excellence Percentage": f"{engineering_excellence_percent:.2f}%",
+                    "Product Focus Tickets": data["product"],
+                    "Engineering Excellence Tickets": data["engineering_excellence"],
+                }
+            )
+    if csv_output:
+        with open("engineering_excellence.csv", "w", newline="") as csvfile:
+            fieldnames = [
+                "Team",
+                "Month",
+                "Product Focus Percentage",
+                "Engineering Excellence Percentage",
+                "Product Focus Tickets",
+                "Engineering Excellence Tickets",
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_metrics)
+        print(
+            "Engineering excellence data has been exported to engineering_excellence.csv"
+        )
+    else:
+        print("To save output to a CSV file, use the -csv flag.")
 
 
 def search_issues(jql):
@@ -154,7 +196,8 @@ def main():
     print(jql_query)
 
     team_data = extract_engineering_excellence(jql_query)
-    print_team_metrics(team_data)
+    args = parse_arguments()
+    show_team_metrics(team_data, args.csv)
 
 
 if __name__ == "__main__":
