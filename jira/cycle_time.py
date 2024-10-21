@@ -66,6 +66,7 @@ def get_tickets_from_jira(start_date, end_date):
     # Get the Jira instance
     jira = get_jira_instance()
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    print(f"jql: {jql_query}")
 
     max_results = 100
     start_at = 0

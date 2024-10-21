@@ -44,6 +44,7 @@ def get_jira_instance():
 def get_release_tickets(start_date, end_date):
     jira = get_jira_instance()
     jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
+    print(f"JQL Query: {jql_query}")
     return jira.search_issues(jql_query, maxResults=1000, expand="changelog")
 
 
