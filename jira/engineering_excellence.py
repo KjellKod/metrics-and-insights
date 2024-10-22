@@ -6,6 +6,8 @@ import csv
 from jira import JIRA
 from jira_utils import get_tickets_from_jira, get_team
 
+# Jira API endpoint
+projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 def parse_arguments():
     # pylint: disable=global-statement
@@ -16,7 +18,6 @@ def parse_arguments():
     )
     args = parser.parse_args()
     return args
-
 
 def get_resolution_date(ticket):
     # we will not look at reversed(ticket.changelog.histories) since if the release was reverted,
