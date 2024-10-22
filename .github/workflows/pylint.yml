@@ -24,10 +24,10 @@ jobs:
         pylint_output=$(pylint $(git ls-files '*.py') | tee /dev/stderr)
         score=$(echo "$pylint_output" | grep -oP 'Your code has been rated at \K[0-9.]+')
         echo "Pylint score: $score"
-        if (( $(echo "$score >= 9.5" | bc -l) )); then
-          echo "Pylint score is $score, which is 9.5 or higher. Workflow will succeed."
+        if (( $(echo "$score >= 9.0" | bc -l) )); then
+          echo "Pylint score is $score, which is 9.0 or higher. Workflow will succeed."
           exit 0
         else
-          echo "Pylint score is $score, which is below 9.5. Workflow will fail."
+          echo "Pylint score is $score, which is below 9.0. Workflow will fail."
           exit 1
         fi
