@@ -79,7 +79,7 @@ args = parser.parse_args()
 
 # Export to CSV if the -csv flag is provided
 if args.csv:
-    with open("releases.csv", "w", newline="") as csvfile:
+    with open("releases.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["Month", "Release Count", "Named Releases"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 

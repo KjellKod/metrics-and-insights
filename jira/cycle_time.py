@@ -5,7 +5,6 @@ import statistics
 import argparse
 import csv
 import pytz
-from jira import JIRA
 from jira.resources import Issue
 from jira_utils import get_tickets_from_jira, get_team
 
