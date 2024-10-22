@@ -7,7 +7,7 @@ import csv
 import pytz
 from jira import JIRA
 from jira.resources import Issue
-
+from jira_utils import get_tickets_from_jira
 
 # Global variable for verbosity
 VERBOSE = False
@@ -42,49 +42,6 @@ SECONDS_TO_HOURS = 3600
 def verbose_print(message):
     if VERBOSE:
         print(message)
-
-
-def get_jira_instance():
-    """
-    Create the jira instance
-    An easy way to set up your environment variables is through your .zshrc or .bashrc file
-    export USER_EMAIL="your_email@example.com"
-    export JIRA_API_KEY="your_jira_api_key"
-    export JIRA_LINK="https://your_jira_instance.atlassian.net"
-    """
-    user = os.environ.get("USER_EMAIL")
-    api_key = os.environ.get("JIRA_API_KEY")
-    link = os.environ.get("JIRA_LINK")
-    options = {
-        "server": link,
-    }
-    jira = JIRA(options=options, basic_auth=(user, api_key))
-    return jira
-
-
-def get_tickets_from_jira(start_date, end_date):
-    # Get the Jira instance
-    jira = get_jira_instance()
-    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-    print(f"jql: {jql_query}")
-
-    max_results = 100
-    start_at = 0
-    total_tickets = []
-
-    while True:
-        tickets = jira.search_issues(
-            jql_query, startAt=start_at, maxResults=max_results, expand="changelog"
-        )
-        if len(tickets) == 0:
-            break
-        print(f"Received {len(tickets)} tickets")
-        total_tickets.extend(tickets)
-        start_at += max_results
-        if len(tickets) < max_results:
-            break
-        start_at += max_results
-    return total_tickets
 
 
 def validate_issue(issue):
@@ -243,7 +200,8 @@ def calculate_cycle_time_seconds(start_date_str, issue):
 
 
 def calculate_monthly_cycle_time(start_date, end_date):
-    tickets = get_tickets_from_jira(start_date, end_date)
+    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    tickets = get_tickets_from_jira(jql_query)
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):

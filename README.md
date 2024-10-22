@@ -62,6 +62,10 @@ To retrieve and categorize GitHub releases, ensure your environmental variables 
 `python3 github/releases.py`
 
 
+## Team and Individual Metrics. 
+A word of caution. These metrics are by itself not very valuable, they can however more easily help you see where a team and an individual are struggling or needs support.
+The metrics should be seen as a clue as to where it's needed to dig in more, to ask questions and understand the situation that is driving the metric up/down. 
+
 
 ## Tests ## 
 `pytest -v` 

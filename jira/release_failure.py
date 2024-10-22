@@ -3,7 +3,7 @@ import argparse
 from collections import defaultdict
 from datetime import datetime
 from jira import JIRA
-
+from jira_utils import get_tickets_from_jira
 
 # Global variable for verbosity
 VERBOSE = False
@@ -29,23 +29,6 @@ def parse_arguments():
 def verbose_print(message):
     if VERBOSE:
         print(message)
-
-
-# Setup JIRA connection
-def get_jira_instance():
-    options = {"server": os.environ.get("JIRA_LINK")}
-    jira = JIRA(
-        options=options,
-        basic_auth=(os.environ.get("USER_EMAIL"), os.environ.get("JIRA_API_KEY")),
-    )
-    return jira
-
-
-def get_release_tickets(start_date, end_date):
-    jira = get_jira_instance()
-    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
-    print(f"JQL Query: {jql_query}")
-    return jira.search_issues(jql_query, maxResults=1000, expand="changelog")
 
 
 def extract_linked_tickets(issue):
@@ -94,7 +77,8 @@ def count_failed_releases(issue):
 
 
 def analyze_release_tickets(start_date, end_date):
-    release_tickets = get_release_tickets(start_date, end_date)
+    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
+    release_tickets = get_tickets_from_jira(jql_query)
     (
         release_info,
         failed_releases_per_month,

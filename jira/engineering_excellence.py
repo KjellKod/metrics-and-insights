@@ -4,9 +4,7 @@ from datetime import datetime
 from collections import defaultdict
 import csv
 from jira import JIRA
-
-# Jira API endpoint
-projects = os.environ.get("JIRA_PROJECTS").split(",")
+from jira_utils import get_tickets_from_jira
 
 
 def parse_arguments():
@@ -18,29 +16,6 @@ def parse_arguments():
     )
     args = parser.parse_args()
     return args
-
-
-def get_jira_instance():
-    """
-    Create the jira instance
-    An easy way to set up your environment variables is through your .zshrc or .bashrc file
-    export USER_EMAIL="your_email@example.com"
-    export JIRA_API_KEY="your_jira_api_key"
-    export JIRA_LINK="https://your_jira_instance.atlassian.net"
-    export JIRA_PROJECTS="ENG, ONF, INT"
-    """
-    user = os.environ.get("USER_EMAIL")
-    api_key = os.environ.get("JIRA_API_KEY")
-    link = os.environ.get("JIRA_LINK")
-    options = {
-        "server": link,
-    }
-    required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-    for var in required_env_vars:
-        if os.environ.get(var) is None:
-            raise ValueError(f"Environment variable {var} is not set.")
-    jira = JIRA(options=options, basic_auth=(user, api_key))
-    return jira
 
 
 def get_resolution_date(ticket):
@@ -154,29 +129,8 @@ def show_team_metrics(team_data, csv_output):
         print("To save output to a CSV file, use the -csv flag.")
 
 
-def search_issues(jql):
-    start_at = 0
-    max_results = 100
-    total_issues = []
-    jira = get_jira_instance()
-    while True:
-        pagination_issues = jira.search_issues(
-            jql, startAt=start_at, maxResults=max_results, expand="changelog"
-        )
-        print(f"Received {len(pagination_issues)} tickets")
-        total_issues.extend(pagination_issues)
-
-        if len(pagination_issues) < max_results:
-            break
-
-        start_at += max_results
-
-    print(f"Received a total of {len(total_issues)} tickets")
-    return total_issues
-
-
 def extract_engineering_excellence(jql_query):
-    released_tickets = search_issues(jql_query)
+    released_tickets = get_tickets_from_jira(jql_query)
     team_data = defaultdict(
         lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0})
     )
@@ -192,9 +146,8 @@ def main():
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     # Modified JQL query to filter tickets that changed to "Released" status within the given timeframe
+    projects = os.environ.get("JIRA_PROJECTS").split(",")
     jql_query = f"project in ({', '.join(projects)})  AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-    print(jql_query)
-
     team_data = extract_engineering_excellence(jql_query)
     args = parse_arguments()
     show_team_metrics(team_data, args.csv)
