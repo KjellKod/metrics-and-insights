@@ -21,7 +21,9 @@ jobs:
       GITHUB_METRIC_REPO: "your_github_repo_name"
       JIRA_PROJECTS: "MYPROJECT, ENG, ETC"
       TEAM_MOB: "Mobile" 
-      
+      CUSTOM_FIELD_TEAM: "10075"
+      CUSTOM_FIELD_WORK_TYPE: "10079"
+
     steps:
     - uses: actions/checkout@v4
     
