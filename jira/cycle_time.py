@@ -5,9 +5,8 @@ import statistics
 import argparse
 import csv
 import pytz
-from jira import JIRA
 from jira.resources import Issue
-
+from jira_utils import get_tickets_from_jira, get_team
 
 # Global variable for verbosity
 VERBOSE = False
@@ -30,10 +29,6 @@ def parse_arguments():
 
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-for var in required_env_vars:
-    if os.environ.get(var) is None:
-        raise ValueError(f"Environment variable {var} is not set.")
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
@@ -44,65 +39,11 @@ def verbose_print(message):
         print(message)
 
 
-def get_jira_instance():
-    """
-    Create the jira instance
-    An easy way to set up your environment variables is through your .zshrc or .bashrc file
-    export USER_EMAIL="your_email@example.com"
-    export JIRA_API_KEY="your_jira_api_key"
-    export JIRA_LINK="https://your_jira_instance.atlassian.net"
-    """
-    user = os.environ.get("USER_EMAIL")
-    api_key = os.environ.get("JIRA_API_KEY")
-    link = os.environ.get("JIRA_LINK")
-    options = {
-        "server": link,
-    }
-    jira = JIRA(options=options, basic_auth=(user, api_key))
-    return jira
-
-
-def get_tickets_from_jira(start_date, end_date):
-    # Get the Jira instance
-    jira = get_jira_instance()
-    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-
-    max_results = 100
-    start_at = 0
-    total_tickets = []
-
-    while True:
-        tickets = jira.search_issues(
-            jql_query, startAt=start_at, maxResults=max_results, expand="changelog"
-        )
-        if len(tickets) == 0:
-            break
-        print(f"Received {len(tickets)} tickets")
-        total_tickets.extend(tickets)
-        start_at += max_results
-        if len(tickets) < max_results:
-            break
-        start_at += max_results
-    return total_tickets
-
-
 def validate_issue(issue):
     if not isinstance(issue, Issue):
         print(f"Unexpected type: {type(issue)}  -- ignoring")
         return False
     return True
-
-
-def get_team(ticket):
-    team_field = ticket.fields.customfield_10075
-    if team_field:
-        return team_field.value.strip().lower().capitalize()
-    project_key = ticket.fields.project.key.upper()
-    default_team = os.getenv(f"TEAM_{project_key}")
-
-    if default_team:
-        return default_team.strip().lower().capitalize()
-    return project_key.strip().lower().capitalize()
 
 
 def business_time_spent_in_seconds(start, end):
@@ -199,20 +140,6 @@ def calculate_business_time(code_review_timestamp, released_timestamp):
     return business_seconds, business_days
 
 
-def log_cycle_time(
-    issue_key,
-    log_string,
-    business_seconds,
-    business_days,
-    code_review_timestamp,
-    released_timestamp,
-):
-    log_string += f"{issue_key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
-    log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
-    log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
-    return log_string
-
-
 def calculate_cycle_time_seconds(start_date_str, issue):
     if not validate_issue(issue):
         return None, None
@@ -227,14 +154,11 @@ def calculate_cycle_time_seconds(start_date_str, issue):
         business_seconds, business_days = calculate_business_time(
             code_review_timestamp, released_timestamp
         )
-        log_string = log_cycle_time(
-            issue.key,
-            log_string,
-            business_seconds,
-            business_days,
-            code_review_timestamp,
-            released_timestamp,
-        )
+        log_string = ""
+        log_string += f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
+        log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
+        log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+
         month_key = released_timestamp.strftime("%Y-%m")
         verbose_print(f"Processing {issue.key}\n{log_string}")
         return business_seconds, month_key
@@ -242,7 +166,8 @@ def calculate_cycle_time_seconds(start_date_str, issue):
 
 
 def calculate_monthly_cycle_time(start_date, end_date):
-    tickets = get_tickets_from_jira(start_date, end_date)
+    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    tickets = get_tickets_from_jira(jql_query)
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
@@ -319,7 +244,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
         all_metrics.extend(metrics)
 
     if csv_output:
-        with open("cycle_times.csv", "w", newline="") as csvfile:
+        with open("cycle_times.csv", "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = [
                 "Team",
                 "Month",

@@ -19,6 +19,8 @@ from engineering_excellence import (
     extract_engineering_excellence,
 )
 
+from jira_utils import get_jira_instance
+
 
 class TestGetResolutionDate(unittest.TestCase):
     def setUp(self):
@@ -149,9 +151,7 @@ class TestEngineeringExcellence(unittest.TestCase):
     Test case for the extract_engineering_excellence function.
     """
 
-    @patch(
-        "engineering_excellence.get_jira_instance"
-    )  # Mock the get_jira_instance function
+    @patch("jira_utils.get_jira_instance")  # Mock the get_jira_instance function
     @patch(
         "engineering_excellence.categorize_ticket"
     )  # Mock the categorize_ticket function

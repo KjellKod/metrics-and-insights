@@ -53,6 +53,8 @@ class TestReleaseFailure(unittest.TestCase):
         self.assertEqual(len(release_events), 1)
         self.assertTrue(release_events[0][1])
 
+    # Ignore some duplicate return values from the release_failure.py file
+    # pylint: disable=R0801
     def test_process_release_tickets(self):
         mock_ticket = MagicMock()
         mock_ticket.key = "TICKET-1"

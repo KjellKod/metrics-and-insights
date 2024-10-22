@@ -1,9 +1,10 @@
 # pylint: disable=missing-timeout
 import os
 from collections import defaultdict
-import requests
 import argparse
 import csv
+import requests
+
 
 # Retrieve the access token from the environment variable
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
@@ -78,19 +79,19 @@ args = parser.parse_args()
 
 # Export to CSV if the -csv flag is provided
 if args.csv:
-    with open("releases.csv", "w", newline="") as csvfile:
+    with open("releases.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["Month", "Release Count", "Named Releases"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()
         for year_month, releases in sorted(releases_by_month.items()):
             release_count = len(releases)
-            named_releases = "\n".join(releases)
+            NAMED_RELEASES = "\n".join(releases)
             writer.writerow(
                 {
                     "Month": year_month,
                     "Release Count": release_count,
-                    "Named Releases": named_releases,
+                    "Named Releases": NAMED_RELEASES,
                 }
             )
     print("Release data has been exported to releases.csv")
