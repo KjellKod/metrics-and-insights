@@ -11,6 +11,12 @@ def get_jira_instance():
     export JIRA_API_KEY="your_jira_api_key"
     export JIRA_LINK="https://your_jira_instance.atlassian.net"
     """
+
+    required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
+    for var in required_env_vars:
+        if os.environ.get(var) is None:
+            raise ValueError(f"Environment variable {var} is not set.")
+
     user = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
     link = os.environ.get("JIRA_LINK")
@@ -43,3 +49,17 @@ def get_tickets_from_jira(jql_query):
             break
         start_at += max_results
     return total_tickets
+
+
+def get_team(ticket):
+    team_field = ticket.fields.customfield_10075
+    if team_field:
+        return team_field.value.strip().lower().capitalize()
+    project_key = ticket.fields.project.key.upper()
+    default_team = os.getenv(f"TEAM_{project_key}")
+
+    if default_team:
+        return default_team.strip().lower().capitalize()
+
+    # Environment variable for project {project_key} not found. Using project key as team
+    return project_key.strip().lower().capitalize()

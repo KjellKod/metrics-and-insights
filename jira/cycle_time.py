@@ -7,7 +7,7 @@ import csv
 import pytz
 from jira import JIRA
 from jira.resources import Issue
-from jira_utils import get_tickets_from_jira
+from jira_utils import get_tickets_from_jira, get_team
 
 # Global variable for verbosity
 VERBOSE = False
@@ -30,10 +30,6 @@ def parse_arguments():
 
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-for var in required_env_vars:
-    if os.environ.get(var) is None:
-        raise ValueError(f"Environment variable {var} is not set.")
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
@@ -49,18 +45,6 @@ def validate_issue(issue):
         print(f"Unexpected type: {type(issue)}  -- ignoring")
         return False
     return True
-
-
-def get_team(ticket):
-    team_field = ticket.fields.customfield_10075
-    if team_field:
-        return team_field.value.strip().lower().capitalize()
-    project_key = ticket.fields.project.key.upper()
-    default_team = os.getenv(f"TEAM_{project_key}")
-
-    if default_team:
-        return default_team.strip().lower().capitalize()
-    return project_key.strip().lower().capitalize()
 
 
 def business_time_spent_in_seconds(start, end):
@@ -157,20 +141,6 @@ def calculate_business_time(code_review_timestamp, released_timestamp):
     return business_seconds, business_days
 
 
-def log_cycle_time(
-    issue_key,
-    log_string,
-    business_seconds,
-    business_days,
-    code_review_timestamp,
-    released_timestamp,
-):
-    log_string += f"{issue_key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
-    log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
-    log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
-    return log_string
-
-
 def calculate_cycle_time_seconds(start_date_str, issue):
     if not validate_issue(issue):
         return None, None
@@ -185,14 +155,11 @@ def calculate_cycle_time_seconds(start_date_str, issue):
         business_seconds, business_days = calculate_business_time(
             code_review_timestamp, released_timestamp
         )
-        log_string = log_cycle_time(
-            issue.key,
-            log_string,
-            business_seconds,
-            business_days,
-            code_review_timestamp,
-            released_timestamp,
-        )
+        log_string = ""
+        log_string += f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
+        log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
+        log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+
         month_key = released_timestamp.strftime("%Y-%m")
         verbose_print(f"Processing {issue.key}\n{log_string}")
         return business_seconds, month_key
@@ -278,7 +245,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
         all_metrics.extend(metrics)
 
     if csv_output:
-        with open("cycle_times.csv", "w", newline="") as csvfile:
+        with open("cycle_times.csv", "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = [
                 "Team",
                 "Month",

@@ -4,7 +4,7 @@ from datetime import datetime
 from collections import defaultdict
 import csv
 from jira import JIRA
-from jira_utils import get_tickets_from_jira
+from jira_utils import get_tickets_from_jira, get_team
 
 
 def parse_arguments():
@@ -26,20 +26,6 @@ def get_resolution_date(ticket):
             if item.field == "status" and item.toString == "Released":
                 return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
     return None
-
-
-def get_team(ticket):
-    team_field = ticket.fields.customfield_10075
-    if team_field:
-        return team_field.value.strip().lower().capitalize()
-    project_key = ticket.fields.project.key.upper()
-    default_team = os.getenv(f"TEAM_{project_key}")
-
-    if default_team:
-        return default_team.strip().lower().capitalize()
-
-    # Environment variable for project {project_key} not found. Using project key as team
-    return project_key.strip().lower().capitalize()
 
 
 def get_work_type(ticket):
@@ -110,7 +96,9 @@ def show_team_metrics(team_data, csv_output):
                 }
             )
     if csv_output:
-        with open("engineering_excellence.csv", "w", newline="") as csvfile:
+        with open(
+            "engineering_excellence.csv", "w", newline="", encoding="utf-8"
+        ) as csvfile:
             fieldnames = [
                 "Team",
                 "Month",

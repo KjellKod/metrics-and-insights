@@ -1,17 +1,12 @@
 import os
 from collections import defaultdict
 from datetime import datetime
-import pytz
 import argparse
 import csv
-from jira import JIRA
+import pytz
 from jira_utils import get_tickets_from_jira
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
-required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
-for var in required_env_vars:
-    if os.environ.get(var) is None:
-        raise ValueError(f"Environment variable {var} is not set.")
 
 
 def get_resolution_date(ticket):

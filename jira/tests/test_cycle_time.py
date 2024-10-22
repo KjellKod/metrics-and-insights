@@ -169,10 +169,8 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
     @patch("cycle_time.process_changelog")
     @patch("cycle_time.log_process_changelog")
     @patch("cycle_time.calculate_business_time")
-    @patch("cycle_time.log_cycle_time")
     def test_calculate_cycle_time_seconds(
         self,
-        mock_log_cycle_time,
         mock_calculate_business_time,
         mock_log_process_changelog,
         mock_process_changelog,
@@ -193,7 +191,6 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
             18000,
             2.5,
         )  # 5 hours in seconds, 2.5 business days
-        mock_log_cycle_time.return_value = "Updated log string"
 
         # Creating a mock issue
         mock_issue = MagicMock()
@@ -217,14 +214,6 @@ class TestCalculateCycleTimeSeconds(unittest.TestCase):
         )
         mock_log_process_changelog.assert_called_once_with(mock_issue.changelog)
         mock_calculate_business_time.assert_called_once_with(
-            datetime(2022, 12, 31, 10, 0, tzinfo=PST),
-            datetime(2022, 12, 31, 15, 0, tzinfo=PST),
-        )
-        mock_log_cycle_time.assert_called_once_with(
-            "ISSUE-123",
-            "Log string",
-            18000,
-            2.5,
             datetime(2022, 12, 31, 10, 0, tzinfo=PST),
             datetime(2022, 12, 31, 15, 0, tzinfo=PST),
         )

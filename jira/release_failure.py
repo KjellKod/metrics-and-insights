@@ -1,8 +1,6 @@
-import os
 import argparse
 from collections import defaultdict
 from datetime import datetime
-from jira import JIRA
 from jira_utils import get_tickets_from_jira
 
 # Global variable for verbosity
