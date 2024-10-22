@@ -30,7 +30,7 @@ If you do python dependency changes, please add them later in your virtual envir
 Scripts for extracting metrics from GitHub based on the release tags 
 - releases.py: Script to retrieve and categorize GitHub releases by year and month.
 
-*jira/*
+*jira/* 
 Scripts for extracting metrics from Jira.
 
 - engineering_excellence.py: Script to extract engineering excellence metrics from Jira. It shows for each team and month the product focus, engineering excellence focus (debt reductino, critical work) and the annual average SO FAR of ee
