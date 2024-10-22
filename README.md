@@ -51,6 +51,9 @@ export GITHUB_METRIC_OWNER="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 export TEAM_ONE="first_team" 
+# NOTE the customfield enumerations here are examples, your jira project might be setup differently
+export CUSTOM_FIELD_TEAM=10075
+export CUSTOM_FIELD_WORK_TYPE=10079
 # -- used for when the `team` field isn't defined for a `ONE` project
 # example export TEAM_INT="mint"
 ```

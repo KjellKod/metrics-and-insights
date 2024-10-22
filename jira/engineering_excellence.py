@@ -8,6 +8,8 @@ from jira_utils import get_tickets_from_jira, get_team
 
 # Jira API endpoint
 projects = os.environ.get("JIRA_PROJECTS").split(",")
+CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
+
 
 def parse_arguments():
     # pylint: disable=global-statement
@@ -18,6 +20,7 @@ def parse_arguments():
     )
     args = parser.parse_args()
     return args
+
 
 def get_resolution_date(ticket):
     # we will not look at reversed(ticket.changelog.histories) since if the release was reverted,
@@ -30,7 +33,7 @@ def get_resolution_date(ticket):
 
 
 def get_work_type(ticket):
-    work_type = ticket.fields.customfield_10079
+    work_type = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_WORK_TYPE}")
     return work_type.value.strip() if work_type else "Product"
 
 

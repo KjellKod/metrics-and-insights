@@ -2,6 +2,10 @@ import os
 from jira import JIRA
 from jira.resources import Issue
 
+# Access the custom field IDs
+CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
+CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
+
 
 def get_jira_instance():
     """
@@ -12,7 +16,14 @@ def get_jira_instance():
     export JIRA_LINK="https://your_jira_instance.atlassian.net"
     """
 
-    required_env_vars = ["JIRA_API_KEY", "USER_EMAIL", "JIRA_LINK", "JIRA_PROJECTS"]
+    required_env_vars = [
+        "JIRA_API_KEY",
+        "USER_EMAIL",
+        "JIRA_LINK",
+        "JIRA_PROJECTS",
+        "CUSTOM_FIELD_TEAM",
+        "CUSTOM_FIELD_WORK_TYPE",
+    ]
     for var in required_env_vars:
         if os.environ.get(var) is None:
             raise ValueError(f"Environment variable {var} is not set.")
@@ -52,7 +63,7 @@ def get_tickets_from_jira(jql_query):
 
 
 def get_team(ticket):
-    team_field = ticket.fields.customfield_10075
+    team_field = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_TEAM}")
     if team_field:
         return team_field.value.strip().lower().capitalize()
     project_key = ticket.fields.project.key.upper()
