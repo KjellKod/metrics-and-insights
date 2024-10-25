@@ -5,6 +5,9 @@ from collections import defaultdict
 import csv
 from jira import JIRA
 from jira_utils import get_tickets_from_jira, get_team
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Jira API endpoint
 projects = os.environ.get("JIRA_PROJECTS").split(",")

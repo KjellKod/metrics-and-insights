@@ -166,7 +166,7 @@ def calculate_cycle_time_seconds(start_date_str, issue):
 
 
 def calculate_monthly_cycle_time(start_date, end_date):
-    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {start_date} and updatedDate <= {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    jql_query = f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     tickets = get_tickets_from_jira(jql_query)
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 

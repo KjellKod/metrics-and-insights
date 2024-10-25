@@ -75,7 +75,7 @@ def count_failed_releases(issue):
 
 
 def analyze_release_tickets(start_date, end_date):
-    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' ORDER BY created ASC"
+    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND created  >= '{start_date}' AND created <= '{end_date}' AND status changed to Released during ({start_date}, {end_date}) ORDER BY created ASC"
     release_tickets = get_tickets_from_jira(jql_query)
     (
         release_info,
