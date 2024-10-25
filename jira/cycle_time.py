@@ -6,7 +6,7 @@ import argparse
 import csv
 import pytz
 from jira.resources import Issue
-from jira_utils import get_tickets_from_jira, get_team
+from jira_utils import get_tickets_from_jira, get_team, extract_status_timestamps
 
 # Global variable for verbosity
 VERBOSE = False
@@ -95,7 +95,9 @@ def log_process_changelog(changelog):
     return log_string
 
 
-def process_changelog(changelog, start_date):
+def process_changelog(issue, start_date):
+    changelog = issue.changelog
+    status_timestamps = extract_status_timestamps(issue)
     code_review_statuses = {
         "code review",
         "in code review",
@@ -108,27 +110,22 @@ def process_changelog(changelog, start_date):
     released_timestamp = None
 
     # we look at in chronological order and the FIRST time we go into code-review
-    for history in reversed(changelog.histories):
-        for item in history.items:
-            if item.field == "status":
-                status = item.toString
-                if status.lower() in code_review_statuses:
-                    code_review_timestamp = datetime.strptime(
-                        history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
-                    break
+    for entry in reversed(status_timestamps):
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+
+        if status.lower() in code_review_statuses:
+            code_review_timestamp = timestamp
+            break
     # look at the histories in reverse-chronological order to find the LAST time it was released.
-    for history in changelog.histories:
-        for item in history.items:
-            if item.field == "status":
-                status = item.toString
-                if status.lower() == "released":
-                    released_timestamp = datetime.strptime(
-                        history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
-                    if start_date > released_timestamp:
-                        return None, None
-                    break
+    for entry in status_timestamps:
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+        if status.lower() == "released":
+            released_timestamp = timestamp
+            if start_date > released_timestamp:
+                return None, None
+            break
     return code_review_timestamp, released_timestamp
 
 
@@ -145,9 +142,7 @@ def calculate_cycle_time_seconds(start_date_str, issue):
         return None, None
 
     start_date = localize_start_date(start_date_str)
-    code_review_timestamp, released_timestamp = process_changelog(
-        issue.changelog, start_date
-    )
+    code_review_timestamp, released_timestamp = process_changelog(issue, start_date)
     log_string = log_process_changelog(issue.changelog)
 
     if released_timestamp and code_review_timestamp:

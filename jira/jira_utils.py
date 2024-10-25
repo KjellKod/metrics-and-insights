@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from jira import JIRA
 from jira.resources import Issue
 from dotenv import load_dotenv
@@ -77,3 +78,19 @@ def get_team(ticket):
 
     # Environment variable for project {project_key} not found. Using project key as team
     return project_key.strip().lower().capitalize()
+
+
+def extract_status_timestamps(issue):
+    status_timestamps = []
+    for history in issue.changelog.histories:
+        for item in history.items:
+            if item.field == "status":
+                status_timestamps.append(
+                    {
+                        "status": item.toString,
+                        "timestamp": datetime.strptime(
+                            history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
+                        ),
+                    }
+                )
+    return status_timestamps
