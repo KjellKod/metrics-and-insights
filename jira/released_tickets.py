@@ -47,7 +47,7 @@ def process_issues(issues, start_date_str):
 CURRENT_YEAR = datetime.now().year
 START_DATE = f"{CURRENT_YEAR}-01-01"
 END_DATE = f"{CURRENT_YEAR}-12-31"
-JQL_QUERY = f"project in ({', '.join(projects)}) AND status in (Released) and (updatedDate >= {START_DATE} and updatedDate <= {END_DATE} ) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+JQL_QUERY = f"project in ({', '.join(projects)}) AND status in (Released) and status changed to Released during ({START_DATE}, {END_DATE}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
 jql_issues = get_tickets_from_jira(JQL_QUERY)
 jql_month_data = process_issues(jql_issues, START_DATE)
 

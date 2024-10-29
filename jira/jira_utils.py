@@ -1,6 +1,9 @@
 import os
 from jira import JIRA
 from jira.resources import Issue
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Access the custom field IDs
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")

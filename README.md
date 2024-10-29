@@ -40,21 +40,32 @@ Scripts for extracting metrics from Jira.
 - Setup and Usage
 
 ## Environmental Variables## 
-Some scripts require environmental variables to be set.You can set these in your .zshrc or .bashrc file:
+Some scripts require environmental variables to be set. Create an .env file in the root of the directory and set these values. 
+As an alternative, you can set these in your .zshrc or .bashrc file:
 
+### .env format
+```
+USER_EMAIL="your_email@example.com"
+JIRA_API_KEY="your_jira_api_key"
+```
+
+### All variables needed and described in zshrc format
 ```
 export USER_EMAIL="your_email@example.com"
-xport JIRA_API_KEY="your_jira_api_key"
+export JIRA_API_KEY="your_jira_api_key"
 export JIRA_LINK="https://your_jira_instance.atlassian.net"
 export GITHUB_TOKEN_READONLY_WEB="your_github_token"
 export GITHUB_METRIC_OWNER="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 export TEAM_ONE="first_team" 
+
 # NOTE the customfield enumerations here are examples, your jira project might be setup differently
+export CUSTOM_FIELD_STORYPOINTS=10025
 export CUSTOM_FIELD_TEAM=10075
 export CUSTOM_FIELD_WORK_TYPE=10079
-# -- used for when the `team` field isn't defined for a `ONE` project
+
+# -- used for when the `team` field isn't defined for a project
 # example export TEAM_INT="mint"
 ```
 
