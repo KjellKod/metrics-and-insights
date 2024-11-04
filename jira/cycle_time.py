@@ -206,12 +206,15 @@ def process_cycle_time_metrics(team, months):
         average_cycle_time_days = average_cycle_time_s / (
             SECONDS_TO_HOURS * HOURS_TO_DAYS
         )
+
+        released_tickets = [issue_id for _, issue_id in cycle_times]
         metrics.append(
             {
                 "Team": team.capitalize(),
                 "Month": month,
                 "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
                 "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
+                "Released Tickets": ", ".join(released_tickets),
             }
         )
         print(
@@ -245,6 +248,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
                 "Month",
                 "Median Cycle Time (days)",
                 "Average Cycle Time (days)",
+                "Released Tickets",
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
@@ -257,8 +261,8 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
 def main():
     args = parse_arguments()
     current_year = datetime.now().year
-    start_date = f"{current_year}-01-01"
-    end_date = f"{current_year}-12-31"
+    start_date = f"{current_year}-08-01"
+    end_date = f"{current_year}-09-30"
     cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month)
 
