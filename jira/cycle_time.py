@@ -172,31 +172,26 @@ def calculate_monthly_cycle_time(start_date, end_date):
 
     for _, issue in enumerate(tickets):
         cycle_time, month_key = calculate_cycle_time_seconds(start_date, issue)
+        issue_id = issue.key
         if cycle_time:
             team = get_team(issue)
-            cycle_times_per_month[team][month_key].append(cycle_time)
-            verbose_print(
-                f"Processing ticket key issue.key, cycle time: {cycle_time} seconds --> in days: {cycle_time/(SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f}"
-            )
-            cycle_times_per_month["all"][month_key].append(cycle_time)
+            cycle_times_per_month[team][month_key].append((cycle_time, issue_id))
+            cycle_times_per_month["all"][month_key].append((cycle_time, issue_id))
 
     return cycle_times_per_month
 
 
 def calculate_average_cycle_time(cycle_times):
     if cycle_times:
-        verbose_print(f"Collected #{len(cycle_times)} cycle times: {cycle_times}")
-        for cycle_time in cycle_times:
-            verbose_print(
-                f"Cycle time: {cycle_time} seconds --> in workhour-days: {cycle_time/(SECONDS_TO_HOURS * HOURS_TO_DAYS):.2f}"
-            )
-        return sum(cycle_times) / len(cycle_times)
+        total_cycle_time = sum(cycle_time for cycle_time, _ in cycle_times)
+        return total_cycle_time / len(cycle_times)
     return 0
 
 
 def calculate_median_cycle_time(cycle_times):
     if cycle_times:
-        return statistics.median(cycle_times)
+        cycle_times_values = [cycle_time for cycle_time, _ in cycle_times]
+        return statistics.median(cycle_times_values)
     return 0
 
 
