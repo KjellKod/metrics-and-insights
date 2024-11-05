@@ -31,13 +31,16 @@ def parse_arguments():
     return args
 
 
-def get_resolution_date2(ticket):
+def get_resolution_date(ticket):
     status_timestamps = extract_status_timestamps(ticket)
     extracted_statuses = interpret_status_timestamps(status_timestamps)
+    print(
+        f"Ticket: {ticket.key}, released: {extracted_statuses[JiraStatus.RELEASED.value]}"
+    )
     return extracted_statuses[JiraStatus.RELEASED.value]
 
 
-def get_resolution_date(ticket):
+def get_resolution_date_old(ticket):
     for history in ticket.changelog.histories:
         for item in history.items:
             if item.field == "status" and item.toString == "Released":
