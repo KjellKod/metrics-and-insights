@@ -199,8 +199,8 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
 def main():
     args = parse_arguments()
     current_year = datetime.now().year
-    start_date = f"{current_year}-09-01"
-    end_date = f"{current_year}-10-01"
+    start_date = f"{current_year}-01-01"
+    end_date = f"{current_year}-12-31"
     cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month)
 
