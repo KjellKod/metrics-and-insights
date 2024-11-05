@@ -25,7 +25,7 @@ Install the necessary python frameworks with:
 If you do python dependency changes, please add them later in your virtual environment with 
 `pip3 freeze requirements.txt`
 
-## Key Components##
+## Key Components ##
 *github/*
 Scripts for extracting metrics from GitHub based on the release tags 
 - releases.py: Script to retrieve and categorize GitHub releases by year and month.
