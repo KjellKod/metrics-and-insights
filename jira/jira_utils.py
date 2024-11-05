@@ -120,7 +120,7 @@ def extract_status_timestamps(issue):
         for item in history.items:
             if item.field == "status":
                 verbose_print(
-                    f"{issue.key} processing status change: {item.toString}, timestammp: {history.created}"
+                    f"{issue.key} processing status change: {item.toString}, timestamp: {history.created}"
                 )
                 status_timestamps.append(
                     {
@@ -158,13 +158,18 @@ def interpret_status_timestamps(status_timestamps):
             and not extracted_statuses[JiraStatus.CODE_REVIEW.value]
         ):
             extracted_statuses[JiraStatus.CODE_REVIEW.value] = timestamp
+            # we might want to change this later, but for now we only check for code review
+            break
 
     # look at the histories in reverse-chronological order to find the LAST time it was released.
     for entry in status_timestamps:
+        status = entry["status"]
+        timestamp = entry["timestamp"]
         if (
             status.lower() == "released"
             and not extracted_statuses[JiraStatus.RELEASED.value]
         ):
             extracted_statuses[JiraStatus.RELEASED.value] = timestamp
+            break
 
     return extracted_statuses
