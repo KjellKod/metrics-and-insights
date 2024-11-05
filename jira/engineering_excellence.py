@@ -33,17 +33,11 @@ def get_resolution_date(ticket):
     return extracted_statuses[JiraStatus.RELEASED.value]
 
 
-def get_resolution_date_old(ticket):
-    for history in ticket.changelog.histories:
-        for item in history.items:
-            if item.field == "status" and item.toString == "Released":
-                return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
-    return None
-
-
 def get_work_type(ticket):
     work_type = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_WORK_TYPE}")
-    return work_type.value.strip() if work_type else "Product"
+    work_type_value = work_type.value.strip() if work_type else "Product"
+    verbose_print(f"{ticket.key}  Work type: {work_type_value}")
+    return work_type_value
 
 
 def update_team_data(team_data, team, month_key, work_type_value):
@@ -64,6 +58,7 @@ def categorize_ticket(ticket, team_data):
     month_key = resolution_date.strftime("%Y-%m")
     team = get_team(ticket)
     work_type_value = get_work_type(ticket)
+    team_data[team][month_key]["tickets"].append(ticket)
     update_team_data(team_data, team, month_key, work_type_value)
 
 
@@ -98,6 +93,9 @@ def show_team_metrics(team_data, csv_output):
             print(
                 f"  {month} Total tickets: {total_tickets}, product focus: {data['product']} [{product_focus_percent:.2f}%], engineering excellence: {data['engineering_excellence']} [{engineering_excellence_percent:.2f}%], annual ee average: {annual_ee_average:.2f}%"
             )
+            # print all tickets for the month
+            verbose_print(f"   Tickets for {month}:")
+            verbose_print(f"   {', '.join([ticket.key for ticket in data['tickets']])}")
             all_metrics.append(
                 {
                     "Team": team.capitalize(),
@@ -133,7 +131,9 @@ def show_team_metrics(team_data, csv_output):
 def extract_engineering_excellence(jql_query):
     released_tickets = get_tickets_from_jira(jql_query)
     team_data = defaultdict(
-        lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0})
+        lambda: defaultdict(
+            lambda: {"engineering_excellence": 0, "product": 0, "tickets": []},
+        )
     )
     print(f"Total number of tickets retrieved: {len(released_tickets)}")
 
