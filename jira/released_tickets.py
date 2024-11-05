@@ -4,20 +4,22 @@ from datetime import datetime
 import argparse
 import csv
 import pytz
-from jira_utils import get_tickets_from_jira, parse_arguments
+from jira_utils import (
+    get_tickets_from_jira,
+    parse_arguments,
+    verbose_print,
+    JiraStatus,
+    extract_status_timestamps,
+    interpret_status_timestamps,
+)
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 
 def get_resolution_date(ticket):
-    # we will not look at reversed(ticket.changelog.histories) since if the release was reverted,
-    # we will not consider it as a successful release
-    for history in ticket.changelog.histories:
-        for item in history.items:
-            if item.field == "status" and item.toString == "Released":
-                print(f"Found resolution date: {history.created}")
-                return datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z")
-    return None
+    status_timestamps = extract_status_timestamps(ticket)
+    extracted_statuses = interpret_status_timestamps(status_timestamps)
+    return extracted_statuses[JiraStatus.RELEASED.value]
 
 
 def process_issues(issues, start_date_str):
@@ -50,17 +52,7 @@ def analyze_release_tickets(jql_month_data, start_date_str, end_date_str):
     for month, data in jql_month_data.items():
         print(f"\nMonth: {month}")
         print(f"Released Tickets Count: {data['released_tickets_count']}")
-        print(f"Released Tickets: {', '.join(data['released_tickets'])}")
-
-
-# Parse command-line arguments
-parser = argparse.ArgumentParser(
-    description="Retrieve and optionally export GitHub releases to CSV."
-)
-parser.add_argument(
-    "-csv", action="store_true", help="Export the release data to a CSV file."
-)
-args = parser.parse_args()
+        verbose_print(f"Released Tickets: {', '.join(data['released_tickets'])}")
 
 
 def show_result(jql_month_data, args):
