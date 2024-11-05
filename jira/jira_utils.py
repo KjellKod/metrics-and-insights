@@ -94,7 +94,6 @@ def get_tickets_from_jira(jql_query):
         start_at += max_results
         if len(tickets) < max_results:
             break
-        start_at += max_results
     return total_tickets
 
 
