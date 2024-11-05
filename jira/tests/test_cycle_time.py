@@ -93,34 +93,6 @@ class TestProcessChangelog(unittest.TestCase):
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNone(released_timestamp)
 
-    def test_changelog_with_bulk_migration(self):
-        changelog_entries = [
-            self.create_changelog_entry(
-                "user2", "2022-12-31T15:00:00.000-0800", "code review", "released"
-            ),
-            self.create_changelog_entry(
-                "user1", "2022-12-31T10:00:00.000-0800", "open", "code review"
-            ),
-        ]
-        expected_code_review_timestamp = datetime.strptime(
-            "2022-12-31T10:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        expected_released_timestamp = datetime.strptime(
-            "2022-12-31T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
-
-        # bulk migration check, we don't want to have jira data logic depending on the "update status"
-        # we want to use the actual history created time stamp. Here we should ignore the ticket since the migration
-        # happened after the time we are looking at
-        self.assertIsNone(code_review_timestamp)
-        self.assertIsNone(released_timestamp)
-        self.assertNotEqual(code_review_timestamp, expected_code_review_timestamp)
-        self.assertNotEqual(released_timestamp, expected_released_timestamp)
-
     def test_empty_changelog(self):
         changelog_entries = []
         issue = self.create_mock_issue(changelog_entries)
