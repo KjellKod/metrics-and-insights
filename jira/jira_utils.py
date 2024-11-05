@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 from datetime import datetime
 import argparse
 from jira import JIRA
@@ -18,6 +19,11 @@ VERBOSE = False
 def verbose_print(message):
     if VERBOSE:
         print(message)
+
+
+class JiraStatus(Enum):
+    CODE_REVIEW = "code review"
+    RELEASED = "released"
 
 
 def parse_arguments():
@@ -114,7 +120,7 @@ def extract_status_timestamps(issue):
         for item in history.items:
             if item.field == "status":
                 verbose_print(
-                    f"{issue.key} processing status change: {item.toString}, timestammp: {history.created}"
+                    f"{issue.key} processing status change: {item.toString}, timestamp: {history.created}"
                 )
                 status_timestamps.append(
                     {
@@ -125,3 +131,45 @@ def extract_status_timestamps(issue):
                     }
                 )
     return status_timestamps
+
+
+def interpret_status_timestamps(status_timestamps):
+    # Interpret the status change timestamps to determine the status timestamps that is of value
+    # example: released --> the LAST release date, code review --> the FIRST code review date
+    code_review_statuses = {
+        "code review",
+        "in code review",
+        "to review",
+        "to code review",
+        "in review",
+        "in design review",
+    }
+    extracted_statuses = {
+        JiraStatus.CODE_REVIEW.value: None,
+        JiraStatus.RELEASED.value: None,
+    }
+
+    # we look at in chronological order and the FIRST time we go into code-review
+    for entry in reversed(status_timestamps):
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+        if (
+            status.lower() in code_review_statuses
+            and not extracted_statuses[JiraStatus.CODE_REVIEW.value]
+        ):
+            extracted_statuses[JiraStatus.CODE_REVIEW.value] = timestamp
+            # we might want to change this later, but for now we only check for code review
+            break
+
+    # look at the histories in reverse-chronological order to find the LAST time it was released.
+    for entry in status_timestamps:
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+        if (
+            status.lower() == "released"
+            and not extracted_statuses[JiraStatus.RELEASED.value]
+        ):
+            extracted_statuses[JiraStatus.RELEASED.value] = timestamp
+            break
+
+    return extracted_statuses
