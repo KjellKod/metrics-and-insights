@@ -9,6 +9,8 @@ from jira_utils import (
     get_tickets_from_jira,
     get_team,
     extract_status_timestamps,
+    interpret_status_timestamps,
+    JiraStatus,
     verbose_print,
     parse_arguments,
 )
@@ -63,36 +65,11 @@ def localize_start_date(start_date_str):
 
 
 def process_changelog(issue, start_date):
-    log_string = ""
     status_timestamps = extract_status_timestamps(issue)
-    code_review_statuses = {
-        "code review",
-        "in code review",
-        "to review",
-        "to code review",
-        "in review",
-        "in design review",
-    }
-    code_review_timestamp = None
-    released_timestamp = None
+    extracted_statuses = interpret_status_timestamps(status_timestamps)
 
-    # we look at in chronological order and the FIRST time we go into code-review
-    for entry in reversed(status_timestamps):
-        status = entry["status"]
-        timestamp = entry["timestamp"]
-
-        if status.lower() in code_review_statuses:
-            code_review_timestamp = timestamp
-            break
-    # look at the histories in reverse-chronological order to find the LAST time it was released.
-    for entry in status_timestamps:
-        status = entry["status"]
-        timestamp = entry["timestamp"]
-        if status.lower() == "released":
-            released_timestamp = timestamp
-            if start_date > released_timestamp:
-                return None, None
-            break
+    code_review_timestamp = extracted_statuses[JiraStatus.CODE_REVIEW.value]
+    released_timestamp = extracted_statuses[JiraStatus.RELEASED.value]
     return code_review_timestamp, released_timestamp
 
 
