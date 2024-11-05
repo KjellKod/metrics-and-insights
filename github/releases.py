@@ -4,7 +4,9 @@ from collections import defaultdict
 import argparse
 import csv
 import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # Retrieve the access token from the environment variable
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
