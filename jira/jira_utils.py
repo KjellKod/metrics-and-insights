@@ -1,4 +1,6 @@
 import os
+from datetime import datetime
+import argparse
 from jira import JIRA
 from jira.resources import Issue
 from dotenv import load_dotenv
@@ -9,8 +11,33 @@ load_dotenv()
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
 CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
 
+# Global variable for verbosity
+VERBOSE = False
 
-def get_jira_instance():
+
+def verbose_print(message):
+    if VERBOSE:
+        print(message)
+
+
+def parse_arguments():
+    # pylint: disable=global-statement
+    # Define the argument parser
+    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose output"
+    )
+    parser.add_argument(
+        "-csv", action="store_true", help="Export the release data to a CSV file."
+    )
+    global VERBOSE
+    args = parser.parse_args()
+    VERBOSE = args.verbose
+    print(f"Verbose printing enabled: {VERBOSE}")
+    return args
+
+
+def get_jira_instance(verbose=False):
     """
     Create the jira instance
     An easy way to set up your environment variables is through your .zshrc or .bashrc file
@@ -77,3 +104,24 @@ def get_team(ticket):
 
     # Environment variable for project {project_key} not found. Using project key as team
     return project_key.strip().lower().capitalize()
+
+
+def extract_status_timestamps(issue):
+    # Extract the status change timestamps. Most recent first.
+    # To see the oldest first, reverse the order of histories (reverse(extract_status_timestamps(issue)))
+    status_timestamps = []
+    for history in issue.changelog.histories:
+        for item in history.items:
+            if item.field == "status":
+                verbose_print(
+                    f"{issue.key} processing status change: {item.toString}, timestammp: {history.created}"
+                )
+                status_timestamps.append(
+                    {
+                        "status": item.toString,
+                        "timestamp": datetime.strptime(
+                            history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
+                        ),
+                    }
+                )
+    return status_timestamps

@@ -2,41 +2,21 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 import statistics
-import argparse
 import csv
 import pytz
 from jira.resources import Issue
-from jira_utils import get_tickets_from_jira, get_team
-
-# Global variable for verbosity
-VERBOSE = False
-
-
-def parse_arguments():
-    # pylint: disable=global-statement
-    # Define the argument parser
-    global VERBOSE
-    parser = argparse.ArgumentParser(description="Process some tickets.")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
-    )
-    parser.add_argument(
-        "-csv", action="store_true", help="Export the release data to a CSV file."
-    )
-    args = parser.parse_args()
-    VERBOSE = args.verbose
-    return args
-
+from jira_utils import (
+    get_tickets_from_jira,
+    get_team,
+    extract_status_timestamps,
+    verbose_print,
+    parse_arguments,
+)
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
-
-
-def verbose_print(message):
-    if VERBOSE:
-        print(message)
 
 
 def validate_issue(issue):
@@ -82,20 +62,9 @@ def localize_start_date(start_date_str):
     return pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
 
 
-def log_process_changelog(changelog):
-    # Create the complete log string first
+def process_changelog(issue, start_date):
     log_string = ""
-    count = 0
-    for history in reversed(changelog.histories):
-        for item in history.items:
-            if item.field == "status":
-                status = item.toString
-                count = count + 1
-                log_string += f"{count} -- {history.author}, {history.created}, {item.fromString} ---> {status}\n"
-    return log_string
-
-
-def process_changelog(changelog, start_date):
+    status_timestamps = extract_status_timestamps(issue)
     code_review_statuses = {
         "code review",
         "in code review",
@@ -108,27 +77,22 @@ def process_changelog(changelog, start_date):
     released_timestamp = None
 
     # we look at in chronological order and the FIRST time we go into code-review
-    for history in reversed(changelog.histories):
-        for item in history.items:
-            if item.field == "status":
-                status = item.toString
-                if status.lower() in code_review_statuses:
-                    code_review_timestamp = datetime.strptime(
-                        history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
-                    break
+    for entry in reversed(status_timestamps):
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+
+        if status.lower() in code_review_statuses:
+            code_review_timestamp = timestamp
+            break
     # look at the histories in reverse-chronological order to find the LAST time it was released.
-    for history in changelog.histories:
-        for item in history.items:
-            if item.field == "status":
-                status = item.toString
-                if status.lower() == "released":
-                    released_timestamp = datetime.strptime(
-                        history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                    )
-                    if start_date > released_timestamp:
-                        return None, None
-                    break
+    for entry in status_timestamps:
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+        if status.lower() == "released":
+            released_timestamp = timestamp
+            if start_date > released_timestamp:
+                return None, None
+            break
     return code_review_timestamp, released_timestamp
 
 
@@ -145,22 +109,19 @@ def calculate_cycle_time_seconds(start_date_str, issue):
         return None, None
 
     start_date = localize_start_date(start_date_str)
-    code_review_timestamp, released_timestamp = process_changelog(
-        issue.changelog, start_date
-    )
-    log_string = log_process_changelog(issue.changelog)
+    verbose_print(f"Processing {issue.key}")
+    code_review_timestamp, released_timestamp = process_changelog(issue, start_date)
 
     if released_timestamp and code_review_timestamp:
         business_seconds, business_days = calculate_business_time(
             code_review_timestamp, released_timestamp
         )
-        log_string = ""
-        log_string += f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
+        log_string = f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
         log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
         log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
-
+        verbose_print(f"{log_string}")
         month_key = released_timestamp.strftime("%Y-%m")
-        verbose_print(f"Processing {issue.key}\n{log_string}")
+        verbose_print(f"SUMMARY: \n{log_string}")
         return business_seconds, month_key
     return None, None
 
@@ -261,8 +222,8 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
 def main():
     args = parse_arguments()
     current_year = datetime.now().year
-    start_date = f"{current_year}-08-01"
-    end_date = f"{current_year}-09-30"
+    start_date = f"{current_year}-01-01"
+    end_date = f"{current_year}-12-30"
     cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month)
 
