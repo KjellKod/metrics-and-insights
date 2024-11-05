@@ -49,6 +49,23 @@ USER_EMAIL="your_email@example.com"
 JIRA_API_KEY="your_jira_api_key"
 ```
 
+### All variables needed and described in .env format (root of repo)
+```
+USER_EMAIL="your_email@example.com"
+JIRA_API_KEY="your_jira_api_key"
+JIRA_LINK="https://your_jira_instance.atlassian.net"
+GITHUB_TOKEN_READONLY_WEB="your_github_token"
+GITHUB_METRIC_OWNER="your_github_repo_owner"
+GITHUB_METRIC_REPO="your_github_repo_name"
+JIRA_PROJECTS="MYPROJECT, ENG, ETC"
+TEAM_ONE="first_team" 
+
+# NOTE the customfield enumerations here are examples, your jira project might be setup differently
+CUSTOM_FIELD_STORYPOINTS=10025
+CUSTOM_FIELD_TEAM=10075
+CUSTOM_FIELD_WORK_TYPE=10079
+
+
 ### All variables needed and described in zshrc format
 ```
 export USER_EMAIL="your_email@example.com"
