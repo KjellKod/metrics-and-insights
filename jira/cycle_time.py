@@ -152,16 +152,16 @@ def process_cycle_time_metrics(team, months):
                 "Month": month,
                 "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
                 "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
-                "Released Tickets": ", ".join(released_tickets),
+                # "Released Tickets": ", ".join(released_tickets),
             }
         )
         print(
-            f"Month: {month}, Average Cycle Time: {average_cycle_time_days:.2f} days, Median Cycle Time: {median_cycle_time_days:.2f} days"
+            f"Month: {month}, Median Cycle Time: {median_cycle_time_days:.2f} days, Average Cycle Time: {average_cycle_time_days:.2f} days"
         )
     return metrics
 
 
-def show_cycle_time_metrics(csv_output, cycle_times_per_month):
+def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
     # Separate the "all" team from other teams
     all_team = cycle_times_per_month.pop("all", None)
 
@@ -186,8 +186,9 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month):
                 "Month",
                 "Median Cycle Time (days)",
                 "Average Cycle Time (days)",
-                "Released Tickets",
+                # "Released Tickets",
             ]
+
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(all_metrics)
@@ -202,7 +203,7 @@ def main():
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
-    show_cycle_time_metrics(args.csv, cycle_times_per_month)
+    show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
 
 
 if __name__ == "__main__":
