@@ -4,7 +4,13 @@ from datetime import datetime
 from collections import defaultdict
 import csv
 from jira import JIRA
-from jira_utils import get_tickets_from_jira, get_team
+from jira_utils import (
+    get_tickets_from_jira,
+    get_team,
+    extract_status_timestamps,
+    interpret_status_timestamps,
+    JiraStatus,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,9 +31,13 @@ def parse_arguments():
     return args
 
 
+def get_resolution_date2(ticket):
+    status_timestamps = extract_status_timestamps(ticket)
+    extracted_statuses = interpret_status_timestamps(status_timestamps)
+    return extracted_statuses[JiraStatus.RELEASED.value]
+
+
 def get_resolution_date(ticket):
-    # we will not look at reversed(ticket.changelog.histories) since if the release was reverted,
-    # we will not consider it as a successful release
     for history in ticket.changelog.histories:
         for item in history.items:
             if item.field == "status" and item.toString == "Released":
