@@ -22,10 +22,11 @@ def get_resolution_date(ticket):
     return extracted_statuses[JiraStatus.RELEASED.value]
 
 
-def process_issues(issues, start_date_str):
+def process_issues(issues, start_date_str, end_date_str):
     # Convert start_date_str to a datetime object and make it offset-aware with PST timezone
     pst = pytz.timezone("America/Los_Angeles")
     start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
+    end_date = pst.localize(datetime.strptime(end_date_str, "%Y-%m-%d"))
     month_data = defaultdict(
         lambda: {"released_tickets_count": 0, "released_tickets": []}
     )
@@ -33,7 +34,10 @@ def process_issues(issues, start_date_str):
     for issue in issues:
         released_date = get_resolution_date(issue)
         # Check if the updated_date is greater than or equal to start_date
-        if released_date < start_date:
+        if released_date < start_date or released_date > end_date:
+            verbose_print(
+                f"Ignored: {issue.key}. Released {released_date}, start_date/end:{start_date}/{end_date}"
+            )
             continue
 
         month_key = released_date.strftime("%Y-%m")
@@ -83,7 +87,7 @@ def main():
     end_date = f"{current_year}-12-31"
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     jql_issues = get_tickets_from_jira(jql_query)
-    jql_month_data = process_issues(jql_issues, start_date)
+    jql_month_data = process_issues(jql_issues, start_date, end_date)
     analyze_release_tickets(jql_month_data, start_date, end_date)
     show_result(jql_month_data, args)
 

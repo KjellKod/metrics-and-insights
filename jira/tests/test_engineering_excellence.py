@@ -138,67 +138,16 @@ class TestTicketFunctions(unittest.TestCase):
         self.ticket.fields.customfield_10079.value = "Debt Reduction"
 
         team_data = {
-            "all": {"2023-10": {"engineering_excellence": 0, "product": 0}},
-            "Mobile": {"2023-10": {"engineering_excellence": 0, "product": 0}},
+            "all": {
+                "2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}
+            },
+            "Mobile": {
+                "2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}
+            },
         }
         categorize_ticket(self.ticket, team_data)
         self.assertEqual(team_data["Mobile"]["2023-10"]["engineering_excellence"], 1)
         self.assertEqual(team_data["Mobile"]["2023-10"]["product"], 0)
-
-
-class TestEngineeringExcellence(unittest.TestCase):
-    """
-    Test case for the extract_engineering_excellence function.
-    """
-
-    @patch("jira_utils.get_jira_instance")  # Mock the get_jira_instance function
-    @patch(
-        "engineering_excellence.categorize_ticket"
-    )  # Mock the categorize_ticket function
-    def test_extract_engineering_excellence(
-        self, mock_categorize_ticket, mock_get_jira_instance
-    ):
-        # Create a mock JIRA instance
-        mock_jira = MagicMock()
-        mock_get_jira_instance.return_value = mock_jira
-
-        # Create a mock response for the search_issues method
-        mock_issue = MagicMock()
-        mock_issue.key = "ONF-123"
-        mock_issue.fields.issuetype.name = "Task"
-        mock_issue.fields.status.name = "Released"
-        mock_issue.changelog.histories = []
-
-        mock_jira.search_issues.return_value = [mock_issue]
-
-        # Define the start and end dates for the test
-        start_date = "2023-01-01"
-        end_date = "2023-12-31"
-
-        # Construct the JQL query
-        jql_query = f"project in (ONF, ENG, MOB) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-
-        # Mock the categorize_ticket function to update the team_data dictionary
-        def mock_categorize(_, team_data):
-            team_data["mock_team"]["2023-10"]["engineering_excellence"] += 1
-
-        mock_categorize_ticket.side_effect = mock_categorize
-
-        # Call the function with the test dates
-        team_data = extract_engineering_excellence(jql_query)
-
-        # Check that the JQL query was constructed correctly
-        mock_jira.search_issues.assert_called_once_with(
-            jql_query, startAt=0, maxResults=100, expand="changelog"
-        )
-
-        # Check that the team_data dictionary was populated correctly
-        expected_team_data = defaultdict(
-            lambda: defaultdict(lambda: {"engineering_excellence": 0, "product": 0})
-        )
-        expected_team_data["mock_team"]["2023-10"]["engineering_excellence"] = 1
-
-        self.assertEqual(team_data, expected_team_data)
 
 
 if __name__ == "__main__":

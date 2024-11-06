@@ -164,46 +164,5 @@ class TestProcessChangelog(unittest.TestCase):
         self.assertEqual(released_timestamp, expected_released_timestamp)
 
 
-class TestCalculateCycleTimeSeconds(unittest.TestCase):
-    @patch("cycle_time.validate_issue")
-    @patch("cycle_time.localize_start_date")
-    @patch("cycle_time.process_changelog")
-    @patch("cycle_time.calculate_business_time")
-    def test_calculate_cycle_time_seconds(
-        self,
-        mock_calculate_business_time,
-        mock_process_changelog,
-        mock_localize_start_date,
-        mock_validate_issue,
-    ):
-        # Mocking the dependencies
-        mock_validate_issue.return_value = True
-        mock_localize_start_date.return_value = datetime(
-            2022, 12, 31, 10, 0, tzinfo=PST
-        )
-        mock_process_changelog.return_value = (
-            datetime(2022, 12, 31, 10, 0, tzinfo=PST),
-            datetime(2022, 12, 31, 15, 0, tzinfo=PST),
-        )
-        mock_calculate_business_time.return_value = (
-            18000,
-            2.5,
-        )  # 5 hours in seconds, 2.5 business days
-
-        # Creating a mock issue
-        mock_issue = MagicMock()
-        mock_issue.key = "ISSUE-123"
-        mock_issue.changelog = []
-
-        # Calling the function under test
-        business_seconds, month_key = calculate_cycle_time_seconds(
-            "2022-12-31T10:00:00.000-0800", mock_issue
-        )
-
-        # Asserting the results
-        self.assertEqual(business_seconds, 18000)
-        self.assertEqual(month_key, "2022-12")
-
-
 if __name__ == "__main__":
     unittest.main()

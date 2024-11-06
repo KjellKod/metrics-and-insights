@@ -59,9 +59,17 @@ def business_time_spent_in_seconds(start, end):
     return total_business_seconds
 
 
-def localize_start_date(start_date_str):
+def calculate_business_time(code_review_timestamp, released_timestamp):
+    business_seconds = business_time_spent_in_seconds(
+        code_review_timestamp, released_timestamp
+    )
+    business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
+    return business_seconds, business_days
+
+
+def localize_date(date_str):
     pst = pytz.timezone("America/Los_Angeles")
-    return pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
+    return pst.localize(datetime.strptime(date_str, "%Y-%m-%d"))
 
 
 def process_changelog(issue, start_date):
@@ -73,21 +81,24 @@ def process_changelog(issue, start_date):
     return code_review_timestamp, released_timestamp
 
 
-def calculate_business_time(code_review_timestamp, released_timestamp):
-    business_seconds = business_time_spent_in_seconds(
-        code_review_timestamp, released_timestamp
-    )
-    business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
-    return business_seconds, business_days
-
-
-def calculate_cycle_time_seconds(start_date_str, issue):
+def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     if not validate_issue(issue):
         return None, None
 
-    start_date = localize_start_date(start_date_str)
+    start_date = localize_date(start_date_str)
+    end_date = localize_date(end_date_str)
     verbose_print(f"Processing {issue.key}")
     code_review_timestamp, released_timestamp = process_changelog(issue, start_date)
+
+    if (
+        released_timestamp is None
+        or released_timestamp < start_date
+        or released_timestamp > end_date
+    ):
+        return (
+            None,
+            None,
+        )  # Skip if the ticket was not released during the period, possibly due to a re-release or "bulk move" issues.
 
     if released_timestamp and code_review_timestamp:
         business_seconds, business_days = calculate_business_time(
@@ -109,7 +120,9 @@ def calculate_monthly_cycle_time(start_date, end_date):
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
-        cycle_time, month_key = calculate_cycle_time_seconds(start_date, issue)
+        cycle_time, month_key = calculate_cycle_time_seconds(
+            start_date, end_date, issue
+        )
         issue_id = issue.key
         if cycle_time:
             team = get_team(issue)
