@@ -11,6 +11,7 @@ load_dotenv()
 # Access the custom field IDs
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
 CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
+CUSTOM_FIELD_STORYPOINTS = os.getenv("CUSTOM_FIELD_STORYPOINTS")
 
 # Global variable for verbosity
 VERBOSE = False
@@ -59,6 +60,7 @@ def get_jira_instance(verbose=False):
         "JIRA_PROJECTS",
         "CUSTOM_FIELD_TEAM",
         "CUSTOM_FIELD_WORK_TYPE",
+        "CUSTOM_FIELD_STORYPOINTS",
     ]
     for var in required_env_vars:
         if os.environ.get(var) is None:
