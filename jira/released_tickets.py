@@ -24,7 +24,7 @@ def get_resolution_date(ticket):
 
 
 def get_ticket_points(ticket):
-    # points IS sketcy, since it's a complete changeable, team-owned variable.
+    # Using points IS sketcy, since it's a complete changeable, team-owned variable.
     # it CAN make sense to show patterns emerging, and strengthening the picture from other metrics
     # such as ticket count, but it's not a reliable metric on its own.
     story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
@@ -54,7 +54,7 @@ def process_issues(issues, start_date_str, end_date_str):
         points = get_ticket_points(issue)
         month_data[month_key]["released_tickets_count"] += 1
         month_data[month_key]["released_tickets"].append(f"{issue_key}")
-        # points IS sketcy, since it's a complete changeable, team-owned variable.
+        # Using points IS sketcy, since it's a complete changeable, team-owned variable.
         # it CAN make sense to show patterns emerging, and strengthening the picture from other metrics
         # such as ticket count, but it's not a reliable metric on its own.
         month_data[month_key]["total_points"] += points
@@ -101,8 +101,8 @@ def main():
     args = parse_arguments()
     args.csv = True
     current_year = datetime.now().year
-    start_date = f"2023-01-01"
-    end_date = f"2023-12-31"
+    start_date = f"{current_year}-01-01"
+    end_date = f"{current_year}-12-31"
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     jql_issues = get_tickets_from_jira(jql_query)
     jql_month_data = process_issues(jql_issues, start_date, end_date)
