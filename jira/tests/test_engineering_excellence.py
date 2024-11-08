@@ -3,7 +3,6 @@ import os
 import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
-from collections import defaultdict
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -16,10 +15,7 @@ from engineering_excellence import (
     get_work_type,
     update_team_data,
     categorize_ticket,
-    extract_engineering_excellence,
 )
-
-from jira_utils import get_jira_instance
 
 
 class TestGetResolutionDate(unittest.TestCase):

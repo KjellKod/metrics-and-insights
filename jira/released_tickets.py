@@ -1,9 +1,10 @@
 import os
 from collections import defaultdict
 from datetime import datetime
-import argparse
 import csv
 import pytz
+
+# pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
     parse_arguments,
@@ -63,7 +64,7 @@ def process_issues(issues, start_date_str, end_date_str):
 
 
 # Process the issues
-def analyze_release_tickets(jql_month_data, start_date_str, end_date_str):
+def analyze_release_tickets(jql_month_data):
     # Output the data in comma-separated format
     print("\nJQL Query Results:")
     for month, data in jql_month_data.items():
@@ -78,7 +79,7 @@ def analyze_release_tickets(jql_month_data, start_date_str, end_date_str):
 def show_result(jql_month_data, args):
     # Export to CSV if the -csv flag is provided
     if args.csv:
-        with open("released_tickets.csv", "w", newline="") as csvfile:
+        with open("released_tickets.csv", "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = ["Month", "Released Ticket Count", "Total Points"]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -106,7 +107,7 @@ def main():
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     jql_issues = get_tickets_from_jira(jql_query)
     jql_month_data = process_issues(jql_issues, start_date, end_date)
-    analyze_release_tickets(jql_month_data, start_date, end_date)
+    analyze_release_tickets(jql_month_data)
     show_result(jql_month_data, args)
 
 

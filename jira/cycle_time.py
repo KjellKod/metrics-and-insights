@@ -5,6 +5,8 @@ import statistics
 import csv
 import pytz
 from jira.resources import Issue
+
+# pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
     get_team,
@@ -72,7 +74,7 @@ def localize_date(date_str):
     return pst.localize(datetime.strptime(date_str, "%Y-%m-%d"))
 
 
-def process_changelog(issue, start_date):
+def process_changelog(issue):
     status_timestamps = extract_status_timestamps(issue)
     extracted_statuses = interpret_status_timestamps(status_timestamps)
 
@@ -88,7 +90,7 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     start_date = localize_date(start_date_str)
     end_date = localize_date(end_date_str)
     verbose_print(f"Processing {issue.key}")
-    code_review_timestamp, released_timestamp = process_changelog(issue, start_date)
+    code_review_timestamp, released_timestamp = process_changelog(issue)
 
     if (
         released_timestamp is None
@@ -146,7 +148,7 @@ def calculate_median_cycle_time(cycle_times):
     return 0
 
 
-def process_cycle_time_metrics(team, months):
+def process_cycle_time_metrics(team, months, verbose):
     metrics = []
     for month, cycle_times in sorted(months.items()):
         average_cycle_time_s = calculate_average_cycle_time(cycle_times)
@@ -159,17 +161,21 @@ def process_cycle_time_metrics(team, months):
         )
 
         released_tickets = [issue_id for _, issue_id in cycle_times]
-        metrics.append(
-            {
-                "Team": team.capitalize(),
-                "Month": month,
-                "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
-                "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
-                # "Released Tickets": ", ".join(released_tickets),
-            }
-        )
+        metric = {
+            "Team": team.capitalize(),
+            "Month": month,
+            "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
+            "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
+        }
+        if verbose:
+            metric["Released Tickets"] = ", ".join(released_tickets)
+
+        metrics.append(metric)
+        total_ticket_amount = ""
+        if verbose:
+            total_ticket_amount = f", Total tickets: {len(released_tickets)}"
         print(
-            f"Month: {month}, Median Cycle Time: {median_cycle_time_days:.2f} days, Average Cycle Time: {average_cycle_time_days:.2f} days"
+            f"Month: {month}, Median Cycle Time: {median_cycle_time_days:.2f} days, Average Cycle Time: {average_cycle_time_days:.2f} days {total_ticket_amount}"
         )
     return metrics
 
@@ -183,13 +189,13 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
     # Process metrics for all other teams
     for team, months in sorted(cycle_times_per_month.items()):
         print(f"Team: {team.capitalize()}")
-        metrics = process_cycle_time_metrics(team, months)
+        metrics = process_cycle_time_metrics(team, months, verbose)
         all_metrics.extend(metrics)
 
     # Process metrics for the "all" team
     if all_team:
         print("Team: All")
-        metrics = process_cycle_time_metrics("All", all_team)
+        metrics = process_cycle_time_metrics("All", all_team, verbose)
         all_metrics.extend(metrics)
 
     if csv_output:
@@ -199,8 +205,9 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
                 "Month",
                 "Median Cycle Time (days)",
                 "Average Cycle Time (days)",
-                # "Released Tickets",
             ]
+            if verbose:
+                fieldnames.append("Released Tickets")
 
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()

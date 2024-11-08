@@ -1,32 +1,15 @@
-import argparse
 from collections import defaultdict
 from datetime import datetime
-from jira_utils import get_tickets_from_jira
+
+# pylint: disable=import-error
+from jira_utils import get_tickets_from_jira, verbose_print
 
 # Global variable for verbosity
-VERBOSE = False
 EXCEPTIONS = ["ENG-8158"]
 
 
 def exceptions_check(ticket_key):
     return ticket_key in EXCEPTIONS
-
-
-def parse_arguments():
-    # Define the argument parser
-    # pylint: disable=global-statement
-    global VERBOSE
-    parser = argparse.ArgumentParser(description="Process some tickets.")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
-    )
-    args = parser.parse_args()
-    VERBOSE = args.verbose
-
-
-def verbose_print(message):
-    if VERBOSE:
-        print(message)
 
 
 def extract_linked_tickets(issue):
@@ -159,14 +142,11 @@ def print_release_info(
         print(f"Month: {month}")
         for info in sorted(release_info[month], key=lambda x: x["release_date"]):
             fail_message = "FAILED RELEASE  " if info["failed"] else "RELEASE\t\t"
-            if VERBOSE:
-                verbose_print(
-                    f"{fail_message} {info['release_ticket']} [{info['release_date']}], Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])})"
-                )
-            else:
-                print(
-                    f"{fail_message} {info['release_ticket']} [{info['release_date']}]"
-                )
+            print(f"{fail_message} {info['release_ticket']} [{info['release_date']}]")
+            verbose_print(
+                f"Linked Tickets: {len(info['linked_tickets'])} ({', '.join(info['linked_tickets'])})"
+            )
+
         total_releases = total_releases_per_month[month]
         failed_releases = failed_releases_per_month[month]
         failure_percentage = (
@@ -206,7 +186,6 @@ def print_exceptions(exceptions):
 
 
 def main():
-    parse_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
