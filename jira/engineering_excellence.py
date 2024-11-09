@@ -1,9 +1,10 @@
 import os
-import argparse
 from datetime import datetime
 from collections import defaultdict
 import csv
-from jira import JIRA
+from dotenv import load_dotenv
+
+# pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
     get_team,
@@ -13,12 +14,10 @@ from jira_utils import (
     JiraStatus,
     verbose_print,
 )
-from dotenv import load_dotenv
 
 load_dotenv()
 
 # Jira API endpoint
-projects = os.environ.get("JIRA_PROJECTS").split(",")
 CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
 
 
@@ -62,6 +61,7 @@ def categorize_ticket(ticket, team_data):
     update_team_data(team_data, team, month_key, work_type_value)
 
 
+# pylint: disable=too-many-locals
 def show_team_metrics(team_data, csv_output):
     all_metrics = []
     for team, months in sorted(team_data.items()):

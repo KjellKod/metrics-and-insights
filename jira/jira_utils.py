@@ -2,15 +2,15 @@ import os
 from enum import Enum
 from datetime import datetime
 import argparse
-from jira import JIRA
-from jira.resources import Issue
 from dotenv import load_dotenv
+from jira import JIRA
 
 load_dotenv()
 
 # Access the custom field IDs
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
 CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
+CUSTOM_FIELD_STORYPOINTS = os.getenv("CUSTOM_FIELD_STORYPOINTS")
 
 # Global variable for verbosity
 VERBOSE = False
@@ -43,7 +43,7 @@ def parse_arguments():
     return args
 
 
-def get_jira_instance(verbose=False):
+def get_jira_instance():
     """
     Create the jira instance
     An easy way to set up your environment variables is through your .zshrc or .bashrc file
@@ -59,6 +59,7 @@ def get_jira_instance(verbose=False):
         "JIRA_PROJECTS",
         "CUSTOM_FIELD_TEAM",
         "CUSTOM_FIELD_WORK_TYPE",
+        "CUSTOM_FIELD_STORYPOINTS",
     ]
     for var in required_env_vars:
         if os.environ.get(var) is None:

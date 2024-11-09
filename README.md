@@ -60,10 +60,12 @@ GITHUB_METRIC_REPO="your_github_repo_name"
 JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 TEAM_ONE="first_team" 
 
-# NOTE the customfield enumerations here are examples, your jira project might be setup differently
+# NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
+# Settings --> Issues --> CustomFields: search for your definition of these variables
 CUSTOM_FIELD_STORYPOINTS=10025
 CUSTOM_FIELD_TEAM=10075
 CUSTOM_FIELD_WORK_TYPE=10079
+CUSTOM_FIELD_STORYPOINTS=10025
 ```
 
 ### All variables needed and described in zshrc format
@@ -77,10 +79,12 @@ export GITHUB_METRIC_REPO="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 export TEAM_ONE="first_team" 
 
-# NOTE the customfield enumerations here are examples, your jira project might be setup differently
+# NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
+# Settings --> Issues --> CustomFields: search for your definition of these variables
 export CUSTOM_FIELD_STORYPOINTS=10025
 export CUSTOM_FIELD_TEAM=10075
 export CUSTOM_FIELD_WORK_TYPE=10079
+export CUSTOM_FIELD_STORYPOINTS=10025
 
 # -- used for when the `team` field isn't defined for a project
 # example export TEAM_INT="mint"

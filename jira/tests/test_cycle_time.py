@@ -1,14 +1,14 @@
 import unittest
 import sys
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from datetime import datetime, timezone, timedelta
 import pytz
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from cycle_time import process_changelog, calculate_cycle_time_seconds
+from cycle_time import process_changelog
 
 from jira.resources import Issue
 
@@ -52,9 +52,7 @@ class TestProcessChangelog(unittest.TestCase):
             ),
         ]
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
 
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
@@ -69,9 +67,7 @@ class TestProcessChangelog(unittest.TestCase):
             ),
         ]
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
 
         self.assertIsNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
@@ -86,9 +82,7 @@ class TestProcessChangelog(unittest.TestCase):
             ),
         ]
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
 
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNone(released_timestamp)
@@ -96,9 +90,7 @@ class TestProcessChangelog(unittest.TestCase):
     def test_empty_changelog(self):
         changelog_entries = []
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
 
         self.assertIsNone(code_review_timestamp)
         self.assertIsNone(released_timestamp)
@@ -119,9 +111,7 @@ class TestProcessChangelog(unittest.TestCase):
             ),
         ]
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
         expected_code_review_timestamp = datetime.strptime(
@@ -149,9 +139,7 @@ class TestProcessChangelog(unittest.TestCase):
             ),
         ]
         issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(
-            issue, self.start_date
-        )
+        code_review_timestamp, released_timestamp = process_changelog(issue)
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
         expected_code_review_timestamp = datetime.strptime(
