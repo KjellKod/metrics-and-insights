@@ -12,7 +12,7 @@ from jira_utils import (
     JiraStatus,
     extract_status_timestamps,
     interpret_status_timestamps,
-    CUSTOM_FIELD_STORYPOINTS,
+    get_ticket_points,
 )
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
@@ -22,14 +22,6 @@ def get_resolution_date(ticket):
     status_timestamps = extract_status_timestamps(ticket)
     extracted_statuses = interpret_status_timestamps(status_timestamps)
     return extracted_statuses[JiraStatus.RELEASED.value]
-
-
-def get_ticket_points(ticket):
-    # Using points IS sketcy, since it's a complete changeable, team-owned variable.
-    # it CAN make sense to show patterns emerging, and strengthening the picture from other metrics
-    # such as ticket count, but it's not a reliable metric on its own.
-    story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
-    return int(story_points) if story_points else 0
 
 
 def process_issues(issues, start_date_str, end_date_str):
