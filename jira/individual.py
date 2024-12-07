@@ -63,9 +63,7 @@ import argparse
 def parse_arguments():
     parser = get_common_parser()
     # Add team-specific argument
-    parser.add_argument(
-        "-team", required=False, help="Specify the team name to process."
-    )
+    parser.add_argument("-team", required=False, help="Specify the team name to process.")
     args = parse_common_arguments(parser)
     return args
 
@@ -79,12 +77,8 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name):
 
     jql_query = construct_jql(team_name, start_date, end_date)
     tickets = get_tickets_from_jira(jql_query)
-    metrics_per_month = defaultdict(
-        lambda: defaultdict(lambda: {"points": 0, "tickets": 0})
-    )
-    assignee_metrics = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0}))
-    )
+    metrics_per_month = defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0}))
+    assignee_metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0})))
 
     for _, issue in enumerate(tickets):
         history = extract_status_timestamps(issue)
@@ -95,9 +89,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name):
 
         team = get_team(issue)
         if team.lower() != team_name:
-            print(
-                f"Skipping issue {issue.key} as it does not belong to team {team_name}"
-            )
+            print(f"Skipping issue {issue.key} as it does not belong to team {team_name}")
             continue
         assignee = issue.fields.assignee
         month_key = released_timestamp.strftime("%Y-%m")
@@ -108,9 +100,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name):
         assignee_metrics[month_key][team][assignee]["points"] += points
         assignee_metrics[month_key][team][assignee]["tickets"] += 1
 
-        verbose_print(
-            f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key}"
-        )
+        verbose_print(f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key}")
 
     return metrics_per_month, assignee_metrics
 
@@ -125,9 +115,7 @@ def process_and_display_metrics(metrics_per_month, assignee_metrics):
             team_size = len(team_members)
 
             team_average_points = team_total_points / team_size if team_size > 0 else 0
-            team_average_tickets = (
-                team_total_tickets / team_size if team_size > 0 else 0
-            )
+            team_average_tickets = team_total_tickets / team_size if team_size > 0 else 0
 
             print(f"Team: {team}")
             print(f"Total Points: {team_total_points}")
@@ -137,20 +125,10 @@ def process_and_display_metrics(metrics_per_month, assignee_metrics):
 
             print("Individual metrics (sorted by points):")
             # Sort team members by points in descending order
-            sorted_members = sorted(
-                team_members.items(), key=lambda x: x[1]["points"], reverse=True
-            )
+            sorted_members = sorted(team_members.items(), key=lambda x: x[1]["points"], reverse=True)
             for assignee, metrics in sorted_members:
-                points_ratio = (
-                    metrics["points"] / team_average_points
-                    if team_average_points > 0
-                    else 0
-                )
-                tickets_ratio = (
-                    metrics["tickets"] / team_average_tickets
-                    if team_average_tickets > 0
-                    else 0
-                )
+                points_ratio = metrics["points"] / team_average_points if team_average_points > 0 else 0
+                tickets_ratio = metrics["tickets"] / team_average_tickets if team_average_tickets > 0 else 0
                 print(
                     f"{assignee}: Points: {metrics['points']}, Points Ratio: {points_ratio:.2f}, "
                     f"Tickets: {metrics['tickets']}, Tickets Ratio: {tickets_ratio:.2f}"
@@ -159,10 +137,10 @@ def process_and_display_metrics(metrics_per_month, assignee_metrics):
 
 def calculate_rolling_top_contributors(assignee_metrics, end_date):
     end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    
+
     # Get the last three months (including the end_date month)
     months = sorted(assignee_metrics.keys())[-3:]
-    
+
     rolling_window_ratios = defaultdict(lambda: {"points": [], "tickets": []})
     total_metrics = defaultdict(lambda: {"points": 0, "tickets": 0})
 
@@ -208,9 +186,10 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 
     return top_contributors
 
+
 def construct_jql(team_name, start_date, end_date):
-    if team_name.lower() == 'mobile':
-        return f"project = MOB AND status in (Released) AND status changed to Released during (\"{start_date}\", \"{end_date}\") AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
+    if team_name.lower() == "mobile":
+        return f'project = MOB AND status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC'
     else:
         return f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during (\"{start_date}\", \"{end_date}\") AND issueType in (Task, Bug, Story, Spike) AND \"Team[Dropdown]\" = \"{team_name}\" ORDER BY updated ASC"
 
@@ -221,28 +200,20 @@ def main():
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     team_name = args.team
-    metrics_per_month, assignee_metrics = calculate_individual_jira_metrics(
-        start_date, end_date, team_name
-    )
+    metrics_per_month, assignee_metrics = calculate_individual_jira_metrics(start_date, end_date, team_name)
     process_and_display_metrics(metrics_per_month, assignee_metrics)
 
     # Calculate and display rolling top contributors based on average ratios
     top_contributors = calculate_rolling_top_contributors(assignee_metrics, end_date)
 
-    print(
-        "\nTop 3 contributors over the last 3 months based on average ratio to team performance:"
-    )
+    print("\nTop 3 contributors over the last 3 months based on average ratio to team performance:")
 
     print("\nBased on Story Points:")
-    for i, (contributor, avg_ratio, total_points) in enumerate(
-        top_contributors["points"], 1
-    ):
+    for i, (contributor, avg_ratio, total_points) in enumerate(top_contributors["points"], 1):
         print(f"{i}. {contributor}[{total_points}]: Average ratio of {avg_ratio:.2f}")
 
     print("\nBased on Number of Tickets:")
-    for i, (contributor, avg_ratio, total_tickets) in enumerate(
-        top_contributors["tickets"], 1
-    ):
+    for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets"], 1):
         print(f"{i}. {contributor}[{total_tickets}]: Average ratio of {avg_ratio:.2f}")
 
 
