@@ -26,21 +26,28 @@ class JiraStatus(Enum):
     RELEASED = "released"
 
 
-def parse_arguments():
+def get_common_parser():
     # pylint: disable=global-statement
     # Define the argument parser
-    parser = argparse.ArgumentParser(description="Process some tickets.")
+    parser = argparse.ArgumentParser(description="Common script options")
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
         "-csv", action="store_true", help="Export the release data to a CSV file."
     )
+
+    return parser
+
+
+def parse_common_arguments(parser=None):
+    if parser is None:
+        parser = get_common_parser()
     global VERBOSE
     args = parser.parse_args()
     VERBOSE = args.verbose
     print(f"Verbose printing enabled: {VERBOSE}")
-    return args
+    return parser.parse_args()
 
 
 def get_jira_instance():
@@ -110,6 +117,14 @@ def get_team(ticket):
 
     # Environment variable for project {project_key} not found. Using project key as team
     return project_key.strip().lower().capitalize()
+
+
+def get_ticket_points(ticket):
+    # Using points IS sketcy, since it's a complete changeable, team-owned variable.
+    # it CAN make sense to show patterns emerging, and strengthening the picture from other metrics
+    # such as ticket count, but it's not a reliable metric on its own.
+    story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
+    return int(story_points) if story_points else 0
 
 
 def extract_status_timestamps(issue):

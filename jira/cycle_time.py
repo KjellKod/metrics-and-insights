@@ -14,7 +14,6 @@ from jira_utils import (
     interpret_status_timestamps,
     JiraStatus,
     verbose_print,
-    parse_arguments,
 )
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
@@ -43,16 +42,12 @@ def business_time_spent_in_seconds(start, end):
             remaining_time_today = day_end - current
 
             if current.date() != end.date():
-                total_business_seconds += min(
-                    remaining_time_today.total_seconds(), seconds_in_workday
-                )
+                total_business_seconds += min(remaining_time_today.total_seconds(), seconds_in_workday)
                 current += timedelta(days=1)
                 current = current.replace(hour=0, minute=0)
             else:
                 remaining_time_on_last_day = end - current
-                total_business_seconds += min(
-                    remaining_time_on_last_day.total_seconds(), seconds_in_workday
-                )
+                total_business_seconds += min(remaining_time_on_last_day.total_seconds(), seconds_in_workday)
                 break
         else:
             current += timedelta(days=1)
@@ -62,9 +57,7 @@ def business_time_spent_in_seconds(start, end):
 
 
 def calculate_business_time(code_review_timestamp, released_timestamp):
-    business_seconds = business_time_spent_in_seconds(
-        code_review_timestamp, released_timestamp
-    )
+    business_seconds = business_time_spent_in_seconds(code_review_timestamp, released_timestamp)
     business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
     return business_seconds, business_days
 
@@ -92,23 +85,19 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     verbose_print(f"Processing {issue.key}")
     code_review_timestamp, released_timestamp = process_changelog(issue)
 
-    if (
-        released_timestamp is None
-        or released_timestamp < start_date
-        or released_timestamp > end_date
-    ):
+    if released_timestamp is None or released_timestamp < start_date or released_timestamp > end_date:
         return (
             None,
             None,
         )  # Skip if the ticket was not released during the period, possibly due to a re-release or "bulk move" issues.
 
     if released_timestamp and code_review_timestamp:
-        business_seconds, business_days = calculate_business_time(
-            code_review_timestamp, released_timestamp
-        )
+        business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)
         log_string = f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
         log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
-        log_string += f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+        log_string += (
+            f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
+        )
         verbose_print(f"{log_string}")
         month_key = released_timestamp.strftime("%Y-%m")
         verbose_print(f"SUMMARY: \n{log_string}")
@@ -122,9 +111,7 @@ def calculate_monthly_cycle_time(start_date, end_date):
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
-        cycle_time, month_key = calculate_cycle_time_seconds(
-            start_date, end_date, issue
-        )
+        cycle_time, month_key = calculate_cycle_time_seconds(start_date, end_date, issue)
         issue_id = issue.key
         if cycle_time:
             team = get_team(issue)
@@ -153,12 +140,8 @@ def process_cycle_time_metrics(team, months, verbose):
     for month, cycle_times in sorted(months.items()):
         average_cycle_time_s = calculate_average_cycle_time(cycle_times)
         median_cycle_time_s = calculate_median_cycle_time(cycle_times)
-        median_cycle_time_days = median_cycle_time_s / (
-            SECONDS_TO_HOURS * HOURS_TO_DAYS
-        )
-        average_cycle_time_days = average_cycle_time_s / (
-            SECONDS_TO_HOURS * HOURS_TO_DAYS
-        )
+        median_cycle_time_days = median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
+        average_cycle_time_days = average_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
 
         released_tickets = [issue_id for _, issue_id in cycle_times]
         metric = {

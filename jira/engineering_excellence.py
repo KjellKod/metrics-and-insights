@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from jira_utils import (
     get_tickets_from_jira,
     get_team,
-    parse_arguments,
     extract_status_timestamps,
     interpret_status_timestamps,
     JiraStatus,
@@ -26,9 +25,7 @@ def get_resolution_date(ticket):
     extracted_statuses = interpret_status_timestamps(status_timestamps)
     for status, timestamp in extracted_statuses.items():
         verbose_print(f"  {status}: {timestamp}")
-    verbose_print(
-        f"Ticket: {ticket.key}, was released: {extracted_statuses[JiraStatus.RELEASED.value]}"
-    )
+    verbose_print(f"Ticket: {ticket.key}, was released: {extracted_statuses[JiraStatus.RELEASED.value]}")
     return extracted_statuses[JiraStatus.RELEASED.value]
 
 
@@ -74,9 +71,7 @@ def show_team_metrics(team_data, csv_output):
             total_tickets = data["engineering_excellence"] + data["product"]
             if total_tickets > 0:
                 product_focus_percent = (data["product"] / total_tickets) * 100
-                engineering_excellence_percent = (
-                    data["engineering_excellence"] / total_tickets
-                ) * 100
+                engineering_excellence_percent = (data["engineering_excellence"] / total_tickets) * 100
             else:
                 product_focus_percent = 0
                 engineering_excellence_percent = 0
@@ -107,9 +102,7 @@ def show_team_metrics(team_data, csv_output):
                 }
             )
     if csv_output:
-        with open(
-            "engineering_excellence.csv", "w", newline="", encoding="utf-8"
-        ) as csvfile:
+        with open("engineering_excellence.csv", "w", newline="", encoding="utf-8") as csvfile:
             fieldnames = [
                 "Team",
                 "Month",
@@ -121,9 +114,7 @@ def show_team_metrics(team_data, csv_output):
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(all_metrics)
-        print(
-            "Engineering excellence data has been exported to engineering_excellence.csv"
-        )
+        print("Engineering excellence data has been exported to engineering_excellence.csv")
     else:
         print("To save output to a CSV file, use the -csv flag.")
 

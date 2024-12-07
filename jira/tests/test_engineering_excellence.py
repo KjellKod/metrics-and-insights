@@ -39,9 +39,7 @@ class TestGetResolutionDate(unittest.TestCase):
         self.ticket.changelog.histories = [history]
 
         # Call the function and check the result
-        expected_date = datetime.strptime(
-            "2023-10-01T12:34:56.789+0000", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
+        expected_date = datetime.strptime("2023-10-01T12:34:56.789+0000", "%Y-%m-%dT%H:%M:%S.%f%z")
         result = get_resolution_date(self.ticket)
         self.assertEqual(result, expected_date)
 
@@ -134,12 +132,8 @@ class TestTicketFunctions(unittest.TestCase):
         self.ticket.fields.customfield_10079.value = "Debt Reduction"
 
         team_data = {
-            "all": {
-                "2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}
-            },
-            "Mobile": {
-                "2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}
-            },
+            "all": {"2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}},
+            "Mobile": {"2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}},
         }
         categorize_ticket(self.ticket, team_data)
         self.assertEqual(team_data["Mobile"]["2023-10"]["engineering_excellence"], 1)
