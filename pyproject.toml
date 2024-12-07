@@ -1,4 +1,3 @@
-[
-tool.black
-]
-line-length = 120  # or any other value you prefer
+[tool.black]
+line-length = 120
+
