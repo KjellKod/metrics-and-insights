@@ -44,12 +44,8 @@ class TestProcessChangelog(unittest.TestCase):
 
     def test_valid_changelog_with_code_review_and_released(self):
         changelog_entries = [
-            self.create_changelog_entry(
-                "user2", "2023-01-03T15:00:00.000-0800", "code review", "released"
-            ),
-            self.create_changelog_entry(
-                "user1", "2023-01-02T10:00:00.000-0800", "open", "code review"
-            ),
+            self.create_changelog_entry("user2", "2023-01-03T15:00:00.000-0800", "code review", "released"),
+            self.create_changelog_entry("user1", "2023-01-02T10:00:00.000-0800", "open", "code review"),
         ]
         issue = self.create_mock_issue(changelog_entries)
         code_review_timestamp, released_timestamp = process_changelog(issue)
@@ -59,12 +55,8 @@ class TestProcessChangelog(unittest.TestCase):
 
     def test_changelog_without_code_review(self):
         changelog_entries = [
-            self.create_changelog_entry(
-                "user2", "2023-01-03T15:00:00.000-0800", "in progress", "released"
-            ),
-            self.create_changelog_entry(
-                "user1", "2023-01-02T10:00:00.000-0800", "open", "in progress"
-            ),
+            self.create_changelog_entry("user2", "2023-01-03T15:00:00.000-0800", "in progress", "released"),
+            self.create_changelog_entry("user1", "2023-01-02T10:00:00.000-0800", "open", "in progress"),
         ]
         issue = self.create_mock_issue(changelog_entries)
         code_review_timestamp, released_timestamp = process_changelog(issue)
@@ -74,12 +66,8 @@ class TestProcessChangelog(unittest.TestCase):
 
     def test_changelog_without_released(self):
         changelog_entries = [
-            self.create_changelog_entry(
-                "user2", "2023-01-03T15:00:00.000-0800", "code review", "in progress"
-            ),
-            self.create_changelog_entry(
-                "user1", "2023-01-02T10:00:00.000-0800", "open", "code review"
-            ),
+            self.create_changelog_entry("user2", "2023-01-03T15:00:00.000-0800", "code review", "in progress"),
+            self.create_changelog_entry("user1", "2023-01-02T10:00:00.000-0800", "open", "code review"),
         ]
         issue = self.create_mock_issue(changelog_entries)
         code_review_timestamp, released_timestamp = process_changelog(issue)
@@ -97,57 +85,33 @@ class TestProcessChangelog(unittest.TestCase):
 
     def test_changelog_with_multiple_code_review_and_released(self):
         changelog_entries = [
-            self.create_changelog_entry(
-                "user4", "2024-01-05T15:00:00.000-0800", "code review", "released"
-            ),
-            self.create_changelog_entry(
-                "user3", "2023-01-04T10:00:00.000-0800", "in progress", "code review"
-            ),
-            self.create_changelog_entry(
-                "user2", "2022-01-03T15:00:00.000-0800", "code review", "in progress"
-            ),
-            self.create_changelog_entry(
-                "user1", "2021-01-02T10:00:00.000-0800", "open", "code review"
-            ),
+            self.create_changelog_entry("user4", "2024-01-05T15:00:00.000-0800", "code review", "released"),
+            self.create_changelog_entry("user3", "2023-01-04T10:00:00.000-0800", "in progress", "code review"),
+            self.create_changelog_entry("user2", "2022-01-03T15:00:00.000-0800", "code review", "in progress"),
+            self.create_changelog_entry("user1", "2021-01-02T10:00:00.000-0800", "open", "code review"),
         ]
         issue = self.create_mock_issue(changelog_entries)
         code_review_timestamp, released_timestamp = process_changelog(issue)
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
-        expected_code_review_timestamp = datetime.strptime(
-            "2021-01-02T10:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        expected_released_timestamp = datetime.strptime(
-            "2024-01-05T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
+        expected_code_review_timestamp = datetime.strptime("2021-01-02T10:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z")
+        expected_released_timestamp = datetime.strptime("2024-01-05T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z")
         self.assertEqual(code_review_timestamp, expected_code_review_timestamp)
         self.assertEqual(released_timestamp, expected_released_timestamp)
 
     def test_changelog_with_multiple_releases(self):
         changelog_entries = [
-            self.create_changelog_entry(
-                "user4", "2024-01-05T15:00:00.000-0800", "reverted", "released"
-            ),
-            self.create_changelog_entry(
-                "user3", "2023-01-04T10:00:00.000-0800", "released", "reverted"
-            ),
-            self.create_changelog_entry(
-                "user2", "2022-01-03T15:00:00.000-0800", "code review", "released"
-            ),
-            self.create_changelog_entry(
-                "user1", "2021-01-02T10:00:00.000-0800", "open", "code review"
-            ),
+            self.create_changelog_entry("user4", "2024-01-05T15:00:00.000-0800", "reverted", "released"),
+            self.create_changelog_entry("user3", "2023-01-04T10:00:00.000-0800", "released", "reverted"),
+            self.create_changelog_entry("user2", "2022-01-03T15:00:00.000-0800", "code review", "released"),
+            self.create_changelog_entry("user1", "2021-01-02T10:00:00.000-0800", "open", "code review"),
         ]
         issue = self.create_mock_issue(changelog_entries)
         code_review_timestamp, released_timestamp = process_changelog(issue)
         self.assertIsNotNone(code_review_timestamp)
         self.assertIsNotNone(released_timestamp)
-        expected_code_review_timestamp = datetime.strptime(
-            "2021-01-02T10:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        expected_released_timestamp = datetime.strptime(
-            "2024-01-05T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
+        expected_code_review_timestamp = datetime.strptime("2021-01-02T10:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z")
+        expected_released_timestamp = datetime.strptime("2024-01-05T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z")
         self.assertEqual(code_review_timestamp, expected_code_review_timestamp)
         self.assertEqual(released_timestamp, expected_released_timestamp)
 

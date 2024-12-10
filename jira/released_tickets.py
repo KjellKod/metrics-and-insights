@@ -29,17 +29,13 @@ def process_issues(issues, start_date_str, end_date_str):
     pst = pytz.timezone("America/Los_Angeles")
     start_date = pst.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
     end_date = pst.localize(datetime.strptime(end_date_str, "%Y-%m-%d"))
-    month_data = defaultdict(
-        lambda: {"released_tickets_count": 0, "released_tickets": [], "total_points": 0}
-    )
+    month_data = defaultdict(lambda: {"released_tickets_count": 0, "released_tickets": [], "total_points": 0})
 
     for issue in issues:
         released_date = get_resolution_date(issue)
         # Check if the updated_date is greater than or equal to start_date
         if released_date < start_date or released_date > end_date:
-            verbose_print(
-                f"Ignored: {issue.key}. Released {released_date}, start_date/end:{start_date}/{end_date}"
-            )
+            verbose_print(f"Ignored: {issue.key}. Released {released_date}, start_date/end:{start_date}/{end_date}")
             continue
 
         month_key = released_date.strftime("%Y-%m")
@@ -62,9 +58,7 @@ def analyze_release_tickets(jql_month_data):
     for month, data in jql_month_data.items():
         print(f"\nMonth: {month}")
         print(f"Released Tickets Count: {data['released_tickets_count']}")
-        print(
-            f"Total Points: {data['total_points']}"
-        )  # points IS sketcy, but we can use it with other metrics
+        print(f"Total Points: {data['total_points']}")  # points IS sketcy, but we can use it with other metrics
         verbose_print(f"Released Tickets: {', '.join(data['released_tickets'])}")
 
 

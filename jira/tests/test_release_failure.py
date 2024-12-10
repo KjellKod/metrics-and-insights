@@ -35,17 +35,11 @@ class TestReleaseFailure(unittest.TestCase):
         mock_issue.changelog.histories = [
             MagicMock(
                 created="2023-01-02T00:00:00.000+0000",
-                items=[
-                    MagicMock(
-                        field="status", fromString="Released", toString="To Release"
-                    )
-                ],
+                items=[MagicMock(field="status", fromString="Released", toString="To Release")],
             ),
             MagicMock(
                 created="2023-01-01T00:00:00.000+0000",
-                items=[
-                    MagicMock(field="status", fromString="Open", toString="Released")
-                ],
+                items=[MagicMock(field="status", fromString="Open", toString="Released")],
             ),
         ]
         fail_count, release_events = count_failed_releases(mock_issue)
@@ -61,17 +55,11 @@ class TestReleaseFailure(unittest.TestCase):
         mock_ticket.changelog.histories = [
             MagicMock(
                 created="2023-01-02T00:00:00.000+0000",
-                items=[
-                    MagicMock(
-                        field="status", fromString="Released", toString="To Release"
-                    )
-                ],
+                items=[MagicMock(field="status", fromString="Released", toString="To Release")],
             ),
             MagicMock(
                 created="2023-01-01T00:00:00.000+0000",
-                items=[
-                    MagicMock(field="status", fromString="Open", toString="Released")
-                ],
+                items=[MagicMock(field="status", fromString="Open", toString="Released")],
             ),
         ]
         mock_ticket.fields.issuelinks = [
@@ -98,14 +86,10 @@ class TestReleaseFailure(unittest.TestCase):
         total_releases_per_month = defaultdict(int, {"2023-01": 1})
         failed_releases_per_month = defaultdict(int, {"2023-01": 1})
 
-        expected_output = (
-            "\nTotal release failure percentage for the whole time period: 100.00%\n"
-        )
+        expected_output = "\nTotal release failure percentage for the whole time period: 100.00%\n"
 
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            print_total_failure_percentage(
-                total_releases_per_month, failed_releases_per_month
-            )
+            print_total_failure_percentage(total_releases_per_month, failed_releases_per_month)
             self.assertEqual(mock_stdout.getvalue(), expected_output)
 
 

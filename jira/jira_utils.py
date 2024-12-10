@@ -30,12 +30,8 @@ def get_common_parser():
     # pylint: disable=global-statement
     # Define the argument parser
     parser = argparse.ArgumentParser(description="Common script options")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
-    )
-    parser.add_argument(
-        "-csv", action="store_true", help="Export the release data to a CSV file."
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("-csv", action="store_true", help="Export the release data to a CSV file.")
 
     return parser
 
@@ -92,9 +88,7 @@ def get_tickets_from_jira(jql_query):
     total_tickets = []
 
     while True:
-        tickets = jira.search_issues(
-            jql_query, startAt=start_at, maxResults=max_results, expand="changelog"
-        )
+        tickets = jira.search_issues(jql_query, startAt=start_at, maxResults=max_results, expand="changelog")
         if len(tickets) == 0:
             break
         print(f"Received {len(tickets)} tickets")
@@ -134,15 +128,11 @@ def extract_status_timestamps(issue):
     for history in issue.changelog.histories:
         for item in history.items:
             if item.field == "status":
-                verbose_print(
-                    f"{issue.key} processing status change: {item.toString}, timestamp: {history.created}"
-                )
+                verbose_print(f"{issue.key} processing status change: {item.toString}, timestamp: {history.created}")
                 status_timestamps.append(
                     {
                         "status": item.toString,
-                        "timestamp": datetime.strptime(
-                            history.created, "%Y-%m-%dT%H:%M:%S.%f%z"
-                        ),
+                        "timestamp": datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z"),
                     }
                 )
     return status_timestamps
@@ -168,10 +158,7 @@ def interpret_status_timestamps(status_timestamps):
     for entry in reversed(status_timestamps):
         status = entry["status"]
         timestamp = entry["timestamp"]
-        if (
-            status.lower() in code_review_statuses
-            and not extracted_statuses[JiraStatus.CODE_REVIEW.value]
-        ):
+        if status.lower() in code_review_statuses and not extracted_statuses[JiraStatus.CODE_REVIEW.value]:
             extracted_statuses[JiraStatus.CODE_REVIEW.value] = timestamp
             # we might want to change this later, but for now we only check for code review
             break
@@ -180,10 +167,7 @@ def interpret_status_timestamps(status_timestamps):
     for entry in status_timestamps:
         status = entry["status"]
         timestamp = entry["timestamp"]
-        if (
-            status.lower() == "released"
-            and not extracted_statuses[JiraStatus.RELEASED.value]
-        ):
+        if status.lower() == "released" and not extracted_statuses[JiraStatus.RELEASED.value]:
             extracted_statuses[JiraStatus.RELEASED.value] = timestamp
             break
 
