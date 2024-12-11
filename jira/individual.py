@@ -1,8 +1,8 @@
 import os
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta
-import argparse
+from datetime import datetime
+from dotenv import load_dotenv
 import csv
 from jira.resources import Issue
 from jira_utils import (
@@ -16,6 +16,8 @@ from jira_utils import (
     get_ticket_points,
     get_team,
 )
+
+load_dotenv()
 
 
 # 1) story points
@@ -85,13 +87,19 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name):
         statuses = interpret_status_timestamps(history)
         released_timestamp = statuses.get(JiraStatus.RELEASED.value)
         if not released_timestamp:
-            sys.exit("Fatal error: Released ticket, missing released timestamp")
+            released_timestamp = statuses.get(JiraStatus.DONE.value)
+            verbose_print(
+                f"Warning: Issue {issue.key} does not have a released timestamp. Using Done timestamp instead."
+            )
+        if not released_timestamp:
+            sys.exit("Fatal error: Released ticket, missing released timestamp and done timestamp.")
 
         team = get_team(issue)
         if team.lower() != team_name:
             print(f"Skipping issue {issue.key} as it does not belong to team {team_name}")
             continue
-        assignee = issue.fields.assignee
+        assignee_raw = issue.fields.assignee
+        assignee = assignee_raw.displayName if assignee_raw else "Unassigned"
         month_key = released_timestamp.strftime("%Y-%m")
         points = get_ticket_points(issue)
 
@@ -190,8 +198,65 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 def construct_jql(team_name, start_date, end_date):
     if team_name.lower() == "mobile":
         return f'project = MOB AND status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC'
+    if team_name.lower() == "devops":
+        return f'project = DevOps AND status IN ("Released", "Done")  AND (status changed TO ("Released", "Done") during ({start_date}, {end_date}) AND issuetype IN (Task, Bug, Story, Spike)) ORDER BY updated ASC'
     else:
         return f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during (\"{start_date}\", \"{end_date}\") AND issueType in (Task, Bug, Story, Spike) AND \"Team[Dropdown]\" = \"{team_name}\" ORDER BY updated ASC"
+
+
+from calendar import month_abbr
+
+
+def transform_month(month):
+    # Extract the month part and convert it to abbreviated month name
+    year, month_num = month.split("-")
+    return month_abbr[int(month_num)]
+
+
+def write_csv(assignee_metrics, output_file):
+    with open(output_file, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Get all unique months and sort them
+        all_months = sorted(set(month for month in assignee_metrics.keys()))
+        current_year = all_months[0].split("-")[0] if all_months else "Year"
+
+        # Transform month names
+        transformed_months = [transform_month(month) for month in all_months]
+
+        # Write Points data
+        writer.writerow([f"{current_year} Assignee Points"] + transformed_months)
+        all_assignees = set()
+        for month_data in assignee_metrics.values():
+            for team_data in month_data.values():
+                all_assignees.update(team_data.keys())
+        for assignee in sorted(all_assignees):
+            row_data = [assignee]
+            for month in all_months:
+                points = 0
+                for team_data in assignee_metrics.get(month, {}).values():
+                    if assignee in team_data:
+                        points += team_data[assignee]["points"]
+                row_data.append(points)
+            writer.writerow(row_data)
+
+        # Add a couple of blank lines for better readability
+        writer.writerow([])
+        writer.writerow([])
+
+        # Write Tickets data
+        writer.writerow([f"{current_year} Assignee Tickets"] + transformed_months)
+        for assignee in sorted(all_assignees):
+            row_data = [assignee]
+            for month in all_months:
+                tickets = 0
+                for team_data in assignee_metrics.get(month, {}).values():
+                    if assignee in team_data:
+                        tickets += team_data[assignee]["tickets"]
+                row_data.append(tickets)
+            writer.writerow(row_data)
+
+    print(f"Writing individual metrics to {output_file}")
 
 
 def main():
@@ -215,6 +280,12 @@ def main():
     print("\nBased on Number of Tickets:")
     for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets"], 1):
         print(f"{i}. {contributor}[{total_tickets}]: Average ratio of {avg_ratio:.2f}")
+
+    if args.csv:
+        csv_output_file = f"{team_name}_individual_metrics.csv"
+        write_csv(assignee_metrics, csv_output_file)
+    else:
+        print("CSV output disabled. Use -csv flag to enable.")
 
 
 if __name__ == "__main__":

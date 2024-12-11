@@ -24,6 +24,7 @@ def verbose_print(message):
 class JiraStatus(Enum):
     CODE_REVIEW = "code review"
     RELEASED = "released"
+    DONE = "done"
 
 
 def get_common_parser():
@@ -152,6 +153,7 @@ def interpret_status_timestamps(status_timestamps):
     extracted_statuses = {
         JiraStatus.CODE_REVIEW.value: None,
         JiraStatus.RELEASED.value: None,
+        JiraStatus.DONE.value: None,
     }
 
     # we look at in chronological order and the FIRST time we go into code-review
@@ -169,6 +171,9 @@ def interpret_status_timestamps(status_timestamps):
         timestamp = entry["timestamp"]
         if status.lower() == "released" and not extracted_statuses[JiraStatus.RELEASED.value]:
             extracted_statuses[JiraStatus.RELEASED.value] = timestamp
+            break
+        elif status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
+            extracted_statuses[JiraStatus.DONE.value] = timestamp
             break
 
     return extracted_statuses
