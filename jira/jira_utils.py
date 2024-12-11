@@ -106,7 +106,6 @@ def get_team(ticket):
         return team_field.value.strip().lower().capitalize()
     project_key = ticket.fields.project.key.upper()
     default_team = os.getenv(f"TEAM_{project_key}")
-
     if default_team:
         return default_team.strip().lower().capitalize()
 
