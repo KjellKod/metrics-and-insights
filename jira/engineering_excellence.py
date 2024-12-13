@@ -10,6 +10,7 @@ from jira_utils import (
     get_team,
     extract_status_timestamps,
     interpret_status_timestamps,
+    parse_common_arguments,
     JiraStatus,
     verbose_print,
 )
@@ -140,7 +141,7 @@ def main():
     # Modified JQL query to filter tickets that changed to "Released" status within the given timeframe
     projects = os.environ.get("JIRA_PROJECTS").split(",")
     jql_query = f"project in ({', '.join(projects)}) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-    args = parse_arguments()
+    args = parse_common_arguments()
     team_data = extract_engineering_excellence(jql_query)
     show_team_metrics(team_data, args.csv)
 

@@ -7,7 +7,7 @@ import pytz
 # pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
-    parse_arguments,
+    parse_common_arguments,
     verbose_print,
     JiraStatus,
     extract_status_timestamps,
@@ -85,7 +85,7 @@ def show_result(jql_month_data, args):
 
 
 def main():
-    args = parse_arguments()
+    args = parse_common_arguments()
     args.csv = True
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
