@@ -262,8 +262,8 @@ def write_csv(assignee_metrics, output_file):
 def main():
     args = parse_arguments()
     current_year = datetime.now().year
-    start_date = f"{current_year}-10-01"
-    end_date = f"{current_year}-10-31"
+    start_date = f"{current_year}-01-01"
+    end_date = f"{current_year}-12-31"
     team_name = args.team
     metrics_per_month, assignee_metrics = calculate_individual_jira_metrics(start_date, end_date, team_name)
     process_and_display_metrics(metrics_per_month, assignee_metrics)
