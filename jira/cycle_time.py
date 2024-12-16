@@ -9,6 +9,7 @@ from jira.resources import Issue
 # pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
+    parse_common_arguments,
     get_team,
     extract_status_timestamps,
     interpret_status_timestamps,
@@ -201,7 +202,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
 
 
 def main():
-    args = parse_arguments()
+    args = parse_common_arguments()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
