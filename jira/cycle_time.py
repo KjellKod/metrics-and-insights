@@ -150,14 +150,13 @@ def process_cycle_time_metrics(team, months, verbose):
             "Month": month,
             "Median Cycle Time (days)": f"{median_cycle_time_days:.2f}",
             "Average Cycle Time (days)": f"{average_cycle_time_days:.2f}",
+            "Number of Released Tickets": len(released_tickets),
         }
-        if verbose:
-            metric["Released Tickets"] = ", ".join(released_tickets)
 
+        metric["Released Tickets"] = ", ".join(released_tickets)
         metrics.append(metric)
         total_ticket_amount = ""
-        if verbose:
-            total_ticket_amount = f", Total tickets: {len(released_tickets)}"
+        total_ticket_amount = f", Total tickets: {len(released_tickets)}"
         print(
             f"Month: {month}, Median Cycle Time: {median_cycle_time_days:.2f} days, Average Cycle Time: {average_cycle_time_days:.2f} days {total_ticket_amount}"
         )
