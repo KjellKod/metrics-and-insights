@@ -276,59 +276,66 @@ def print_metrics(pr_metrics):
         )
 
 
-def get_merged_prs_for_years(start_year, end_year):
-    url = f"{base_url}/pulls"
-    params = {"state": "closed", "sort": "created", "direction": "desc", "per_page": 100}
+# @Robbie eng-mgmt channel Dec19
+# This might be a shady metric for now. For a long time in 2024 we made these auto sync PRs, like this one
+# https://github.com/onfleet/web/pull/4698
+# 10:28
+# Probably hundreds of them
+# 10:29
+# I think devops turned this off a few months ago
+# def get_merged_prs_for_years(start_year, end_year):
+#     url = f"{base_url}/pulls"
+#     params = {"state": "closed", "sort": "created", "direction": "desc", "per_page": 100}
 
-    year_counts = {year: 0 for year in range(start_year, end_year + 1)}
-    page = 1
-    keep_going = True
+#     year_counts = {year: 0 for year in range(start_year, end_year + 1)}
+#     page = 1
+#     keep_going = True
 
-    while keep_going:
-        params["page"] = page
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
-            print(f"Failed to fetch PRs: {response.status_code}")
-            break
+#     while keep_going:
+#         params["page"] = page
+#         response = requests.get(url, headers=headers, params=params)
+#         if response.status_code != 200:
+#             print(f"Failed to fetch PRs: {response.status_code}")
+#             break
 
-        prs = response.json()
-        if not prs:
-            print(f"No more PRs found after page {page}")
-            break
+#         prs = response.json()
+#         if not prs:
+#             print(f"No more PRs found after page {page}")
+#             break
 
-        print(f"Processing page {page}, found {len(prs)} PRs")
+#         print(f"Processing page {page}, found {len(prs)} PRs")
 
-        for pr in prs:
-            pr_number = pr.get("number")
-            created_at = pr.get("created_at")
-            merged_at = pr.get("merged_at")
+#         for pr in prs:
+#             pr_number = pr.get("number")
+#             created_at = pr.get("created_at")
+#             merged_at = pr.get("merged_at")
 
-            if not created_at:
-                print(f"  Skipping PR #{pr_number} - no creation date")
-                continue
+#             if not created_at:
+#                 print(f"  Skipping PR #{pr_number} - no creation date")
+#                 continue
 
-            created_year = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").year
+#             created_year = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").year
 
-            if created_year < start_year:
-                print(f"  Found PR created in {created_year}, stopping search")
-                keep_going = False
-                break
+#             if created_year < start_year:
+#                 print(f"  Found PR created in {created_year}, stopping search")
+#                 keep_going = False
+#                 break
 
-            if merged_at:
-                merged_year = datetime.strptime(merged_at, "%Y-%m-%dT%H:%M:%SZ").year
-                if start_year <= merged_year <= end_year:
-                    year_counts[merged_year] += 1
-                    print(f"  Counted PR #{pr_number} for {merged_year}")
-                else:
-                    print(f"  PR #{pr_number} merged in {merged_year}, outside of target range")
-            else:
-                print(f"  PR #{pr_number} not merged")
+#             if merged_at:
+#                 merged_year = datetime.strptime(merged_at, "%Y-%m-%dT%H:%M:%SZ").year
+#                 if start_year <= merged_year <= end_year:
+#                     year_counts[merged_year] += 1
+#                     print(f"  Counted PR #{pr_number} for {merged_year}")
+#                 else:
+#                     print(f"  PR #{pr_number} merged in {merged_year}, outside of target range")
+#             else:
+#                 print(f"  PR #{pr_number} not merged")
 
-        print(f"After page {page}, current counts: {year_counts}")
-        page += 1
+#         print(f"After page {page}, current counts: {year_counts}")
+#         page += 1
 
-    print(f"Final counts of merged PRs: {year_counts}")
-    return year_counts
+#     print(f"Final counts of merged PRs: {year_counts}")
+#     return year_counts
 
 
 # following UTC time format although it's possible that the CI was running in a different timezone
