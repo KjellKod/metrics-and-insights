@@ -37,6 +37,29 @@ Scripts for extracting metrics from Jira.
 - cycle_time.py: Script to calculate cycle time metrics from Jira, based on when coding is finished until it's marked as released. 
 - release_failure.py: Script extract all `Release` tickets, the linked tickets part of that release and whether or not the release was a failure. 
 - released_tickets.py: Retrieve calculate amount of released tickets month-by-month.
+- pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
+
+## PR Metrics Analysis
+To analyze PR metrics, use the following command:
+
+```bash
+python3 github/pr_metrics.py [options]
+
+Options:
+
+-v, --verbose: Enable verbose output
+-csv: Export the release data to a CSV file
+-load-from-file FILENAME: Load data from a specified file instead of querying GitHub
+-save-to-file FILENAME: Save retrieved data to a specified file
+This script calculates and displays metrics for merged Pull Requests, including:
+
+Total number of PRs per month
+Median merge time (in hours) per month
+Median and average check time (in minutes) per month
+Ratio of check time to merge time (as a percentage)
+The script retrieves data for PRs that have been merged since January 1, 2024, by default.
+```
+
 - Setup and Usage
 
 ## Environmental Variables## 

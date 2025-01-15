@@ -7,6 +7,37 @@ from collections import defaultdict
 from datetime import datetime
 from dotenv import load_dotenv
 
+
+"""
+PR Metrics Analysis Script
+
+This script analyzes Pull Request (PR) metrics for a specified GitHub repository,
+focusing on merge times and GitHub Actions check durations.
+
+Key features:
+1. Retrieves merged PRs from a specified date (default: January 1, 2024)
+2. Calculates metrics such as merge time and check duration for each PR
+3. Provides monthly summaries of PR metrics
+4. Offers options for verbose output, CSV export, and file-based data loading/saving
+
+Usage:
+    python3 pr_metrics.py [options]
+
+Options:
+    -v, --verbose         Enable verbose output
+    -csv                  Export the release data to a CSV file
+    -load-from-file FILE  Load data from a specified file instead of querying GitHub
+    -save-to-file FILE    Save retrieved data to a specified file
+
+The script requires proper setup of GitHub API credentials in the .env file or
+environment variables. See the README.md for more details on setting up credentials.
+
+Note: This script currently focuses on calculating the time for a PR to be merged
+and the duration of GitHub Actions checks. Future versions may include additional
+metrics and analysis capabilities.
+"""
+
+
 load_dotenv()
 
 # Global variable for verbosity
@@ -79,29 +110,6 @@ def get_single_pull_request(pr_number):
     url = f"{base_url}/pulls/{pr_number}"
     response = requests.get(url, headers=headers)
     return [response.json()] if response.status_code == 200 else []
-
-
-# def get_pull_requests(start_date, state="closed", per_page=100):
-#     url = f"{base_url}/pulls"
-#     start_date = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ")
-#     params = {"state": state, "per_page": per_page, "sort": "updated", "direction": "desc"}
-#     prs = []
-#     if start_date is None:
-#         start_date = "2024-07-01T00:00:00Z"
-
-#     while url:
-#         response = requests.get(url, headers=headers, params=params)
-#         page_prs = response.json()
-#         for pr in page_prs:
-#             if pr["merged_at"]:
-#                 merged_at = datetime.strptime(pr["merged_at"], "%Y-%m-%dT%H:%M:%SZ")
-#                 if merged_at > start_date:
-#                     prs.append(pr)
-#                 elif merged_at < start_date:
-#                     print
-#                     return prs  # We've gone past 2024, so we can stop
-#         url = response.links.get("next", {}).get("url")
-#     return prs
 
 
 def get_pull_requests(start_date, state="closed", per_page=100):
@@ -274,68 +282,6 @@ def print_metrics(pr_metrics):
         print(
             f"{month}, {len(prs)}, {median_merge_time_hours:.2f}, {median_check_time_minutes:.2f}, {avg_check_time_minutes:.2f}, {ratio_percentage:.2f}"
         )
-
-
-# @Robbie eng-mgmt channel Dec19
-# This might be a shady metric for now. For a long time in 2024 we made these auto sync PRs, like this one
-# https://github.com/onfleet/web/pull/4698
-# 10:28
-# Probably hundreds of them
-# 10:29
-# I think devops turned this off a few months ago
-# def get_merged_prs_for_years(start_year, end_year):
-#     url = f"{base_url}/pulls"
-#     params = {"state": "closed", "sort": "created", "direction": "desc", "per_page": 100}
-
-#     year_counts = {year: 0 for year in range(start_year, end_year + 1)}
-#     page = 1
-#     keep_going = True
-
-#     while keep_going:
-#         params["page"] = page
-#         response = requests.get(url, headers=headers, params=params)
-#         if response.status_code != 200:
-#             print(f"Failed to fetch PRs: {response.status_code}")
-#             break
-
-#         prs = response.json()
-#         if not prs:
-#             print(f"No more PRs found after page {page}")
-#             break
-
-#         print(f"Processing page {page}, found {len(prs)} PRs")
-
-#         for pr in prs:
-#             pr_number = pr.get("number")
-#             created_at = pr.get("created_at")
-#             merged_at = pr.get("merged_at")
-
-#             if not created_at:
-#                 print(f"  Skipping PR #{pr_number} - no creation date")
-#                 continue
-
-#             created_year = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").year
-
-#             if created_year < start_year:
-#                 print(f"  Found PR created in {created_year}, stopping search")
-#                 keep_going = False
-#                 break
-
-#             if merged_at:
-#                 merged_year = datetime.strptime(merged_at, "%Y-%m-%dT%H:%M:%SZ").year
-#                 if start_year <= merged_year <= end_year:
-#                     year_counts[merged_year] += 1
-#                     print(f"  Counted PR #{pr_number} for {merged_year}")
-#                 else:
-#                     print(f"  PR #{pr_number} merged in {merged_year}, outside of target range")
-#             else:
-#                 print(f"  PR #{pr_number} not merged")
-
-#         print(f"After page {page}, current counts: {year_counts}")
-#         page += 1
-
-#     print(f"Final counts of merged PRs: {year_counts}")
-#     return year_counts
 
 
 # following UTC time format although it's possible that the CI was running in a different timezone
