@@ -1,13 +1,12 @@
 #!/bin/bash
 
 #
-# similar to 
+#
+# The purpose of this file is to be able to get all the commits for a specific date range for multiple repositories.
+# The usage here is for example an audit or other oversight activity.
+# The stored date is similar to: 
 # git log master --since="YYYY-MM-DD" --until="YYYY-MM-DD" --first-parent --pretty=format:"%h,%an,%ad,%s" --date=iso --abbrev=7
-
-#!/bin/bash
-
-# Enable command echoing
-#set -x
+# (abbrev7 gives the hash to be the same short length as the GitHub UI)
 
 
 
@@ -84,7 +83,6 @@ get_branch_commits() {
     if [ ! -z "$OUTPUT" ]; then
         echo "$OUTPUT" >> "$OUTPUT_FILE"
         echo "Successfully wrote output to file"
-        cat ../$OUTPUT_FILE
         return 0
     else
         echo "No output generated from git log command"
@@ -140,7 +138,7 @@ echo "=== Summary ==="
 TOTAL_REPOS=$(cat "$OUTPUT_FILE" | grep -v "^repository" | cut -d',' -f1 | sort -u | wc -l)
 ERROR_REPOS=$(cat "$OUTPUT_FILE" | grep "ERROR" | cut -d',' -f1 | sort -u | wc -l)
 SUCCESS_REPOS=$((TOTAL_REPOS - ERROR_REPOS))
+echo "Report generated: $OUTPUT_FILE"
 echo "Total unique repositories processed: $TOTAL_REPOS"
 echo "Successful: $SUCCESS_REPOS"
 echo "Errors: $ERROR_REPOS"
-echo "Report generated: $OUTPUT_FILE"
