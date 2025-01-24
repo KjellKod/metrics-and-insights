@@ -134,3 +134,13 @@ done
 
 echo "Report generated: $OUTPUT_FILE"
 cat "$OUTPUT_FILE"  # Verify content
+
+
+echo "=== Summary ==="
+TOTAL_REPOS=$(cat "$OUTPUT_FILE" | grep -v "^repository" | cut -d',' -f1 | sort -u | wc -l)
+ERROR_REPOS=$(cat "$OUTPUT_FILE" | grep "ERROR" | cut -d',' -f1 | sort -u | wc -l)
+SUCCESS_REPOS=$((TOTAL_REPOS - ERROR_REPOS))
+echo "Total unique repositories processed: $TOTAL_REPOS"
+echo "Successful: $SUCCESS_REPOS"
+echo "Errors: $ERROR_REPOS"
+echo "Report generated: $OUTPUT_FILE"
