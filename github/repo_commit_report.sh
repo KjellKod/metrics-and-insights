@@ -1,5 +1,17 @@
 #!/bin/bash
 
+#
+# similar to 
+# git log master --since="YYYY-MM-DD" --until="YYYY-MM-DD" --first-parent --pretty=format:"%h,%an,%ad,%s" --date=iso --abbrev=7
+
+#!/bin/bash
+
+# Enable command echoing
+#set -x
+
+
+
+
 # Usage function
 usage() {
     echo "Usage: $0 --start-date YYYY-MM-DD --end-date YYYY-MM-DD --repos 'owner1/repo1,owner2/repo2'"
@@ -36,52 +48,89 @@ if [[ -z "$START_DATE" || -z "$END_DATE" || -z "$REPOS" ]]; then
 fi
 
 # Create output file with headers
-OUTPUT_FILE="commit_report.csv"
+SCRIPT_DIR="$PWD"
+OUTPUT_FILE="$SCRIPT_DIR/commit_report.csv"
 echo "repository,hash,author,date,message" > "$OUTPUT_FILE"
 
 # Function to get commits for a specific branch
 get_branch_commits() {
     local branch=$1
-    if git fetch --quiet origin "$branch" 2>/dev/null; then
-        echo "Using branch: $branch"
-        git log "origin/$branch" --since="$START_DATE" --until="$END_DATE" --first-parent \
-            --pretty=format:"$REPO_TRIM,%h,%an,%ad,%s" --date=iso --abbrev=7 >> "../$OUTPUT_FILE"
+    echo "Attempting to get commits for branch: $branch"
+    
+    # Show current directory and list repo contents
+    pwd
+    ls -la
+    
+    # Show git status and branch info
+    git status
+    git branch -a
+    
+    # Try to fetch and check out the branch
+    echo "Fetching branch $branch..."
+    git fetch --quiet origin "$branch"
+    echo "Checking out branch $branch..."
+    git checkout -q "$branch" || git checkout -q "origin/$branch"
+    
+    # Show the exact command we're running
+    echo "Running git log command..."
+    GIT_CMD="git log $branch --since=\"$START_DATE\" --until=\"$END_DATE\" --first-parent --pretty=format:\"$REPO_TRIM,%h,%an,%ad,%s\" --date=iso --abbrev=7"
+    echo "Command: $GIT_CMD"
+    
+    # Execute the command and capture output
+    OUTPUT=$(eval "$GIT_CMD")
+    echo "Command output:"
+    
+    # Append to file and check if successful
+    if [ ! -z "$OUTPUT" ]; then
+        echo "$OUTPUT" >> "$OUTPUT_FILE"
+        echo "Successfully wrote output to file"
+        cat ../$OUTPUT_FILE
         return 0
+    else
+        echo "No output generated from git log command"
+        return 1
     fi
-    return 1
 }
 
 # Process each repository
 IFS=',' read -ra REPO_ARRAY <<< "$REPOS"
 for REPO in "${REPO_ARRAY[@]}"; do
     REPO_TRIM=$(echo "$REPO" | xargs)  # Trim whitespace
-    
-    # Create temp directory for repo
-    TEMP_DIR=$(mktemp -d)
     echo "Processing repository: $REPO_TRIM"
     
-    # Clone repository (depth 1 for speed, we'll fetch more as needed)
-    git clone --quiet "git@github.com:$REPO_TRIM.git" "$TEMP_DIR"
+    # Use a fixed directory under /tmp
+    TEMP_DIR="/tmp/${REPO_TRIM//\//_}"
+    echo "Using directory: $TEMP_DIR"
     
-    if [ $? -eq 0 ]; then
-        cd "$TEMP_DIR"
-        
-        # Try master first, then main if master fails
-        if ! get_branch_commits "master"; then
-            echo "master branch not found, trying main..."
-            if ! get_branch_commits "main"; then
-                echo "Error: Neither master nor main branch found in $REPO_TRIM"
-                echo "$REPO_TRIM,ERROR,ERROR,ERROR,No master or main branch found" >> "../$OUTPUT_FILE"
-            fi
+    if [ ! -d "$TEMP_DIR" ]; then
+        echo "Directory doesn't exist, cloning repository..."
+        mkdir -p "$TEMP_DIR"
+        git clone --quiet "git@github.com:$REPO_TRIM.git" "$TEMP_DIR"
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to clone $REPO_TRIM"
+            echo "$REPO_TRIM,ERROR,ERROR,ERROR,Failed to clone repository" >> "$OUTPUT_FILE" 
+            continue
         fi
-        
-        cd ..
-        rm -rf "$TEMP_DIR"
-        echo "Completed processing $REPO_TRIM"
     else
-        echo "Error: Failed to clone $REPO_TRIM"
-        echo "$REPO_TRIM,ERROR,ERROR,ERROR,Failed to clone repository" >> "$OUTPUT_FILE"
+        echo "Directory exists, updating repository..."
+        cd "$TEMP_DIR"
+        git fetch --all --quiet
+        cd - > /dev/null
     fi
+    
+    cd "$TEMP_DIR"
+    
+    # Try master first, then main if master fails
+    if ! get_branch_commits "master"; then
+        echo "master branch failed, trying main..."
+        if ! get_branch_commits "main"; then
+            echo "Error: Neither master nor main branch worked for $REPO_TRIM"
+            echo "$REPO_TRIM,ERROR,ERROR,ERROR,No commits found in specified date range" >> "$OUTPUT_FILE"
+        fi
+    fi
+    
+    cd - > /dev/null
 done
 
 echo "Report generated: $OUTPUT_FILE"
+cat "$OUTPUT_FILE"  # Verify content
