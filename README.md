@@ -1,6 +1,9 @@
 ```
-├── github/               # Scripts for extracting metrics from GitHub
+from GitHub
 │   ├── releases.py
+│   ├── pr_metrics.py
+|   |── repo_commit_report.sh
+│
 │
 ├── jira/                 # Scripts for extracting metrics from Jira
 │   ├── engineering_excellence.py
@@ -29,6 +32,8 @@ If you do python dependency changes, please add them later in your virtual envir
 *github/*
 Scripts for extracting metrics from GitHub based on the release tags 
 - releases.py: Script to retrieve and categorize GitHub releases by year and month.
+- pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
+- repo_commit_report.sh: Bash script to generate repository commit information for a time range for one or multiple repositories
 
 *jira/* 
 Scripts for extracting metrics from Jira.
@@ -37,7 +42,7 @@ Scripts for extracting metrics from Jira.
 - cycle_time.py: Script to calculate cycle time metrics from Jira, based on when coding is finished until it's marked as released. 
 - release_failure.py: Script extract all `Release` tickets, the linked tickets part of that release and whether or not the release was a failure. 
 - released_tickets.py: Retrieve calculate amount of released tickets month-by-month.
-- pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
+- jira_utils.py: Helper utility module containing common functions and utilities used across other Jira scripts
 
 ## PR Metrics Analysis
 To analyze PR metrics, use the following command:
