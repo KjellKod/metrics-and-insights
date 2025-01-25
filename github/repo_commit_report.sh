@@ -8,15 +8,12 @@
 # git log master --since="YYYY-MM-DD" --until="YYYY-MM-DD" --first-parent --pretty=format:"%h,%an,%ad,%s" --date=iso --abbrev=7
 # (abbrev7 gives the hash to be the same short length as the GitHub UI)
 
-
-
-
 # Usage function
 usage() {
     echo "Usage: $0 --start-date YYYY-MM-DD --end-date YYYY-MM-DD --repos 'owner1/repo1,owner2/repo2'"
     echo
     echo "Example:"
-    echo "$0 --start-date 2024-10-15 --end-date 2025-01-15 --repos 'onfleet/web,onfleet/mobile'"
+    echo "$0 --start-date 2024-10-15 --end-date 2025-01-15 --repos 'my_organization/web,my_organization/metrics'"
     exit 1
 }
 
@@ -57,12 +54,12 @@ get_branch_commits() {
     echo "Attempting to get commits for branch: $branch"
     
     # Show current directory and list repo contents
-    pwd
-    ls -la
+    pwd | cat
+    ls -la | cat
     
     # Show git status and branch info
-    git status
-    git branch -a
+    git status | cat
+    git branch -a | cat
     
     # Try to fetch and check out the branch
     echo "Fetching branch $branch..."
@@ -82,7 +79,8 @@ get_branch_commits() {
     # Append to file and check if successful
     if [ ! -z "$OUTPUT" ]; then
         echo "$OUTPUT" >> "$OUTPUT_FILE"
-        echo "Successfully wrote output to file"
+        COMMIT_COUNT=$(echo "$OUTPUT" | wc -l)
+        echo "Successfully wrote $COMMIT_COUNT commits to file"
         return 0
     else
         echo "No output generated from git log command"
@@ -131,9 +129,6 @@ for REPO in "${REPO_ARRAY[@]}"; do
 done
 
 echo "Report generated: $OUTPUT_FILE"
-cat "$OUTPUT_FILE"  # Verify content
-
-
 echo "=== Summary ==="
 TOTAL_REPOS=$(cat "$OUTPUT_FILE" | grep -v "^repository" | cut -d',' -f1 | sort -u | wc -l)
 ERROR_REPOS=$(cat "$OUTPUT_FILE" | grep "ERROR" | cut -d',' -f1 | sort -u | wc -l)
