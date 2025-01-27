@@ -7,6 +7,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def fetch_commit_data(graphql_url, headers, query, variables):
+    response = requests.post(graphql_url, headers=headers, json={"query": query, "variables": variables})
+    if response.status_code != 200:
+        print(f"Failed to fetch commits: {response.status_code}")
+        return None
+    return response.json()
+
+
+def process_commit_data(commit_history):
+    total_additions = 0
+    total_deletions = 0
+    commits_processed = 0
+
+    for commit in commit_history["nodes"]:
+        total_additions += commit["additions"]
+        total_deletions += commit["deletions"]
+        commits_processed += 1
+        print(f"Processed commit {commits_processed}: +{commit['additions']} -{commit['deletions']}")
+
+    return total_additions, total_deletions, commits_processed
+
+
 def get_commits_stats(start_date, end_date, owner, repo, access_token):
     graphql_url = "https://api.github.com/graphql"
     headers = {
@@ -51,20 +73,15 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token):
             "cursor": cursor,
         }
 
-        response = requests.post(graphql_url, headers=headers, json={"query": query, "variables": variables})
-
-        if response.status_code != 200:
-            print(f"Failed to fetch commits: {response.status_code}")
+        data = fetch_commit_data(graphql_url, headers, query, variables)
+        if not data:
             break
 
-        data = response.json()
         commit_history = data["data"]["repository"]["defaultBranchRef"]["target"]["history"]
-
-        for commit in commit_history["nodes"]:
-            total_additions += commit["additions"]
-            total_deletions += commit["deletions"]
-            commits_processed += 1
-            print(f"Processed commit {commits_processed}: +{commit['additions']} -{commit['deletions']}")
+        additions, deletions, processed = process_commit_data(commit_history)
+        total_additions += additions
+        total_deletions += deletions
+        commits_processed += processed
 
         if not commit_history["pageInfo"]["hasNextPage"]:
             break
@@ -85,7 +102,6 @@ def main():
     access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
     owner = os.environ.get("GITHUB_METRIC_OWNER")
     repo = os.environ.get("GITHUB_METRIC_REPO")
-    base_url = f"https://api.github.com/repos/{owner}/{repo}"
 
     start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
     end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
