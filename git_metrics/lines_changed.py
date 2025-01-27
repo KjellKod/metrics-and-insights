@@ -44,38 +44,51 @@ def process_commit_data(commit_history, progress_callback=None):
     return total_additions, total_deletions, commits_processed
 
 
-def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
-    graphql_url = "https://api.github.com/graphql"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/vnd.github.v4+json",
-    }
-    query = """
-    query ($owner: String!, $repo: String!, $since: GitTimestamp!, $until: GitTimestamp!, $cursor: String) {
-        repository(owner: $owner, name: $repo) {
-            defaultBranchRef {
-                target {
-                    ... on Commit {
-                        history(since: $since, until: $until, first: 100, after: $cursor) {
-                            pageInfo {
-                                hasNextPage
-                                endCursor
-                            }
-                            nodes {
-                                additions
-                                deletions
+def setup_github_api():
+    """Setup GitHub API configuration."""
+    return {
+        "url": "https://api.github.com/graphql",
+        "headers": {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github.v4+json",
+        },
+        "query": """
+        query ($owner: String!, $repo: String!, $since: GitTimestamp!, $until: GitTimestamp!, $cursor: String) {
+            repository(owner: $owner, name: $repo) {
+                defaultBranchRef {
+                    target {
+                        ... on Commit {
+                            history(since: $since, until: $until, first: 100, after: $cursor) {
+                                pageInfo {
+                                    hasNextPage
+                                    endCursor
+                                }
+                                nodes {
+                                    additions
+                                    deletions
+                                }
                             }
                         }
                     }
                 }
             }
         }
+        """,
     }
-    """
 
-    total_additions = 0
-    total_deletions = 0
-    commits_processed = 0
+
+def fetch_commit_page(api_config, variables):
+    """Fetch a single page of commit data and extract history."""
+    data = fetch_commit_data(api_config["url"], api_config["headers"], api_config["query"], variables)
+    if not data:
+        return None
+    return data["data"]["repository"]["defaultBranchRef"]["target"]["history"]
+
+
+def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
+    """Get commit statistics for the specified period."""
+    api_config = setup_github_api()
+    total_additions = total_deletions = commits_processed = 0
     cursor = None
 
     while True:
@@ -87,20 +100,24 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_
             "cursor": cursor,
         }
 
-        data = fetch_commit_data(graphql_url, headers, query, variables)
-        if not data:
+        commit_history = fetch_commit_page(api_config, variables)
+        if not commit_history:
+            print("Failed to fetch commit data")
             break
 
-        commit_history = data["data"]["repository"]["defaultBranchRef"]["target"]["history"]
         additions, deletions, processed = process_commit_data(commit_history, progress_callback)
         total_additions += additions
         total_deletions += deletions
         commits_processed += processed
 
-        if not commit_history["pageInfo"]["hasNextPage"]:
+        try:
+            if not commit_history["pageInfo"]["hasNextPage"]:
+                break
+            cursor = commit_history["pageInfo"]["endCursor"]
+        except (KeyError, TypeError) as e:
+            print(f"Error accessing pagination info: {str(e)}")
+            print("Response structure might be invalid or incomplete")
             break
-
-        cursor = commit_history["pageInfo"]["endCursor"]
 
     return total_additions, total_deletions, commits_processed
 
