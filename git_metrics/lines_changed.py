@@ -7,12 +7,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def fetch_commit_data(graphql_url, headers, query, variables):
-    response = requests.post(graphql_url, headers=headers, json={"query": query, "variables": variables})
-    if response.status_code != 200:
-        print(f"Failed to fetch commits: {response.status_code}")
+def fetch_commit_data(graphql_url, headers, query, variables, timeout=30):
+    try:
+        response = requests.post(
+            graphql_url, headers=headers, json={"query": query, "variables": variables}, timeout=timeout
+        )
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx, 5xx)
+        return response.json()
+    except requests.Timeout:
+        print(f"Request timed out after {timeout} seconds")
         return None
-    return response.json()
+    except requests.ConnectionError:
+        print("Network connection error occurred")
+        return None
+    except requests.RequestException as e:
+        print(f"An error occurred while fetching commit data: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error occurred: {str(e)}")
+        return None
 
 
 def process_commit_data(commit_history, progress_callback=None):
