@@ -15,7 +15,7 @@ def fetch_commit_data(graphql_url, headers, query, variables):
     return response.json()
 
 
-def process_commit_data(commit_history):
+def process_commit_data(commit_history, progress_callback=None):
     total_additions = 0
     total_deletions = 0
     commits_processed = 0
@@ -24,12 +24,14 @@ def process_commit_data(commit_history):
         total_additions += commit["additions"]
         total_deletions += commit["deletions"]
         commits_processed += 1
-        print(f"Processed commit {commits_processed}: +{commit['additions']} -{commit['deletions']}")
+
+        if progress_callback:
+            progress_callback(commits_processed, commit["additions"], commit["deletions"])
 
     return total_additions, total_deletions, commits_processed
 
 
-def get_commits_stats(start_date, end_date, owner, repo, access_token):
+def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
     graphql_url = "https://api.github.com/graphql"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -49,7 +51,6 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token):
                             nodes {
                                 additions
                                 deletions
-                                commitUrl
                             }
                         }
                     }
@@ -78,7 +79,7 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token):
             break
 
         commit_history = data["data"]["repository"]["defaultBranchRef"]["target"]["history"]
-        additions, deletions, processed = process_commit_data(commit_history)
+        additions, deletions, processed = process_commit_data(commit_history, progress_callback)
         total_additions += additions
         total_deletions += deletions
         commits_processed += processed
@@ -106,7 +107,12 @@ def main():
     start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
     end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
 
-    additions, deletions, commits = get_commits_stats(start_date, end_date, owner, repo, access_token)
+    def log_progress(commits_processed, additions, deletions):
+        print(f"Processed commit {commits_processed}: +{additions} -{deletions}")
+
+    additions, deletions, commits = get_commits_stats(
+        start_date, end_date, owner, repo, access_token, progress_callback=log_progress
+    )
 
     print(f"\nAnalysis for period {args.start_date} to {args.end_date}:")
     print(f"Total commits processed: {commits}")
