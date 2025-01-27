@@ -8,8 +8,8 @@ load_dotenv()
 
 # GitHub API setup
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
-owner = "onfleet"
-repo = "web"
+owner = os.environ.get("GITHUB_METRIC_OWNER")
+repo = os.environ.get("GITHUB_METRIC_REPO")
 base_url = f"https://api.github.com/repos/{owner}/{repo}"
 headers = {
     "Authorization": f"token {access_token}",
