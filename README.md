@@ -2,6 +2,7 @@
 from GitHub
 │   ├── releases.py
 │   ├── pr_metrics.py
+│   ├── lines_changed.py
 |   |── repo_commit_report.sh
 │
 │
@@ -33,6 +34,7 @@ If you do python dependency changes, please add them later in your virtual envir
 Scripts for extracting metrics from GitHub based on the release tags 
 - releases.py: Script to retrieve and categorize GitHub releases by year and month.
 - pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
+- lines_changed.py: Script to see line changes between two dates. This is just a for-fun insight that can show how much / little changes over time in repositories. It does not take into account the importance of the changes. `GITHUB_METRIC_OWNER=<organization>` and `GITHUB_METRIC_REPO=<repo-name>` needs to be defined in environment variables. 
 - repo_commit_report.sh: Bash script to generate repository commit information for a time range for one or multiple repositories
 
 *jira/* 

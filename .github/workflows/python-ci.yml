@@ -35,8 +35,8 @@ jobs:
     - name: Install dependencies
       run: |
         pip3 install --upgrade pip
-        if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
-        pip3 install pytest
+        pip3 install -r requirements.txt
+        pip3 install pytest jira 
 
     - name: Test with pytest
       run: |
