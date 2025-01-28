@@ -44,7 +44,7 @@ def process_commit_data(commit_history, progress_callback=None):
     return total_additions, total_deletions, commits_processed
 
 
-def setup_github_api():
+def setup_github_api(access_token):
     """Setup GitHub API configuration."""
     return {
         "url": "https://api.github.com/graphql",
@@ -87,7 +87,7 @@ def fetch_commit_page(api_config, variables):
 
 def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
     """Get commit statistics for the specified period."""
-    api_config = setup_github_api()
+    api_config = setup_github_api(access_token)
     total_additions = total_deletions = commits_processed = 0
     cursor = None
 
@@ -122,33 +122,66 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_
     return total_additions, total_deletions, commits_processed
 
 
-def main():
+def validate_env_variables():
+    """Validate required environment variables and return their values."""
+    required_vars = {
+        "GITHUB_TOKEN_READONLY_WEB": "GitHub access token",
+        "GITHUB_METRIC_OWNER": "GitHub repository owner",
+        "GITHUB_METRIC_REPO": "GitHub repository name",
+    }
 
+    missing_vars = []
+    env_values = {}
+
+    for var, description in required_vars.items():
+        value = os.environ.get(var)
+        if not value:
+            missing_vars.append(f"{var} ({description})")
+        env_values[var] = value
+
+    if missing_vars:
+        raise ValueError("Missing required environment variables:\n" + "\n".join(f"- {var}" for var in missing_vars))
+
+    return env_values
+
+
+def main():
     parser = argparse.ArgumentParser(description="Analyze lines changed on master branch")
     parser.add_argument("--start-date", type=str, required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, required=True, help="End date (YYYY-MM-DD)")
     args = parser.parse_args()
 
-    # GitHub API setup
-    access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
-    owner = os.environ.get("GITHUB_METRIC_OWNER")
-    repo = os.environ.get("GITHUB_METRIC_REPO")
+    try:
+        # Validate environment variables first
+        env_vars = validate_env_variables()
 
-    start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
+        start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
+        end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
 
-    def log_progress(commits_processed, additions, deletions):
-        print(f"Processed commit {commits_processed}: +{additions} -{deletions}")
+        def log_progress(commits_processed, additions, deletions):
+            print(f"Processed commit {commits_processed}: +{additions} -{deletions}")
 
-    additions, deletions, commits = get_commits_stats(
-        start_date, end_date, owner, repo, access_token, progress_callback=log_progress
-    )
+        additions, deletions, commits = get_commits_stats(
+            start_date,
+            end_date,
+            env_vars["GITHUB_METRIC_OWNER"],
+            env_vars["GITHUB_METRIC_REPO"],
+            env_vars["GITHUB_TOKEN_READONLY_WEB"],
+            progress_callback=log_progress,
+        )
 
-    print(f"\nAnalysis for period {args.start_date} to {args.end_date}:")
-    print(f"Total commits processed: {commits}")
-    print(f"Total lines added: {additions}")
-    print(f"Total lines deleted: {deletions}")
-    print(f"Net change: {additions - deletions}")
+        print(f"\nAnalysis for period {args.start_date} to {args.end_date}:")
+        print(f"Total commits processed: {commits}")
+        print(f"Total lines added: {additions}")
+        print(f"Total lines deleted: {deletions}")
+        print(f"Net change: {additions - deletions}")
+
+    except ValueError as e:
+        print(f"Configuration error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
