@@ -1,12 +1,14 @@
 import os
-import requests
+import sys
 from datetime import datetime
 import argparse
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# pylint: disable=broad-exception-caught
 def fetch_commit_data(graphql_url, headers, query, variables, timeout=30):
     try:
         response = requests.post(
@@ -85,6 +87,7 @@ def fetch_commit_page(api_config, variables):
     return data["data"]["repository"]["defaultBranchRef"]["target"]["history"]
 
 
+# pylint: disable=broad-exception-caught,too-many-positional-arguments,too-many-arguments,too-many-locals
 def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
     """Get commit statistics for the specified period."""
     api_config = setup_github_api(access_token)

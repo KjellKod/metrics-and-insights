@@ -71,12 +71,8 @@ for year_month, releases in sorted(releases_by_month.items()):
 
 
 # Parse command-line arguments
-parser = argparse.ArgumentParser(
-    description="Retrieve and optionally export GitHub releases to CSV."
-)
-parser.add_argument(
-    "-csv", action="store_true", help="Export the release data to a CSV file."
-)
+parser = argparse.ArgumentParser(description="Retrieve and optionally export GitHub releases to CSV.")
+parser.add_argument("-csv", action="store_true", help="Export the release data to a CSV file.")
 args = parser.parse_args()
 
 # Export to CSV if the -csv flag is provided
