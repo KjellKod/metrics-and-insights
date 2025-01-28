@@ -2,31 +2,43 @@ import os
 import sys
 from datetime import datetime
 import argparse
+import logging
+
 import requests
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
 
+def setup_logging():
+    """Configure logging settings."""
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    return logging.getLogger(__name__)
+
+
 # pylint: disable=broad-exception-caught
 def fetch_commit_data(graphql_url, headers, query, variables, timeout=30):
+    logger = logging.getLogger(__name__)
     try:
         response = requests.post(
             graphql_url, headers=headers, json={"query": query, "variables": variables}, timeout=timeout
         )
-        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx, 5xx)
+        response.raise_for_status()
         return response.json()
     except requests.Timeout:
-        print(f"Request timed out after {timeout} seconds")
+        logger.error("Request timed out after %d seconds", timeout)
         return None
     except requests.ConnectionError:
-        print("Network connection error occurred")
+        logger.error("Network connection error occurred")
         return None
     except requests.RequestException as e:
-        print(f"An error occurred while fetching commit data: {str(e)}")
+        logger.error("An error occurred while fetching commit data: %s", str(e))
         return None
     except Exception as e:
-        print(f"Unexpected error occurred: {str(e)}")
+        logger.error("Unexpected error occurred: %s", str(e), exc_info=True)
         return None
 
 
@@ -90,6 +102,7 @@ def fetch_commit_page(api_config, variables):
 # pylint: disable=broad-exception-caught,too-many-positional-arguments,too-many-arguments,too-many-locals
 def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_callback=None):
     """Get commit statistics for the specified period."""
+    logger = logging.getLogger(__name__)
     api_config = setup_github_api(access_token)
     total_additions = total_deletions = commits_processed = 0
     cursor = None
@@ -105,7 +118,7 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_
 
         commit_history = fetch_commit_page(api_config, variables)
         if not commit_history:
-            print("Failed to fetch commit data")
+            logger.error("Failed to fetch commit data")
             break
 
         additions, deletions, processed = process_commit_data(commit_history, progress_callback)
@@ -118,8 +131,8 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_
                 break
             cursor = commit_history["pageInfo"]["endCursor"]
         except (KeyError, TypeError) as e:
-            print(f"Error accessing pagination info: {str(e)}")
-            print("Response structure might be invalid or incomplete")
+            logger.error("Error accessing pagination info: %s", str(e))
+            logger.warning("Response structure might be invalid or incomplete")
             break
 
     return total_additions, total_deletions, commits_processed
@@ -127,6 +140,7 @@ def get_commits_stats(start_date, end_date, owner, repo, access_token, progress_
 
 def validate_env_variables():
     """Validate required environment variables and return their values."""
+    logger = logging.getLogger(__name__)
     required_vars = {
         "GITHUB_TOKEN_READONLY_WEB": "GitHub access token",
         "GITHUB_METRIC_OWNER": "GitHub repository owner",
@@ -143,26 +157,31 @@ def validate_env_variables():
         env_values[var] = value
 
     if missing_vars:
-        raise ValueError("Missing required environment variables:\n" + "\n".join(f"- {var}" for var in missing_vars))
+        logger.error("Missing required environment variables:\n%s", "\n".join(f"- {var}" for var in missing_vars))
+        raise ValueError("Missing required environment variables")
 
     return env_values
 
 
-def main():
+def parse_arguments():
+    """Parse and validate command line arguments."""
     parser = argparse.ArgumentParser(description="Analyze lines changed on master branch")
     parser.add_argument("--start-date", type=str, required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, required=True, help="End date (YYYY-MM-DD)")
-    args = parser.parse_args()
+    return parser.parse_args()
 
+
+def main():
+    logger = setup_logging()
     try:
-        # Validate environment variables first
+        args = parse_arguments()
         env_vars = validate_env_variables()
 
         start_date = datetime.strptime(args.start_date, "%Y-%m-%d")
         end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
 
         def log_progress(commits_processed, additions, deletions):
-            print(f"Processed commit {commits_processed}: +{additions} -{deletions}")
+            logger.info("Processed commit %d: +%d -%d", commits_processed, additions, deletions)
 
         additions, deletions, commits = get_commits_stats(
             start_date,
@@ -173,17 +192,17 @@ def main():
             progress_callback=log_progress,
         )
 
-        print(f"\nAnalysis for period {args.start_date} to {args.end_date}:")
-        print(f"Total commits processed: {commits}")
-        print(f"Total lines added: {additions}")
-        print(f"Total lines deleted: {deletions}")
-        print(f"Net change: {additions - deletions}")
+        logger.info("\nAnalysis for period %s to %s:", args.start_date, args.end_date)
+        logger.info("Total commits processed: %d", commits)
+        logger.info("Total lines added: %d", additions)
+        logger.info("Total lines deleted: %d", deletions)
+        logger.info("Net change: %d", additions - deletions)
 
     except ValueError as e:
-        print(f"Configuration error: {str(e)}")
+        logger.error("Configuration error: %s", str(e))
         sys.exit(1)
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        logger.error("An error occurred: %s", str(e), exc_info=True)
         sys.exit(1)
 
 
