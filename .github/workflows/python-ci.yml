@@ -36,8 +36,13 @@ jobs:
       run: |
         pip3 install --upgrade pip
         pip3 install -r requirements.txt
-        pip3 install pytest jira 
-
+        pip3 install pytest jira pytest-cov
+        
     - name: Test with pytest
       run: |
-        pytest -v  # Use -v for verbose output
+        pytest -v --cov-branch --cov-report=xml # Use -v for verbose output
+
+- name: Upload coverage reports to Codecov
+    uses: codecov/codecov-action@v5
+    with:
+      token: ${{ secrets.CODECOV_TOKEN }}
