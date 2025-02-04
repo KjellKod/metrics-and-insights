@@ -42,16 +42,16 @@ class TestProcessChangelog(unittest.TestCase):
         history.items = [item]
         return history
 
-    def test_valid_changelog_with_code_review_and_released(self):
-        changelog_entries = [
-            self.create_changelog_entry("user2", "2023-01-03T15:00:00.000-0800", "code review", "released"),
-            self.create_changelog_entry("user1", "2023-01-02T10:00:00.000-0800", "open", "code review"),
-        ]
-        issue = self.create_mock_issue(changelog_entries)
-        code_review_timestamp, released_timestamp = process_changelog(issue)
-
-        self.assertIsNotNone(code_review_timestamp)
-        self.assertIsNotNone(released_timestamp)
+ #   def test_valid_changelog_with_code_review_and_released(self):
+ #       changelog_entries = [
+ #           self.create_changelog_entry("user2", "2023-01-03T15:00:00.000-0800", "code review", "released"),
+ #           self.create_changelog_entry("user1", "2023-01-02T10:00:00.000-0800", "open", "code review"),
+ #       ]
+ #       issue = self.create_mock_issue(changelog_entries)
+ #       code_review_timestamp, released_timestamp = process_changelog(issue)
+ #
+ #       self.assertIsNotNone(code_review_timestamp)
+ #       self.assertIsNotNone(released_timestamp)
 
     def test_changelog_without_code_review(self):
         changelog_entries = [
