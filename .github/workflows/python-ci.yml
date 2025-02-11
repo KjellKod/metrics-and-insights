@@ -17,7 +17,7 @@ jobs:
       JIRA_API_KEY: "your_jira_api_key"
       JIRA_LINK: "https://your_jira_instance.atlassian.net"
       GITHUB_TOKEN_READONLY_WEB: "your_github_token"
-      GITHUB_METRIC_OWNER: "your_github_repo_owner"
+      GITHUB_METRIC_OWNER_OR_ORGANIZATION: "your_github_repo_owner"
       GITHUB_METRIC_REPO: "your_github_repo_name"
       JIRA_PROJECTS: "MYPROJECT, ENG, ETC"
       TEAM_MOB: "Mobile" 

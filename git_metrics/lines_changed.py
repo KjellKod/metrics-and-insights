@@ -143,7 +143,7 @@ def validate_env_variables():
     logger = logging.getLogger(__name__)
     required_vars = {
         "GITHUB_TOKEN_READONLY_WEB": "GitHub access token",
-        "GITHUB_METRIC_OWNER": "GitHub repository owner",
+        "GITHUB_METRIC_OWNER_OR_ORGANIZATION": "GitHub repository owner",
         "GITHUB_METRIC_REPO": "GitHub repository name",
     }
 
@@ -186,7 +186,7 @@ def main():
         additions, deletions, commits = get_commits_stats(
             start_date,
             end_date,
-            env_vars["GITHUB_METRIC_OWNER"],
+            env_vars["GITHUB_METRIC_OWNER_OR_ORGANIZATION"],
             env_vars["GITHUB_METRIC_REPO"],
             env_vars["GITHUB_TOKEN_READONLY_WEB"],
             progress_callback=log_progress,

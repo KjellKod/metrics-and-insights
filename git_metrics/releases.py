@@ -12,8 +12,8 @@ load_dotenv()
 access_token = os.environ.get("GITHUB_TOKEN_READONLY_WEB")
 
 # Set the repository owner and name
-owner = os.environ.get("GITHUB_METRIC_OWNER")
-repo = os.environ.get("GITHUB_METRIC_REPO")
+owner = os.environ.get("GITHUB_METRIC_OWNER_OR_ORGANIZATION")
+repo = os.environ.get("GITHUB_REPO_FOR_RELEASE_TRACKING")
 
 # Set the API endpoint URL
 URL = f"https://api.github.com/repos/{owner}/{repo}/tags"

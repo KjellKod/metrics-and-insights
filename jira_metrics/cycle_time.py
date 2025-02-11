@@ -14,10 +14,12 @@ from jira_utils import (
     extract_status_timestamps,
     interpret_status_timestamps,
     JiraStatus,
+    print_env_variables,
     verbose_print,
 )
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
+print(f"Projects: {projects}")
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
@@ -202,6 +204,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
 
 def main():
     args = parse_common_arguments()
+    print_env_variables()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
