@@ -1,14 +1,14 @@
 import os
 import sys
+from calendar import month_abbr
 from collections import defaultdict
 from datetime import datetime
-from dotenv import load_dotenv
 import csv
-from jira.resources import Issue
+from dotenv import load_dotenv
+
 from jira_utils import (
     get_tickets_from_jira,
     get_common_parser,
-    parse_common_arguments,
     verbose_print,
     JiraStatus,
     interpret_status_timestamps,
@@ -56,17 +56,6 @@ def parse_arguments():
     args = parser.parse_args()
     global VERBOSE
     VERBOSE = args.verbose
-    return args
-
-
-import argparse
-
-
-def parse_arguments():
-    parser = get_common_parser()
-    # Add team-specific argument
-    parser.add_argument("-team", required=False, help="Specify the team name to process.")
-    args = parse_common_arguments(parser)
     return args
 
 
@@ -198,23 +187,19 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 def construct_jql(team_name, start_date, end_date):
     if team_name.lower() == "mobile":
         return f'project = MOB AND status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC'
-    if team_name.lower() == "devops":
+    elif team_name.lower() == "devops":
         return f'project = DevOps AND status IN ("Released", "Done")  AND (status changed TO ("Released", "Done") during ({start_date}, {end_date}) AND issuetype IN (Task, Bug, Story, Spike)) ORDER BY updated ASC'
     else:
         return f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during (\"{start_date}\", \"{end_date}\") AND issueType in (Task, Bug, Story, Spike) AND \"Team[Dropdown]\" = \"{team_name}\" ORDER BY updated ASC"
 
 
-from calendar import month_abbr
-
-
 def transform_month(month):
     # Extract the month part and convert it to abbreviated month name
-    year, month_num = month.split("-")
-    return month_abbr[int(month_num)]
+    return month_abbr[int(month)]
 
 
 def write_csv(assignee_metrics, output_file):
-    with open(output_file, "w", newline="") as csvfile:
+    with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
 
         # Get all unique months and sort them

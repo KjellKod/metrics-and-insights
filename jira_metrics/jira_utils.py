@@ -49,11 +49,71 @@ def parse_common_arguments(parser=None):
 
 def get_jira_instance():
     """
-    Create the jira instance
-    An easy way to set up your environment variables is through your .zshrc or .bashrc file
-    export USER_EMAIL="your_email@example.com"
-    export JIRA_API_KEY="your_jira_api_key"
-    export JIRA_LINK="https://your_jira_instance.atlassian.net"
+    Create and verify the jira instance
+    """
+    required_env_vars = [
+        "JIRA_API_KEY",
+        "USER_EMAIL",
+        "JIRA_LINK",
+        "JIRA_PROJECTS",
+        "CUSTOM_FIELD_TEAM",
+        "CUSTOM_FIELD_WORK_TYPE",
+        "CUSTOM_FIELD_STORYPOINTS",
+    ]
+
+
+    for var in required_env_vars:
+        if os.environ.get(var) is None:
+            raise ValueError(f"Environment variable {var} is not set.")
+
+    projects = os.environ.get("JIRA_PROJECTS").split(",")
+    user = os.environ.get("USER_EMAIL")
+    api_key = os.environ.get("JIRA_API_KEY")
+    link = os.environ.get("JIRA_LINK")
+
+    # Debug prints to verify credentials (mask the API key for security)
+    print("\nAttempting JIRA connection with:")
+    print(f"Link: {link}")
+    print(f"User: {user}")
+    print(f"API Key length: {len(api_key)}")
+    print(f"Projects: {projects}")
+
+    if not api_key or len(api_key.strip()) == 0:
+        raise ValueError("JIRA API key is empty or invalid")
+
+    if not user or not "@" in user:
+        raise ValueError("Invalid email format for USER_EMAIL")
+
+    if not link or not link.startswith("https://"):
+        raise ValueError("Invalid JIRA link format")
+
+    options = {"server": link, "verify": True}  # Ensure SSL verification is enabled
+
+    try:
+        print("\nInitializing JIRA connection...")
+        jira = JIRA(options=options, basic_auth=(user, api_key))
+
+        print("Verifying authentication...")
+        user_info = jira.myself()
+        print(f"Successfully authenticated as: {user_info['displayName']}")
+
+        return jira
+
+    except Exception as e:
+        print("\nAuthentication Error Details:")
+        print(f"- Error Type: {type(e).__name__}")
+        print(f"- Error Message: {str(e)}")
+        print("\nPlease verify:")
+        print("1. Your API key is correct and not expired")
+        print("2. Your email address matches your Jira account")
+        print("3. The Jira URL is correct")
+        print("4. You have the necessary permissions in Jira")
+        raise ConnectionError(f"Jira authentication failed: {str(e)}") from e
+
+
+def print_env_variables():
+    """
+    Print Jira-related environment variables for debugging.
     """
 
     required_env_vars = [
@@ -65,24 +125,23 @@ def get_jira_instance():
         "CUSTOM_FIELD_WORK_TYPE",
         "CUSTOM_FIELD_STORYPOINTS",
     ]
-    for var in required_env_vars:
-        if os.environ.get(var) is None:
-            raise ValueError(f"Environment variable {var} is not set.")
 
-    user = os.environ.get("USER_EMAIL")
-    api_key = os.environ.get("JIRA_API_KEY")
-    link = os.environ.get("JIRA_LINK")
-    options = {
-        "server": link,
-    }
-    jira = JIRA(options=options, basic_auth=(user, api_key))
-    return jira
+    print("\n=== Jira Environment Variables ===\n")
+
+    for var in required_env_vars:
+        value = os.environ.get(var, "NOT SET")
+
+        # Mask sensitive information like API keys
+        if "KEY" in var or "PASSWORD" in var:
+            value = "****** (hidden for security)"
+
+        print(f"{var}: {value}")
 
 
 def get_tickets_from_jira(jql_query):
     # Get the Jira instance
     jira = get_jira_instance()
-    print(f"jql: {jql_query}")
+    print(f"jql: '{jql_query}'")
 
     max_results = 100
     start_at = 0
@@ -171,7 +230,7 @@ def interpret_status_timestamps(status_timestamps):
         if status.lower() == "released" and not extracted_statuses[JiraStatus.RELEASED.value]:
             extracted_statuses[JiraStatus.RELEASED.value] = timestamp
             break
-        elif status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
+        if status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
             extracted_statuses[JiraStatus.DONE.value] = timestamp
             break
 

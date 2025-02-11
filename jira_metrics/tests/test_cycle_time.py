@@ -1,16 +1,18 @@
 import unittest
 import sys
 import os
+
 from unittest.mock import MagicMock
 from datetime import datetime, timezone, timedelta
 import pytz
+from jira.resources import Issue
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
 from cycle_time import process_changelog
 
-from jira.resources import Issue
+
 
 
 # Define the PST timezone

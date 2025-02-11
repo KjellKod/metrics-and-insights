@@ -14,10 +14,9 @@ from jira_utils import (
     extract_status_timestamps,
     interpret_status_timestamps,
     JiraStatus,
+    print_env_variables,
     verbose_print,
 )
-
-projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
@@ -106,7 +105,8 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     return None, None
 
 
-def calculate_monthly_cycle_time(start_date, end_date):
+def calculate_monthly_cycle_time(projects, start_date, end_date):
+
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     tickets = get_tickets_from_jira(jql_query)
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
@@ -202,10 +202,13 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
 
 def main():
     args = parse_common_arguments()
+    print_env_variables()
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
-    cycle_times_per_month = calculate_monthly_cycle_time(start_date, end_date)
+    projects = os.environ.get("JIRA_PROJECTS").split(",")
+    print(f"Projects: {projects}")
+    cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
 
 

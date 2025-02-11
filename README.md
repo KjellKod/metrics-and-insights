@@ -34,7 +34,7 @@ If you do python dependency changes, please add them later in your virtual envir
 Scripts for extracting metrics from GitHub based on the release tags 
 - releases.py: Script to retrieve and categorize GitHub releases by year and month.
 - pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
-- lines_changed.py: Script to see line changes between two dates. This is just a for-fun insight that can show how much / little changes over time in repositories. It does not take into account the importance of the changes. `GITHUB_METRIC_OWNER=<organization>` and `GITHUB_METRIC_REPO=<repo-name>` needs to be defined in environment variables. 
+- lines_changed.py: Script to see line changes between two dates. This is just a for-fun insight that can show how much / little changes over time in repositories. It does not take into account the importance of the changes. `GITHUB_METRIC_OWNER_OR_ORGANIZATION=<organization>` and `GITHUB_METRIC_REPO=<repo-name>` needs to be defined in environment variables. 
 - repo_commit_report.sh: Bash script to generate repository commit information for a time range for one or multiple repositories
 
 *jira/* 
@@ -84,11 +84,12 @@ JIRA_API_KEY="your_jira_api_key"
 USER_EMAIL="your_email@example.com"
 JIRA_API_KEY="your_jira_api_key"
 JIRA_LINK="https://your_jira_instance.atlassian.net"
+JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/api/graphql"
 GITHUB_TOKEN_READONLY_WEB="your_github_token"
-GITHUB_METRIC_OWNER="your_github_repo_owner"
-GITHUB_METRIC_REPO="your_github_repo_name"
+GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner_or_organization"
+GITHUB_REPO_FOR_RELEASE_TRACKING="your_github_repo_name"
 JIRA_PROJECTS="MYPROJECT, ENG, ETC"
-TEAM_ONE="first_team" 
+TEAM_<NAME>="a team name, for issues when they can't be parsed or doesn't exist in team-only project the <NAME> should correspond to the PROJECT" 
 
 # NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
 # Settings --> Issues --> CustomFields: search for your definition of these variables
@@ -103,8 +104,9 @@ CUSTOM_FIELD_STORYPOINTS=10025
 export USER_EMAIL="your_email@example.com"
 export JIRA_API_KEY="your_jira_api_key"
 export JIRA_LINK="https://your_jira_instance.atlassian.net"
+export JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/api/graphql"
 export GITHUB_TOKEN_READONLY_WEB="your_github_token"
-export GITHUB_METRIC_OWNER="your_github_repo_owner"
+export GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 export TEAM_ONE="first_team" 
