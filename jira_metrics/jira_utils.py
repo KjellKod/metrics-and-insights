@@ -60,10 +60,13 @@ def get_jira_instance():
         "CUSTOM_FIELD_WORK_TYPE",
         "CUSTOM_FIELD_STORYPOINTS",
     ]
+
+
     for var in required_env_vars:
         if os.environ.get(var) is None:
             raise ValueError(f"Environment variable {var} is not set.")
 
+    projects = os.environ.get("JIRA_PROJECTS").split(",")
     user = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
     link = os.environ.get("JIRA_LINK")
@@ -73,6 +76,7 @@ def get_jira_instance():
     print(f"Link: {link}")
     print(f"User: {user}")
     print(f"API Key length: {len(api_key)}")
+    print(f"Projects: {projects}")
 
     if not api_key or len(api_key.strip()) == 0:
         raise ValueError("JIRA API key is empty or invalid")
