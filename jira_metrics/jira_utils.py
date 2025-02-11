@@ -47,14 +47,6 @@ def parse_common_arguments(parser=None):
     return parser.parse_args()
 
 
-def verify_jira_authenticate():
-    """
-    Verify that the Jira authentication is working
-    """
-    jira = JIRA(server=jira_url, basic_auth=(jira_email, jira_api_key))
-    print(jira.myself())  # Check if authentication is working
-
-
 def get_jira_instance():
     """
     Create and verify the jira instance
@@ -77,7 +69,7 @@ def get_jira_instance():
     link = os.environ.get("JIRA_LINK")
 
     # Debug prints to verify credentials (mask the API key for security)
-    print(f"\nAttempting JIRA connection with:")
+    print("\nAttempting JIRA connection with:")
     print(f"Link: {link}")
     print(f"User: {user}")
     print(f"API Key length: {len(api_key)}")
@@ -234,7 +226,7 @@ def interpret_status_timestamps(status_timestamps):
         if status.lower() == "released" and not extracted_statuses[JiraStatus.RELEASED.value]:
             extracted_statuses[JiraStatus.RELEASED.value] = timestamp
             break
-        elif status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
+        if status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
             extracted_statuses[JiraStatus.DONE.value] = timestamp
             break
 
