@@ -54,6 +54,7 @@ def verify_jira_authenticate():
     jira = JIRA(server=jira_url, basic_auth=(jira_email, jira_api_key))
     print(jira.myself())  # Check if authentication is working
 
+
 def get_jira_instance():
     """
     Create and verify the jira instance
@@ -74,37 +75,34 @@ def get_jira_instance():
     user = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
     link = os.environ.get("JIRA_LINK")
-    
+
     # Debug prints to verify credentials (mask the API key for security)
     print(f"\nAttempting JIRA connection with:")
     print(f"Link: {link}")
     print(f"User: {user}")
     print(f"API Key length: {len(api_key)}")
-    
+
     if not api_key or len(api_key.strip()) == 0:
         raise ValueError("JIRA API key is empty or invalid")
-    
-    if not user or not '@' in user:
+
+    if not user or not "@" in user:
         raise ValueError("Invalid email format for USER_EMAIL")
-    
-    if not link or not link.startswith('https://'):
+
+    if not link or not link.startswith("https://"):
         raise ValueError("Invalid JIRA link format")
 
-    options = {
-        "server": link,
-        "verify": True  # Ensure SSL verification is enabled
-    }
-    
+    options = {"server": link, "verify": True}  # Ensure SSL verification is enabled
+
     try:
         print("\nInitializing JIRA connection...")
         jira = JIRA(options=options, basic_auth=(user, api_key))
-        
+
         print("Verifying authentication...")
         user_info = jira.myself()
         print(f"Successfully authenticated as: {user_info['displayName']}")
-        
+
         return jira
-        
+
     except Exception as e:
         print("\nAuthentication Error Details:")
         print(f"- Error Type: {type(e).__name__}")
@@ -115,7 +113,7 @@ def get_jira_instance():
         print("3. The Jira URL is correct")
         print("4. You have the necessary permissions in Jira")
         raise ConnectionError(f"Jira authentication failed: {str(e)}") from e
-        
+
 
 def print_env_variables():
     """
@@ -133,14 +131,14 @@ def print_env_variables():
     ]
 
     print("\n=== Jira Environment Variables ===\n")
-    
+
     for var in required_env_vars:
         value = os.environ.get(var, "NOT SET")
-        
+
         # Mask sensitive information like API keys
         if "KEY" in var or "PASSWORD" in var:
             value = "****** (hidden for security)"
-        
+
         print(f"{var}: {value}")
 
 
