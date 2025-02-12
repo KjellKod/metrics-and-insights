@@ -4,6 +4,8 @@ from datetime import datetime
 import argparse
 from dotenv import load_dotenv
 from jira import JIRA
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
 
 load_dotenv()
 
@@ -158,6 +160,123 @@ def get_tickets_from_jira(jql_query):
             break
     return total_tickets
 
+def get_tickets_from_graphql(start_date, end_date):
+    """
+    Retrieve tickets using GraphQL instead of JIRA REST API
+    """
+    # Get GraphQL endpoint from environment
+    jira_url = os.environ.get("JIRA_LINK")
+    if not jira_url:
+        raise ValueError("JIRA_LINK environment variable not set")
+    
+    # Use the correct Atlassian Cloud GraphQL endpoint
+    graphql_endpoint = f"{jira_url.rstrip('/')}/gateway/api/graphql"
+    
+    api_key = os.environ.get("JIRA_API_KEY")
+    if not api_key:
+        raise ValueError("JIRA_API_KEY environment variable not set")
+        
+    custom_field_team = os.environ.get("CUSTOM_FIELD_TEAM")
+    if not custom_field_team:
+        raise ValueError("CUSTOM_FIELD_TEAM environment variable not set")
+
+    print(f"Using GraphQL endpoint: {graphql_endpoint}")  # Debug print
+
+    # Create the dynamic field name for the team field
+    team_field = f"customfield_{custom_field_team}"
+
+    # Setup GraphQL client with proper authentication
+    transport = RequestsHTTPTransport(
+        url=graphql_endpoint,
+        headers={
+            'Authorization': f'Basic {api_key}',
+            'Content-Type': 'application/json',
+        },
+        verify=True  # Enable SSL verification
+    )
+    
+    try:
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        
+        # Define GraphQL query
+        query = gql(f"""
+        query GetJiraIssues($startDate: String!, $endDate: String!, $after: String) {{
+          issues(
+            first: 100,
+            after: $after,
+            jql: "status changed to Released during ($startDate, $endDate) AND issueType in (Task, Bug, Story, Spike)"
+          ) {{
+            nodes {{
+              key
+              fields {{
+                status {{
+                  name
+                }}
+                created
+                project {{
+                  key
+                }}
+                {team_field} {{
+                  value
+                }}
+                changelog {{
+                  histories {{
+                    created
+                    items {{
+                      field
+                      fromString
+                      toString
+                    }}
+                  }}
+                }}
+              }}
+            }}
+            pageInfo {{
+              hasNextPage
+              endCursor
+            }}
+          }}
+        }}
+        """)
+
+        # Execute query with pagination
+        all_tickets = []
+        has_next_page = True
+        cursor = None
+        
+        while has_next_page:
+            variables = {
+                "startDate": start_date,
+                "endDate": end_date,
+                "after": cursor
+            }
+            
+            try:
+                result = client.execute(query, variable_values=variables)
+                
+                # Process results
+                if "issues" in result and "nodes" in result["issues"]:
+                    tickets = result["issues"]["nodes"]
+                    all_tickets.extend(tickets)
+                    
+                    # Handle pagination
+                    page_info = result["issues"]["pageInfo"]
+                    has_next_page = page_info["hasNextPage"]
+                    cursor = page_info["endCursor"]
+                else:
+                    print("Unexpected response format from GraphQL query")
+                    break
+                    
+            except Exception as e:
+                print(f"Error executing GraphQL query: {str(e)}")
+                break
+
+        return all_tickets
+
+    except Exception as e:
+        print(f"Error setting up GraphQL client: {str(e)}")
+        raise
+
 
 def get_team(ticket):
     team_field = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_TEAM}")
@@ -173,7 +292,7 @@ def get_team(ticket):
 
 
 def get_ticket_points(ticket):
-    # Using points IS sketcy, since it's a complete changeable, team-owned variable.
+    # Using points IS sketcy, since it's a complete completeable, team-owned variable.
     # it CAN make sense to show patterns emerging, and strengthening the picture from other metrics
     # such as ticket count, but it's not a reliable metric on its own.
     story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
