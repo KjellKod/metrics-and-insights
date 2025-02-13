@@ -22,7 +22,7 @@ def setup_logging():
         
     logging.basicConfig(
         level=logging.INFO,
-        format="%(levelname)s - %(message)s",  # Removed the timestamp ' format="%(asctime)s ... etc where datefmt="%Y-%m-%d %H:%M:%S",
+        format="\t%(message)s",  # Removed the timestamp ' %(levelname)s format="%(asctime)s ... etc where datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)]
     )
     logger = logging.getLogger(__name__)
@@ -41,7 +41,9 @@ def build_jql_queries(year, projects):
     Returns:
         Dictionary containing different JQL queries for bug metrics
     """
-    project_clause = f"project in ({', '.join(projects)})"
+    # Strip any existing single quotes and re-add them for all projects
+    quoted_projects = [f"'{project.strip("'")}'" for project in projects]
+    project_clause = f"project in ({', '.join(quoted_projects)})"
     return {
         'created': f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
         'closed': f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31'",
@@ -69,18 +71,28 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
         project_tickets = defaultdict(list)
         
         for ticket in tickets:
-            project_key = ticket.fields.project.key
+            # Strip single quotes from the project key to ensure consistency
+            project_key = ticket.fields.project.key.strip("'")
             project_counts[project_key] += 1
             project_tickets[project_key].append(ticket.key)
         
         for project in projects:
-            stats[project][metric] = {
-                'count': project_counts.get(project, 0),
-                'tickets': project_tickets.get(project, [])
+            # Strip single quotes from the project key to ensure consistency
+            stripped_project = project.strip("'")
+            stats[stripped_project][metric] = {
+                'count': project_counts.get(stripped_project, 0),  # Default to 0 if no tickets found
+                'tickets': project_tickets.get(stripped_project, [])  # Default to empty list if no tickets found
             }
         
         if progress_callback:
             progress_callback(year, metric, len(tickets))
+
+    # Debug print
+    print("Stats dictionary after fetching data:")
+    for project, metrics in stats.items():
+        print(f"Project: {project}")
+        for metric, data in metrics.items():
+            print(f"  {metric}: {data}")
         
     return stats
 
@@ -105,7 +117,7 @@ def export_to_csv(stats, filename="bug_statistics.csv"):
         
         for year in sorted(stats.keys()):
             for project in sorted(stats[year].keys()):
-                for metric in ['created', 'closed', 'open_eoy']:
+                for metric in ['created', 'resolved', 'open_eoy']:
                     writer.writerow([
                         year,
                         project,
