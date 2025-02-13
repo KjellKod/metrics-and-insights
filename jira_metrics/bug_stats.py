@@ -109,7 +109,7 @@ def validate_years(start_year, end_year):
     if start_year > end_year:
         raise ValueError("Start year cannot be greater than end year")
 
-def export_bug_summary(stats, filename="bug_summary.csv"):
+def export_to_csv(stats, filename="bug_summary.csv"):
     """Export structured bug statistics for easier charting and analysis."""
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
