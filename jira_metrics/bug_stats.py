@@ -109,22 +109,28 @@ def validate_years(start_year, end_year):
     if start_year > end_year:
         raise ValueError("Start year cannot be greater than end year")
 
-def export_to_csv(stats, filename="bug_statistics.csv"):
-    """Export bug statistics to CSV file, including project-specific data."""
+def export_to_csv(stats, filename="bug_summary.csv"):
+    """Export summarized bug statistics for easier charting and analysis."""
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Year', 'Project', 'Metric', 'Count', 'Tickets'])
         
+        # Write headers
+        writer.writerow(["Year", "Project", "Bugs Created", "Bugs Closed", "Bugs Open End of Year"])
+        
+        # Write data
         for year in sorted(stats.keys()):
             for project in sorted(stats[year].keys()):
-                for metric in ['created', 'resolved', 'open_eoy']:
-                    writer.writerow([
-                        year,
-                        project,
-                        metric,
-                        stats[year][project][metric]['count'],
-                        ', '.join(stats[year][project][metric]['tickets'])
-                    ])
+                writer.writerow([
+                    year,
+                    project,
+                    stats[year][project]['created']['count'],
+                    stats[year][project]['closed']['count'],
+                    stats[year][project]['open_eoy']['count']
+                ])
+    
+    print(f"Bug summary exported successfully to {filename}")
+    return filename
+
 
 def parse_arguments():
     """Parse and validate command line arguments."""
