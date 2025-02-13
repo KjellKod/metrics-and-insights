@@ -109,27 +109,31 @@ def validate_years(start_year, end_year):
     if start_year > end_year:
         raise ValueError("Start year cannot be greater than end year")
 
-def export_to_csv(stats, filename="bug_summary.csv"):
-    """Export summarized bug statistics for easier charting and analysis."""
+def export_bug_summary(stats, filename="bug_summary.csv"):
+    """Export structured bug statistics for easier charting and analysis."""
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
         # Write headers
-        writer.writerow(["Year", "Project", "Bugs Created", "Bugs Closed", "Bugs Open End of Year"])
+        writer.writerow(["Year", "Total Bugs Created", "Total Bugs Closed", "INT Bugs Created", "MOB Bugs Created", "INT Bugs Closed", "MOB Bugs Closed", "Bugs Open End of Year"])
         
-        # Write data
         for year in sorted(stats.keys()):
-            for project in sorted(stats[year].keys()):
-                writer.writerow([
-                    year,
-                    project,
-                    stats[year][project]['created']['count'],
-                    stats[year][project]['closed']['count'],
-                    stats[year][project]['open_eoy']['count']
-                ])
+            total_created = sum(stats[year][proj]['created']['count'] for proj in stats[year])
+            total_closed = sum(stats[year][proj]['closed']['count'] for proj in stats[year])
+            open_eoy = sum(stats[year][proj]['open_eoy']['count'] for proj in stats[year])
+            
+            int_created = stats[year].get("INT", {}).get('created', {}).get('count', 0)
+            mob_created = stats[year].get("MOB", {}).get('created', {}).get('count', 0)
+            int_closed = stats[year].get("INT", {}).get('closed', {}).get('count', 0)
+            mob_closed = stats[year].get("MOB", {}).get('closed', {}).get('count', 0)
+            
+            writer.writerow([
+                year, total_created, total_closed, int_created, mob_created, int_closed, mob_closed, open_eoy
+            ])
     
     print(f"Bug summary exported successfully to {filename}")
     return filename
+
 
 
 def parse_arguments():
