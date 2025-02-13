@@ -114,27 +114,40 @@ def export_to_csv(stats, filename="bug_summary.csv"):
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Write headers
-        writer.writerow(["Year", "Total Bugs Created", "Total Bugs Closed", "INT Bugs Created", "MOB Bugs Created", "INT Bugs Closed", "MOB Bugs Closed", "Bugs Open End of Year"])
+        # Dynamically determine the projects from the stats
+        projects = set()
+        for year in stats.keys():
+            projects.update(stats[year].keys())
+        projects = sorted(projects)  # Sort for consistent ordering
         
+        # Write headers
+        headers = ["Year", "Total Bugs Created", "Total Bugs Closed", "Bugs Open End of Year"]
+        for project in projects:
+            headers.append(f"{project} Bugs Created")
+        for project in projects:
+            headers.append(f"{project} Bugs Closed")
+        writer.writerow(headers)
+        
+        # Write data rows
         for year in sorted(stats.keys()):
             total_created = sum(stats[year][proj]['created']['count'] for proj in stats[year])
             total_closed = sum(stats[year][proj]['closed']['count'] for proj in stats[year])
             open_eoy = sum(stats[year][proj]['open_eoy']['count'] for proj in stats[year])
             
-            int_created = stats[year].get("INT", {}).get('created', {}).get('count', 0)
-            mob_created = stats[year].get("MOB", {}).get('created', {}).get('count', 0)
-            int_closed = stats[year].get("INT", {}).get('closed', {}).get('count', 0)
-            mob_closed = stats[year].get("MOB", {}).get('closed', {}).get('count', 0)
+            # Initialize project-specific counts
+            project_created = {proj: stats[year].get(proj, {}).get('created', {}).get('count', 0) for proj in projects}
+            project_closed = {proj: stats[year].get(proj, {}).get('closed', {}).get('count', 0) for proj in projects}
             
-            writer.writerow([
-                year, total_created, total_closed, int_created, mob_created, int_closed, mob_closed, open_eoy
-            ])
+            # Write the row
+            row = [year, total_created, total_closed, open_eoy]
+            for proj in projects:
+                row.append(project_created[proj])
+            for proj in projects:
+                row.append(project_closed[proj])
+            writer.writerow(row)
     
     print(f"Bug summary exported successfully to {filename}")
     return filename
-
-
 
 def parse_arguments():
     """Parse and validate command line arguments."""
@@ -226,8 +239,9 @@ def main():
         display_results(stats, logger)
         
         if args.csv:
-            export_to_csv(stats)
-            logger.info("Results exported to bug_statistics.csv")
+            filename = "bug_statistics.csv"
+            export_to_csv(stats, filename)
+            logger.info("Results exported to filename: %s", filename)
             
     except ValueError as e:
         logger.error("Configuration error: %s", str(e))
