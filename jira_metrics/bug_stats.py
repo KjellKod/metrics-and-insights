@@ -22,8 +22,7 @@ def setup_logging():
         
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        format="%(levelname)s - %(message)s",  # Removed the timestamp ' format="%(asctime)s ... etc where datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)]
     )
     logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ def setup_logging():
 
 def build_jql_queries(year, projects):
     """
-    Build JQL queries for different bug metrics.
+    Build JQL queries for different bug metrics without using the 'resolved' field.
     
     Args:
         year: The year to analyze
@@ -45,13 +44,13 @@ def build_jql_queries(year, projects):
     project_clause = f"project in ({', '.join(projects)})"
     return {
         'created': f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
-        'resolved': f"{project_clause} AND issuetype = Bug AND status in (Done, Closed) AND resolved >= '{year}-01-01' AND resolved <= '{year}-12-31'",
-        'open_eoy': f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' AND (resolved >= '{year}-12-31' OR resolution = Empty)"
+        'closed': f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31'",
+        'open_eoy': f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' AND status not in (Done, Closed, Released)"
     }
 
 def fetch_bug_statistics(year, projects, progress_callback=None):
     """
-    Fetch bug statistics for a given year.
+    Fetch bug statistics for a given year, broken down by project.
     
     Args:
         year: The year to analyze
@@ -59,18 +58,26 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
         progress_callback: Optional callback function for progress reporting
     
     Returns:
-        Dictionary containing bug statistics and ticket details
+        Dictionary containing bug statistics and ticket details, broken down by project
     """
     queries = build_jql_queries(year, projects)
-    stats = defaultdict(dict)
+    stats = defaultdict(lambda: defaultdict(dict))
     
     for metric, query in queries.items():
         tickets = get_tickets_from_jira(query)
-        ticket_keys = [ticket.key for ticket in tickets]
-        stats[metric] = {
-            'count': len(tickets),
-            'tickets': ticket_keys
-        }
+        project_counts = defaultdict(int)
+        project_tickets = defaultdict(list)
+        
+        for ticket in tickets:
+            project_key = ticket.fields.project.key
+            project_counts[project_key] += 1
+            project_tickets[project_key].append(ticket.key)
+        
+        for project in projects:
+            stats[project][metric] = {
+                'count': project_counts.get(project, 0),
+                'tickets': project_tickets.get(project, [])
+            }
         
         if progress_callback:
             progress_callback(year, metric, len(tickets))
@@ -91,19 +98,21 @@ def validate_years(start_year, end_year):
         raise ValueError("Start year cannot be greater than end year")
 
 def export_to_csv(stats, filename="bug_statistics.csv"):
-    """Export bug statistics to CSV file."""
+    """Export bug statistics to CSV file, including project-specific data."""
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Year', 'Metric', 'Count', 'Tickets'])
+        writer.writerow(['Year', 'Project', 'Metric', 'Count', 'Tickets'])
         
         for year in sorted(stats.keys()):
-            for metric in ['created', 'resolved', 'open_eoy']:
-                writer.writerow([
-                    year,
-                    metric,
-                    stats[year][metric]['count'],
-                    ', '.join(stats[year][metric]['tickets'])
-                ])
+            for project in sorted(stats[year].keys()):
+                for metric in ['created', 'closed', 'open_eoy']:
+                    writer.writerow([
+                        year,
+                        project,
+                        metric,
+                        stats[year][project][metric]['count'],
+                        ', '.join(stats[year][project][metric]['tickets'])
+                    ])
 
 def parse_arguments():
     """Parse and validate command line arguments."""
@@ -120,7 +129,7 @@ def log_progress(year, metric, count):
 
 def generate_yearly_report(start_year, end_year, projects):
     """
-    Generate bug statistics report for the specified year range.
+    Generate bug statistics report for the specified year range, broken down by project.
     
     Args:
         start_year: Starting year for analysis
@@ -128,7 +137,7 @@ def generate_yearly_report(start_year, end_year, projects):
         projects: List of Jira project keys
     
     Returns:
-        Dictionary containing bug statistics for all years
+        Dictionary containing bug statistics for all years, broken down by project
     """
     validate_years(start_year, end_year)
     yearly_stats = {}
@@ -139,16 +148,18 @@ def generate_yearly_report(start_year, end_year, projects):
     return yearly_stats
 
 def display_results(stats, logger):
-    """Display bug statistics results."""
+    """Display bug statistics results, including project-specific data."""
     for year in sorted(stats.keys()):
         logger.info("\nStatistics for year %d:", year)
-        logger.info("Bugs created: %d", stats[year]['created']['count'])
-        logger.info("Bugs resolved: %d", stats[year]['resolved']['count'])
-        logger.info("Bugs open at end of year: %d", stats[year]['open_eoy']['count'])
-        
-        # Display net change in bugs
-        net_change = stats[year]['created']['count'] - stats[year]['resolved']['count']
-        logger.info("Net change in bugs: %d", net_change)
+        for project in sorted(stats[year].keys()):
+            logger.info("\nProject: %s", project)
+            logger.info("Bugs created: %d", stats[year][project]['created']['count'])
+            logger.info("Bugs closed: %d", stats[year][project]['closed']['count'])
+            logger.info("Bugs open at end of year: %d", stats[year][project]['open_eoy']['count'])
+            
+            # Display net change in bugs
+            net_change = stats[year][project]['created']['count'] - stats[year][project]['closed']['count']
+            logger.info("Net change in bugs: %d", net_change)
 
 def validate_env_variables():
     """Validate required environment variables and return their values."""
