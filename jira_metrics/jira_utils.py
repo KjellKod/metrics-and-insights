@@ -63,7 +63,6 @@ def get_jira_instance():
         "CUSTOM_FIELD_STORYPOINTS",
     ]
 
-
     for var in required_env_vars:
         if os.environ.get(var) is None:
             raise ValueError(f"Environment variable {var} is not set.")
@@ -160,6 +159,7 @@ def get_tickets_from_jira(jql_query):
             break
     return total_tickets
 
+
 def get_tickets_from_graphql(start_date, end_date):
     """
     Retrieve tickets using GraphQL instead of JIRA REST API
@@ -168,14 +168,14 @@ def get_tickets_from_graphql(start_date, end_date):
     jira_url = os.environ.get("JIRA_LINK")
     if not jira_url:
         raise ValueError("JIRA_LINK environment variable not set")
-    
+
     # Use the correct Atlassian Cloud GraphQL endpoint
     graphql_endpoint = f"{jira_url.rstrip('/')}/gateway/api/graphql"
-    
+
     api_key = os.environ.get("JIRA_API_KEY")
     if not api_key:
         raise ValueError("JIRA_API_KEY environment variable not set")
-        
+
     custom_field_team = os.environ.get("CUSTOM_FIELD_TEAM")
     if not custom_field_team:
         raise ValueError("CUSTOM_FIELD_TEAM environment variable not set")
@@ -189,17 +189,18 @@ def get_tickets_from_graphql(start_date, end_date):
     transport = RequestsHTTPTransport(
         url=graphql_endpoint,
         headers={
-            'Authorization': f'Basic {api_key}',
-            'Content-Type': 'application/json',
+            "Authorization": f"Basic {api_key}",
+            "Content-Type": "application/json",
         },
-        verify=True  # Enable SSL verification
+        verify=True,  # Enable SSL verification
     )
-    
+
     try:
         client = Client(transport=transport, fetch_schema_from_transport=True)
-        
+
         # Define GraphQL query
-        query = gql(f"""
+        query = gql(
+            f"""
         query GetJiraIssues($startDate: String!, $endDate: String!, $after: String) {{
           issues(
             first: 100,
@@ -237,28 +238,25 @@ def get_tickets_from_graphql(start_date, end_date):
             }}
           }}
         }}
-        """)
+        """
+        )
 
         # Execute query with pagination
         all_tickets = []
         has_next_page = True
         cursor = None
-        
+
         while has_next_page:
-            variables = {
-                "startDate": start_date,
-                "endDate": end_date,
-                "after": cursor
-            }
-            
+            variables = {"startDate": start_date, "endDate": end_date, "after": cursor}
+
             try:
                 result = client.execute(query, variable_values=variables)
-                
+
                 # Process results
                 if "issues" in result and "nodes" in result["issues"]:
                     tickets = result["issues"]["nodes"]
                     all_tickets.extend(tickets)
-                    
+
                     # Handle pagination
                     page_info = result["issues"]["pageInfo"]
                     has_next_page = page_info["hasNextPage"]
@@ -266,7 +264,7 @@ def get_tickets_from_graphql(start_date, end_date):
                 else:
                     print("Unexpected response format from GraphQL query")
                     break
-                    
+
             except Exception as e:
                 print(f"Error executing GraphQL query: {str(e)}")
                 break

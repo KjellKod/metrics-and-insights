@@ -13,8 +13,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from cycle_time import process_changelog
 
 
-
-
 # Define the PST timezone
 PST = timezone(timedelta(hours=-8))
 
