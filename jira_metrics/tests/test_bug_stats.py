@@ -1,11 +1,7 @@
-import unittest
 import sys
 import os
-from unittest.mock import MagicMock
-from datetime import datetime, timezone, timedelta
-import pytz
-from jira.resources import Issue
-from collections import defaultdict
+import unittest
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 # Add the parent directory to the Python path
@@ -19,9 +15,6 @@ from jira_metrics.bug_stats import (
     generate_yearly_report,
     setup_logging,
 )
-
-import sys
-import os
 
 
 class TestBugStats(unittest.TestCase):
@@ -88,7 +81,7 @@ def test_export_to_csv(tmp_path):
     export_to_csv(stats, filename=test_file)
 
     # Verify file content
-    with open(test_file, "r") as f:
+    with open(test_file, "r", encoding="utf-8") as f:
         content = f.read()
         assert "2023" in content
         assert "PROJ1 Bugs Created" in content
