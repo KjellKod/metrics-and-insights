@@ -204,8 +204,8 @@ def main():
     args = parse_common_arguments()
     print_env_variables()
     current_year = datetime.now().year
-    start_date = f"2023-01-01"
-    end_date = f"2023-12-31"
+    start_date = f"{current_year}-01-01"
+    end_date = f"{current_year}-12-31"
     projects = os.environ.get("JIRA_PROJECTS").split(",")
     print(f"Projects: {projects}")
     cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
