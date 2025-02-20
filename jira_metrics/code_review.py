@@ -65,15 +65,15 @@ def verify_user() -> Optional[Dict]:
         client = setup_graphql_client()
         expected_email = os.environ.get("USER_EMAIL")
 
-        # Query to verify user's email
+        # Query to verify user's email - simplified
         query = gql(
             """
             query GetCurrentUser {
                 me {
                     user {
-                        accountId
-                        email
-                        displayName
+                        ... on AtlassianAccountUser {
+                            email
+                        }
                     }
                 }
             }
@@ -84,7 +84,7 @@ def verify_user() -> Optional[Dict]:
         current_email = result.get("me", {}).get("user", {}).get("email")
 
         if current_email == expected_email:
-            logger.info("Successfully authenticated with correct user email")
+            logger.info("Successfully authenticated with correct user email: %s", current_email)
             return result
         else:
             logger.error("Email mismatch: authenticated as %s but expected %s", current_email, expected_email)
