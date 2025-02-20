@@ -1,71 +1,53 @@
+"""
+Jira GraphQL API Connection Template
+A minimal example to verify Jira connectivity and authentication.
+"""
+
 import os
 import sys
 import logging
 import base64
-from typing import Optional, Dict
-
+from dotenv import load_dotenv
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
-def validate_env_variables() -> Dict[str, str]:
-    """Validate required environment variables."""
-    required_vars = {
-        "USER_EMAIL": "User email for authentication",
-        "JIRA_API_KEY": "Jira API token",
-        "JIRA_LINK": "Jira instance URL",
-    }
+def verify_jira_connection():
+    """Verify Jira GraphQL API connection and print user information."""
 
-    env_values = {}
-    missing_vars = []
+    # Load environment variables
+    load_dotenv()
 
-    for var, description in required_vars.items():
-        value = os.environ.get(var)
-        if not value:
-            missing_vars.append(f"{var} ({description})")
-        env_values[var] = value
+    # Required environment variables
+    jira_url = os.getenv("JIRA_LINK")
+    api_key = os.getenv("JIRA_API_KEY")
+    user_email = os.getenv("USER_EMAIL")
 
-    if missing_vars:
-        raise ValueError(f"Missing required environment variables:\n{chr(10).join(missing_vars)}")
+    if not all([jira_url, api_key, user_email]):
+        logger.error("Missing required environment variables:")
+        if not jira_url:
+            logger.error("- JIRA_LINK")
+        if not api_key:
+            logger.error("- JIRA_API_KEY")
+        if not user_email:
+            logger.error("- USER_EMAIL")
+        return False
 
-    return env_values
-
-
-def setup_graphql_client() -> Client:
-    """Setup GraphQL client with authentication."""
-    env_vars = validate_env_variables()
-
-    # Create base64 encoded credentials
-    credentials = base64.b64encode(f"{env_vars['USER_EMAIL']}:{env_vars['JIRA_API_KEY']}".encode()).decode()
-
-    # Setup the GraphQL endpoint
-    jira_url = env_vars["JIRA_LINK"].rstrip("/")
-    graphql_endpoint = f"{jira_url}/gateway/api/graphql"
-
-    transport = RequestsHTTPTransport(
-        url=graphql_endpoint,
-        headers={"Authorization": f"Basic {credentials}", "Content-Type": "application/json"},
-        verify=True,
-    )
-
-    return Client(transport=transport, fetch_schema_from_transport=True)
-
-
-def verify_user() -> Optional[Dict]:
-    """Verify connection and user email match."""
     try:
-        client = setup_graphql_client()
-        expected_email = os.environ.get("USER_EMAIL")
+        # Setup GraphQL client
+        credentials = base64.b64encode(f"{user_email}:{api_key}".encode()).decode()
+        transport = RequestsHTTPTransport(
+            url=f"{jira_url.rstrip('/')}/gateway/api/graphql",
+            headers={"Authorization": f"Basic {credentials}", "Content-Type": "application/json"},
+        )
 
-        # Query to verify user's email - simplified
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+
+        # Query user information
         query = gql(
             """
             query GetCurrentUser {
@@ -73,6 +55,7 @@ def verify_user() -> Optional[Dict]:
                     user {
                         ... on AtlassianAccountUser {
                             email
+                            accountId
                         }
                     }
                 }
@@ -81,34 +64,30 @@ def verify_user() -> Optional[Dict]:
         )
 
         result = client.execute(query)
-        current_email = result.get("me", {}).get("user", {}).get("email")
 
-        if current_email == expected_email:
-            logger.info("Successfully authenticated with correct user email: %s", current_email)
-            return result
-        else:
-            logger.error("Email mismatch: authenticated as %s but expected %s", current_email, expected_email)
-            return None
+        # Print user information
+        user_data = result.get("me", {}).get("user", {})
+        if user_data:
+            logger.info("\nAuthenticated User Information:")
+            logger.info("Email: %s", user_data.get("email"))
+            logger.info("Account ID: %s", user_data.get("accountId"))
+            return True
+
+        logger.error("Failed to get user information")
+        return False
 
     except Exception as e:
-        logger.error("Error executing GraphQL query: %s", str(e))
-        return None
+        logger.error("Connection failed: %s", str(e))
+        return False
 
 
 def main():
-    try:
-        logger.info("Testing Jira GraphQL API connection...")
-        result = verify_user()
-
-        if result:
-            logger.info("Connection test successful!")
-            logger.info("You can now build your Jira GraphQL queries.")
-        else:
-            logger.error("Failed to verify Jira connection")
-            sys.exit(1)
-
-    except Exception as e:
-        logger.error("An error occurred: %s", str(e))
+    logger.info("Testing Jira GraphQL API connection...")
+    if verify_jira_connection():
+        logger.info("\nConnection test successful! ✨")
+        sys.exit(0)
+    else:
+        logger.error("\nConnection test failed! 💥")
         sys.exit(1)
 
 
