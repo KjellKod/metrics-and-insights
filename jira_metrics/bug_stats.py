@@ -34,22 +34,15 @@ def setup_logging():
 
 def build_jql_queries(year, projects):
     """
-    Build JQL queries for different bug metrics without using the 'resolved' field.
-
-    Args:
-        year: The year to analyze
-        projects: List of Jira project keys
-
-    Returns:
-        Dictionary containing different JQL queries for bug metrics
+    Build JQL queries for different bug metrics.
     """
-    # Strip any existing single quotes and re-add them for all projects
     quoted_projects = [f"'{project.strip("'")}'" for project in projects]
     project_clause = f"project in ({', '.join(quoted_projects)})"
     return {
         "created": f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
         "closed": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution != 'Won\\'t Do'",
         "open_eoy": f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' AND status not in (Done, Closed, Released)",
+        "wont_do": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution = 'Won\\'t Do'",
     }
 
 
@@ -126,29 +119,35 @@ def export_to_csv(stats, filename="bug_summary.csv"):
         projects = sorted(projects)  # Sort for consistent ordering
 
         # Write headers
-        headers = ["Year", "Total Bugs Created", "Total Bugs Closed", "Bugs Open End of Year"]
+        headers = ["Year", "Total Bugs Created", "Total Bugs Closed", "Total Won't Do", "Bugs Open End of Year"]
         for project in projects:
             headers.append(f"{project} Bugs Created")
         for project in projects:
             headers.append(f"{project} Bugs Closed")
+        for project in projects:
+            headers.append(f"{project} Won't Do")
         writer.writerow(headers)
 
         # Write data rows
         for year in sorted(stats.keys()):
             total_created = sum(stats[year][proj]["created"]["count"] for proj in stats[year])
             total_closed = sum(stats[year][proj]["closed"]["count"] for proj in stats[year])
+            total_wont_do = sum(stats[year][proj]["wont_do"]["count"] for proj in stats[year])
             open_eoy = sum(stats[year][proj]["open_eoy"]["count"] for proj in stats[year])
 
             # Initialize project-specific counts
             project_created = {proj: stats[year].get(proj, {}).get("created", {}).get("count", 0) for proj in projects}
             project_closed = {proj: stats[year].get(proj, {}).get("closed", {}).get("count", 0) for proj in projects}
+            project_wont_do = {proj: stats[year].get(proj, {}).get("wont_do", {}).get("count", 0) for proj in projects}
 
             # Write the row
-            row = [year, total_created, total_closed, open_eoy]
+            row = [year, total_created, total_closed, total_wont_do, open_eoy]
             for proj in projects:
                 row.append(project_created[proj])
             for proj in projects:
                 row.append(project_closed[proj])
+            for proj in projects:
+                row.append(project_wont_do[proj])
             writer.writerow(row)
 
     print(f"Bug summary exported successfully to {filename}")
@@ -199,10 +198,13 @@ def display_results(stats, logger):
             logger.info("\nProject: %s", project)
             logger.info("Bugs created: %d", stats[year][project]["created"]["count"])
             logger.info("Bugs closed: %d", stats[year][project]["closed"]["count"])
+            logger.info("Bugs marked as Won't Do: %d", stats[year][project]["wont_do"]["count"])
             logger.info("Bugs open at end of year: %d", stats[year][project]["open_eoy"]["count"])
 
-            # Display net change in bugs
-            net_change = stats[year][project]["created"]["count"] - stats[year][project]["closed"]["count"]
+            # Calculate net change excluding Won't Do
+            net_change = stats[year][project]["created"]["count"] - (
+                stats[year][project]["closed"]["count"] + stats[year][project]["wont_do"]["count"]
+            )
             logger.info("Net change in bugs: %d", net_change)
 
 
