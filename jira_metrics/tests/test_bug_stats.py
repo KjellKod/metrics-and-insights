@@ -72,6 +72,7 @@ def test_export_to_csv(tmp_path):
                 "created": {"count": 5, "tickets": []},
                 "closed": {"count": 3, "tickets": []},
                 "open_eoy": {"count": 2, "tickets": []},
+                "wont_do": {"count": 1, "tickets": []},
             }
         }
     }
@@ -82,10 +83,31 @@ def test_export_to_csv(tmp_path):
 
     # Verify file content
     with open(test_file, "r", encoding="utf-8") as f:
-        content = f.read()
-        assert "2023" in content
-        assert "PROJ1 Bugs Created" in content
-        assert "5" in content
+        lines = f.readlines()
+        # Check headers
+        headers = lines[0].strip().split(",")
+        assert headers == [
+            "Year",
+            "Total Bugs Created",
+            "Total Bugs Closed",
+            "Total Won't Do",
+            "Bugs Open End of Year",
+            "PROJ1 Bugs Created",
+            "PROJ1 Bugs Closed",
+            "PROJ1 Won't Do",
+        ]
+        # Check data row
+        data = lines[1].strip().split(",")
+        assert data == [
+            "2023",  # Year
+            "5",  # Total Bugs Created
+            "3",  # Total Bugs Closed
+            "1",  # Total Won't Do
+            "2",  # Bugs Open End of Year
+            "5",  # PROJ1 Bugs Created
+            "3",  # PROJ1 Bugs Closed
+            "1",  # PROJ1 Won't Do
+        ]
 
 
 @patch("jira_metrics.bug_stats.fetch_bug_statistics")
