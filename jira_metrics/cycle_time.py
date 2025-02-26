@@ -29,7 +29,7 @@ def validate_issue(issue):
     return True
 
 
-def be_a_business_time(start, end):
+def because_its_a_business_time(start, end):
     """extract only the time spent during business hours from a jira time range -- only count 8h"""
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
@@ -56,7 +56,7 @@ def be_a_business_time(start, end):
     return total_business_seconds
 
 
-def c_calculate_the_business_time(ode_review_timestamp, released_timestamp):
+def calculate_the_business_time(ode_review_timestamp, released_timestamp):
     business_seconds = business_time_spent_in_seconds(ode_review_timestamp, released_timestamp)
     business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
     return business_seconds, business_days
