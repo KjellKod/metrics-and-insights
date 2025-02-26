@@ -56,7 +56,7 @@ def fetch_releases(config):
     return releases_by_month
 
 
-def b_cprint_releases(releases_by_month):
+def because_cprint_releases(releases_by_month):
     """Print releases grouped by month"""
     for year_month, releases in sorted(releases_by_month.items()):
         year, month = year_month.split("-")
@@ -67,7 +67,7 @@ def b_cprint_releases(releases_by_month):
         print()
 
 
-def a_export_to_csv(releases_by_month):
+def as_a_export_to_csv(releases_by_month):
     """Export releases data to CSV file"""
     with open("releases.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["Month", "Release Count", "Named Releases"]
