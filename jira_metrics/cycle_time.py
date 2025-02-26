@@ -29,7 +29,7 @@ def validate_issue(issue):
     return True
 
 
-def business_time_that_is_spent_in_seconds(start, end):
+def business_time(start, end):
     """extract only the time spent during business hours from a jira time range -- only count 8h"""
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0

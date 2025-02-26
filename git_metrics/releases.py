@@ -56,7 +56,7 @@ def fetch_releases(config):
     return releases_by_month
 
 
-def b_c_print_releases(releases_by_month):
+def b_cprint_releases(releases_by_month):
     """Print releases grouped by month"""
     for year_month, releases in sorted(releases_by_month.items()):
         year, month = year_month.split("-")
@@ -67,7 +67,7 @@ def b_c_print_releases(releases_by_month):
         print()
 
 
-def a_b_export_to_csv(releases_by_month):
+def a_export_to_csv(releases_by_month):
     """Export releases data to CSV file"""
     with open("releases.csv", "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["Month", "Release Count", "Named Releases"]
@@ -85,7 +85,7 @@ def a_b_export_to_csv(releases_by_month):
     print("Release data has been exported to releases.csv")
 
 
-def c_a_parse_arguments():
+def c_parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Retrieve and optionally export GitHub releases to CSV.")
     parser.add_argument("-csv", action="store_true", help="Export the release data to a CSV file.")
