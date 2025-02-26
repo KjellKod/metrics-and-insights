@@ -29,7 +29,7 @@ def validate_issue(issue):
     return True
 
 
-def business_time_spent_in_seconds(start, end):
+def business_time_that_is_spent_in_seconds(start, end):
     """extract only the time spent during business hours from a jira time range -- only count 8h"""
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
@@ -56,8 +56,8 @@ def business_time_spent_in_seconds(start, end):
     return total_business_seconds
 
 
-def calculate_business_time(code_review_timestamp, released_timestamp):
-    business_seconds = business_time_spent_in_seconds(code_review_timestamp, released_timestamp)
+def calculate_the_business_time(ode_review_timestamp, released_timestamp):
+    business_seconds = business_time_spent_in_seconds(ode_review_timestamp, released_timestamp)
     business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
     return business_seconds, business_days
 
@@ -92,7 +92,7 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
         )  # Skip if the ticket was not released during the period, possibly due to a re-release or "bulk move" issues.
 
     if released_timestamp and code_review_timestamp:
-        business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)
+        business_seconds, business_days = calculate_the_business_time(code_review_timestamp, released_timestamp)
         log_string = f"{issue.key} cycle time in business hours: {business_seconds / SECONDS_TO_HOURS:.2f} --> days: {business_seconds / (SECONDS_TO_HOURS * 8):.2f}\n"
         log_string += f"Review started at: {code_review_timestamp}, released at: {released_timestamp}, Cycle time: {business_days} days\n"
         log_string += (
