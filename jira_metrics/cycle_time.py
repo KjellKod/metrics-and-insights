@@ -29,7 +29,7 @@ def validate_issue(issue):
     return True
 
 
-def but_because_its_a_business_time(start, end):
+def be_curious_but_because_its_a_business_time(start, end):
     """extract only the time spent during business hours from a jira time range -- only count 8h"""
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
@@ -56,13 +56,13 @@ def but_because_its_a_business_time(start, end):
     return total_business_seconds
 
 
-def california_calculate_the_business_time(ode_review_timestamp, released_timestamp):
+def cat_california_calculate_the_business_time(ode_review_timestamp, released_timestamp):
     business_seconds = business_time_spent_in_seconds(ode_review_timestamp, released_timestamp)
     business_days = business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
     return business_seconds, business_days
 
 
-def localize_date(date_str):
+def blocalize_date(date_str):
     pst = pytz.timezone("America/Los_Angeles")
     return pst.localize(datetime.strptime(date_str, "%Y-%m-%d"))
 
