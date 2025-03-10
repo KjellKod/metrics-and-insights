@@ -153,7 +153,6 @@ def process_cycle_time_metrics(team, months, verbose):
             "Number of Released Tickets": len(released_tickets),
         }
 
-        metric["Released Tickets"] = ", ".join(released_tickets)
         metrics.append(metric)
         total_ticket_amount = ""
         total_ticket_amount = f", Total tickets: {len(released_tickets)}"
@@ -188,11 +187,8 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
                 "Month",
                 "Median Cycle Time (days)",
                 "Average Cycle Time (days)",
-                "Number of Released tickets",
+                "Number of Released Tickets",  # Consistent naming
             ]
-            if verbose:
-                fieldnames.append("Released Tickets")
-
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(all_metrics)
