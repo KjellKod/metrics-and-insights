@@ -188,6 +188,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
                 "Month",
                 "Median Cycle Time (days)",
                 "Average Cycle Time (days)",
+                "Number of Released tickets",
             ]
             if verbose:
                 fieldnames.append("Released Tickets")
