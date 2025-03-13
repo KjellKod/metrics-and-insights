@@ -24,7 +24,7 @@ Setup Requirements:
 Usage:
 ------
 Simply run the script:
-    python active-devs-one-off.py
+    python active-repos-one-off.py
 """
 
 import os
