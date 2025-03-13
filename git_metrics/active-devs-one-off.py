@@ -205,7 +205,7 @@ def main():
 
         # Get repositories
         if env_vars.get("GITHUB_METRIC_REPOS"):
-            repositories = env_vars["GITHUB_METRIC_REPOS"].split(",")
+            repositories = [repo.strip() for repo in env_vars["GITHUB_METRIC_REPOS"].split(",")]
             logger.info("Using repositories from environment variable: %d repos", len(repositories))
         else:
             repositories = fetch_repositories(api_config, org_name)
