@@ -7,7 +7,12 @@ from unittest.mock import patch, MagicMock
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from active_devs_one_off import validate_env_variables, fetch_active_repositories
+# Update the import statement to use relative path
+# pylint: disable=wrong-import-position,import-error
+from git_metrics.active_devs_one_off import (
+    validate_env_variables,
+    fetch_active_repositories,
+)  # Changed from git_metrics.active_devs_one_off
 
 
 class TestActiveDevsOneOff(unittest.TestCase):
@@ -30,7 +35,7 @@ class TestActiveDevsOneOff(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_env_variables()
 
-    @patch("active_devs_one_off.requests.post")
+    @patch("active_repos_one_off.requests.post")
     def test_fetch_active_repositories(self, mock_post):
         # Create a mock API response
         mock_response = MagicMock()
