@@ -45,7 +45,7 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
-def fetch_active_repositories(api_config, org_name, since_date):
+def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=None):
     """Fetch repositories with PR activity since the given date"""
     logger = logging.getLogger(__name__)
     query = """
@@ -91,6 +91,10 @@ def fetch_active_repositories(api_config, org_name, since_date):
 
         active_repos = []
         repositories = data["data"]["organization"]["repositories"]["nodes"]
+
+        # Filter repositories if a specific list is provided
+        if repos_to_scan:
+            repositories = [repo for repo in repositories if repo["name"] in repos_to_scan]
 
         for repo in repositories:
             if not repo.get("defaultBranchRef"):
@@ -148,6 +152,14 @@ def main():
         since_date = datetime.now(timezone.utc) - timedelta(days=60)
 
         logger.info("Fetching repositories with PR activity since %s", since_date.date())
+
+        # Check for specific repositories to scan
+        repos_to_scan = os.getenv("GITHUB_METRIC_REPOS")
+        if repos_to_scan:
+            repos_to_scan = [repo.strip() for repo in repos_to_scan.split(",")]
+            logger.info("Using specific repositories from environment variable: %s", repos_to_scan)
+        else:
+            repos_to_scan = None
 
         active_repos = fetch_active_repositories(api_config, org_name, since_date)
 
