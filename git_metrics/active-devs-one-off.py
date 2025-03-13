@@ -119,6 +119,20 @@ def setup_github_api(access_token):
     }
 
 
+def execute_graphql_query(api_config, query, variables):
+    """Execute a GraphQL query and return the response data."""
+    try:
+        response = requests.post(
+            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error("GraphQL query failed: %s", str(e))
+        raise
+
+
 def fetch_repositories(api_config, org_name):
     """Fetch all repositories in the organization using GraphQL"""
     logger = logging.getLogger(__name__)
@@ -136,11 +150,7 @@ def fetch_repositories(api_config, org_name):
     variables = {"org": org_name}
 
     try:
-        response = requests.post(
-            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = execute_graphql_query(api_config, query, variables)
         return [repo["name"] for repo in data["data"]["organization"]["repositories"]["nodes"]]
     except Exception as e:
         logger.error("Failed to fetch repositories: %s", str(e))
@@ -174,11 +184,7 @@ def fetch_commit_activity(api_config, org_name, repo_name, since_date):
     variables = {"owner": org_name, "repo": repo_name, "since": since_date.isoformat()}
 
     try:
-        response = requests.post(
-            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = execute_graphql_query(api_config, query, variables)
 
         commit_authors = set()
         history = data["data"]["repository"]["defaultBranchRef"]["target"]["history"]["nodes"]
