@@ -165,7 +165,7 @@ def main():
         else:
             repos_to_scan = None
 
-        active_repos = fetch_active_repositories(api_config, org_name, since_date)
+        active_repos = fetch_active_repositories(api_config, org_name, since_date, repos_to_scan)
 
         if not active_repos:
             logger.info("No repositories found with PR activity in the last 60 days")
