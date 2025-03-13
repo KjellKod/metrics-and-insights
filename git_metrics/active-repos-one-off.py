@@ -36,6 +36,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def parse_github_date(date_str):
     """Parse GitHub date string to datetime object."""
     return datetime.fromisoformat(date_str.replace("Z", "+00:00"))

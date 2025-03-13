@@ -191,7 +191,14 @@ def fetch_commit_activity(api_config, org_name, repo_name, since_date):
         data = response.json()
 
         commit_authors = set()
-        history = data.get("data", {}).get("repository", {}).get("defaultBranchRef", {}).get("target", {}).get("history", {}).get("nodes", [])
+        history = (
+            data.get("data", {})
+            .get("repository", {})
+            .get("defaultBranchRef", {})
+            .get("target", {})
+            .get("history", {})
+            .get("nodes", [])
+        )
         for commit in history:
             author = commit.get("author", {}).get("user", {})
             if author and author.get("login"):
