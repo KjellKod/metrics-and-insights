@@ -36,6 +36,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def parse_github_date(date_str):
+    """Parse GitHub date string to datetime object."""
+    return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+
 
 def setup_logging():
     """Configure logging settings."""
@@ -71,7 +75,6 @@ def fetch_active_repositories(api_config, org_name, since_date):
         }
     }
     """
-
     variables = {"org": org_name}
 
     try:
@@ -102,12 +105,12 @@ def fetch_active_repositories(api_config, org_name, since_date):
             # Filter PRs by date
             recent_prs = []
             for pr in pr_nodes:
-                pr_date = datetime.fromisoformat(pr["updatedAt"].replace("Z", "+00:00"))
+                pr_date = parse_github_date(pr["updatedAt"])
                 if pr_date >= since_date:
                     recent_prs.append(pr)
 
             if recent_prs:  # Only include repos with recent PRs
-                last_pr_date = datetime.fromisoformat(recent_prs[0]["updatedAt"].replace("Z", "+00:00"))
+                last_pr_date = parse_github_date(recent_prs[0]["updatedAt"])
                 active_repos.append(
                     {
                         "name": repo["name"],
