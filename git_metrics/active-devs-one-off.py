@@ -16,7 +16,7 @@ to efficiently fetch commit data and identify unique contributors.
 
 I needed something like this to fetch which developers are most active, as we have some that are more administrative than active. 
 For the active ones we wanted to pay for some tool usage and finding out how many "seats" we needed and to whom was important. 
-(I could not at the time find an easy way to extract this from Github)
+(I could not at the time find an easy way to extract this from GitHub)
 
 Features:
 - Fetches commit activity across multiple repositories
