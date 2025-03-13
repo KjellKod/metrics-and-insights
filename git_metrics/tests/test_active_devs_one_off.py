@@ -35,7 +35,7 @@ class TestActiveDevsOneOff(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_env_variables()
 
-    @patch("active_repos_one_off.requests.post")
+    @patch("git_metrics.active_devs_one_off.requests.post")
     def test_fetch_active_repositories(self, mock_post):
         # Create a mock API response
         mock_response = MagicMock()
