@@ -120,28 +120,45 @@ def setup_github_api(access_token):
 
 
 def fetch_repositories(api_config, org_name):
-    """Fetch all repositories in the organization using GraphQL"""
+    """Fetch all repositories in the organization using GraphQL with pagination"""
     logger = logging.getLogger(__name__)
     query = """
-    query ($org: String!) {
+    query ($org: String!, $cursor: String) {
         organization(login: $org) {
-            repositories(first: 100) {
+            repositories(first: 100, after: $cursor) {
                 nodes {
                     name
+                }
+                pageInfo {
+                    endCursor
+                    hasNextPage
                 }
             }
         }
     }
     """
-    variables = {"org": org_name}
+    variables = {"org": org_name, "cursor": None}
+
+    all_repositories = []
 
     try:
-        response = requests.post(
-            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
-        )
-        response.raise_for_status()
-        data = response.json()
-        return [repo["name"] for repo in data["data"]["organization"]["repositories"]["nodes"]]
+        while True:
+            response = requests.post(
+                api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            repositories = data["data"]["organization"]["repositories"]["nodes"]
+            all_repositories.extend(repo["name"] for repo in repositories)
+
+            page_info = data["data"]["organization"]["repositories"]["pageInfo"]
+            if not page_info["hasNextPage"]:
+                break
+
+            variables["cursor"] = page_info["endCursor"]
+
+        return all_repositories
     except Exception as e:
         logger.error("Failed to fetch repositories: %s", str(e))
         return None
