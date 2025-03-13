@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
+from datetime import datetime
 from active_devs_one_off import validate_env_variables, fetch_repositories, fetch_commit_activity
 
 
