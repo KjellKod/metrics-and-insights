@@ -6,7 +6,7 @@ import os
 from jira_utils import get_tickets_from_jira, verbose_print
 
 # Global variable for verbosity
-EXCEPTIONS = ["ENG-8158"]
+EXCEPTIONS = []  # RELEASE-123 tickets that were wrongly tagged as failed and corrected in this script
 
 
 def exceptions_check(ticket_key):
