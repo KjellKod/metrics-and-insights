@@ -78,11 +78,18 @@ class TestTicketFunctions(unittest.TestCase):
         self.ticket.fields.project = MagicMock()
         self.ticket.fields.customfield_10075 = MagicMock()
         self.ticket.fields.customfield_10079 = MagicMock()
+        # Set up environment variable patch
+        self.env_patcher = patch.dict("os.environ", {"TEAM_SWE": "Swedes"})
+        self.env_patcher.start()
 
-    def test_get_team_mobile(self):
-        self.ticket.fields.project.key = "MOB"
+    def tearDown(self):
+        # Clean up the environment variable patch
+        self.env_patcher.stop()
+
+    def test_get_team_swedes(self):
+        self.ticket.fields.project.key = "SWE"
         self.ticket.fields.customfield_10075 = None
-        self.assertEqual(get_team(self.ticket), "Mobile")
+        self.assertEqual(get_team(self.ticket), "Swedes")
 
     def test_get_team_unknown(self):
         self.ticket.fields.project.key = "UNKNOWN"
@@ -105,11 +112,11 @@ class TestTicketFunctions(unittest.TestCase):
     def test_update_team_data_engineering_excellence(self):
         team_data = {
             "all": {"2023-10": {"engineering_excellence": 0, "product": 0}},
-            "mobile": {"2023-10": {"engineering_excellence": 0, "product": 0}},
+            "Swedes": {"2023-10": {"engineering_excellence": 0, "product": 0}},
         }
-        update_team_data(team_data, "mobile", "2023-10", "Debt Reduction")
-        self.assertEqual(team_data["mobile"]["2023-10"]["engineering_excellence"], 1)
-        self.assertEqual(team_data["mobile"]["2023-10"]["product"], 0)
+        update_team_data(team_data, "Swedes", "2023-10", "Debt Reduction")
+        self.assertEqual(team_data["Swedes"]["2023-10"]["engineering_excellence"], 1)
+        self.assertEqual(team_data["Swedes"]["2023-10"]["product"], 0)
 
     @patch("builtins.print")
     def test_categorize_ticket_no_resolution_date(self, mock_print):
@@ -127,17 +134,22 @@ class TestTicketFunctions(unittest.TestCase):
                 items=[MagicMock(field="status", toString="Released")],
             )
         ]
-        self.ticket.fields.project.key = "MOB"
-        self.ticket.fields.customfield_10075.value = "Mobile"
+        self.ticket.fields.project.key = "SWE"
+        self.ticket.fields.customfield_10075.value = "Swedes"
         self.ticket.fields.customfield_10079.value = "Debt Reduction"
 
         team_data = {
             "all": {"2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}},
-            "Mobile": {"2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}},
+            "Swedes": {"2023-10": {"engineering_excellence": 0, "product": 0, "tickets": []}},
         }
         categorize_ticket(self.ticket, team_data)
-        self.assertEqual(team_data["Mobile"]["2023-10"]["engineering_excellence"], 1)
-        self.assertEqual(team_data["Mobile"]["2023-10"]["product"], 0)
+        self.assertEqual(team_data["Swedes"]["2023-10"]["engineering_excellence"], 1)
+        self.assertEqual(team_data["Swedes"]["2023-10"]["product"], 0)
+
+    def test_get_team_swe(self):
+        self.ticket.fields.project.key = "SWE"
+        self.ticket.fields.customfield_10075 = None
+        self.assertEqual(get_team(self.ticket), "Swedes")
 
 
 if __name__ == "__main__":
