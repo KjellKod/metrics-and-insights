@@ -539,36 +539,73 @@ def get_check_runs(pr_number):
 
 
 def print_metrics(pr_metrics):
-    print("\nDetailed Monthly Metrics:")
-    print(
-        "Month, PRs, Median Merge (hrs), Median Check (min), Avg Files Changed, Avg Review Time (hrs), Check Success Rate (%)"
-    )
+    # First, organize PRs by year
+    yearly_prs = defaultdict(list)
+    for month, prs in pr_metrics.items():
+        year = month.split("-")[0]
+        yearly_prs[year].extend(prs)
 
-    for month, prs in sorted(pr_metrics.items()):
+    # Print statistics for each year
+    for year, prs in sorted(yearly_prs.items()):
+        print(f"\nOverall Statistics for {year}:")
+
+        # Calculate yearly metrics
         merge_times = [pr["merge_time"] for pr in prs]
         check_times = [pr["total_check_time"] for pr in prs]
-        files_changed = [pr["code_changes"]["changed_files"] for pr in prs]
-        review_times = [pr["reviews"]["time_to_first_review"] for pr in prs if pr["reviews"]["time_to_first_review"]]
 
-        total_checks = sum(pr["checks"]["successful"] + pr["checks"]["failed"] for pr in prs)
-        successful_checks = sum(pr["checks"]["successful"] for pr in prs)
+        # Convert to appropriate units
+        merge_times_hours = [t / 3600 for t in merge_times]
+        check_times_minutes = [t / 60 for t in check_times]
 
-        median_merge_time_hours = statistics.median(merge_times) / 3600
-        median_check_time_minutes = statistics.median(check_times) / 60
-        avg_files_changed = statistics.mean(files_changed)
-        avg_review_time_hours = statistics.mean(review_times) / 3600 if review_times else 0
-        check_success_rate = (successful_checks / total_checks * 100) if total_checks > 0 else 0
+        # Calculate metrics for the year
+        total_prs = len(prs)
+        median_merge_time_hours = statistics.median(merge_times_hours)
+        median_check_time_minutes = statistics.median(check_times_minutes)
+        avg_check_time_minutes = statistics.mean(check_times_minutes)
+        avg_merge_time_hours = statistics.mean(merge_times_hours)
 
+        # Calculate ratios
+        avg_check_merge_ratio = (avg_check_time_minutes / (avg_merge_time_hours * 60)) * 100
+        median_check_merge_ratio = (median_check_time_minutes / (median_merge_time_hours * 60)) * 100
+
+        # Print yearly statistics
+        print(f"Total PRs: {total_prs}")
+        print(f"Median PR Merge Time (hours): {median_merge_time_hours:.2f}")
+        print(f"Median CI Build Time (minutes): {median_check_time_minutes:.2f}")
+        print(f"Average CI Build Time (minutes): {avg_check_time_minutes:.2f}")
+        print(f"Average PR Merge Time (hours): {avg_merge_time_hours:.2f}")
+        print(f"Average Check Time / Average Merge Time Ratio (%): {avg_check_merge_ratio:.2f}")
+        print(f"Median Check Time / Median Merge Time Ratio (%): {median_check_merge_ratio:.2f}")
+
+        # Print monthly breakdown for this year
+        print(f"\nMonthly Breakdown for {year}:")
         print(
-            f"{month}, {len(prs)}, {median_merge_time_hours:.2f}, {median_check_time_minutes:.2f}, "
-            f"{avg_files_changed:.1f}, {avg_review_time_hours:.2f}, {check_success_rate:.1f}"
+            "Month, PRs, Median Merge (hrs), Median Check (min), Avg Files Changed, Avg Review Time (hrs), Check Success Rate (%)"
         )
 
-    print("\nSize Metrics:")
-    all_prs = [pr for prs in pr_metrics.values() for pr in prs]
-    print(f"Average additions per PR: {statistics.mean(pr['code_changes']['additions'] for pr in all_prs):.1f}")
-    print(f"Average deletions per PR: {statistics.mean(pr['code_changes']['deletions'] for pr in all_prs):.1f}")
-    print(f"Average comments per PR: {statistics.mean(pr['comments'] for pr in all_prs):.1f}")
+        # Filter and sort months for this year
+        year_months = {month: prs for month, prs in pr_metrics.items() if month.startswith(year)}
+        for month, month_prs in sorted(year_months.items()):
+            merge_times = [pr["merge_time"] for pr in month_prs]
+            check_times = [pr["total_check_time"] for pr in month_prs]
+            files_changed = [pr["code_changes"]["changed_files"] for pr in month_prs]
+            review_times = [
+                pr["reviews"]["time_to_first_review"] for pr in month_prs if pr["reviews"]["time_to_first_review"]
+            ]
+
+            total_checks = sum(pr["checks"]["successful"] + pr["checks"]["failed"] for pr in month_prs)
+            successful_checks = sum(pr["checks"]["successful"] for pr in month_prs)
+
+            median_merge_time_hours = statistics.median(merge_times) / 3600
+            median_check_time_minutes = statistics.median(check_times) / 60
+            avg_files_changed = statistics.mean(files_changed)
+            avg_review_time_hours = statistics.mean(review_times) / 3600 if review_times else 0
+            check_success_rate = (successful_checks / total_checks * 100) if total_checks > 0 else 0
+
+            print(
+                f"{month}, {len(month_prs)}, {median_merge_time_hours:.2f}, {median_check_time_minutes:.2f}, "
+                f"{avg_files_changed:.1f}, {avg_review_time_hours:.2f}, {check_success_rate:.1f}"
+            )
 
 
 # following UTC time format although it's possible that the CI was running in a different timezone
@@ -584,7 +621,7 @@ def main():
     try:
         print("Retrieving yearly stats for approved and merged PRs...")
         print("Retrieving yearly stats for merged PRs...")
-        start_year = 2022
+        start_year = 2024
         end_year = 2024
         yearly_counts = get_merged_prs_for_years(start_year, end_year)
         for year, count in yearly_counts.items():
