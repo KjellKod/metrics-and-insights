@@ -136,7 +136,7 @@ def calculate_median_cycle_time(cycle_times):
     return 0
 
 
-def process_cycle_time_metrics(team, months, verbose):
+def process_cycle_time_metrics(team, months):
     metrics = []
     for month, cycle_times in sorted(months.items()):
         average_cycle_time_s = calculate_average_cycle_time(cycle_times)
@@ -171,13 +171,13 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
     # Process metrics for all other teams
     for team, months in sorted(cycle_times_per_month.items()):
         print(f"Team: {team.capitalize()}")
-        metrics = process_cycle_time_metrics(team, months, verbose)
+        metrics = process_cycle_time_metrics(team, months)
         all_metrics.extend(metrics)
 
     # Process metrics for the "all" team
     if all_team:
         print("Team: All")
-        metrics = process_cycle_time_metrics("All", all_team, verbose)
+        metrics = process_cycle_time_metrics("All", all_team)
         all_metrics.extend(metrics)
 
     if csv_output:

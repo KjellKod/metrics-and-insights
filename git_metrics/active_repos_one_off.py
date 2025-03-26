@@ -1,3 +1,13 @@
+import os
+import sys
+import logging
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+import requests
+
+load_dotenv()
+
+# pylint: disable=pointless-string-statement
 """Active Repository Report Generator
 ================================
 
@@ -27,15 +37,6 @@ Simply run the script:
     python active-repos-one-off.py
 """
 
-import os
-import sys
-import logging
-import requests
-from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 def parse_github_date(date_str):
     """Parse GitHub date string to datetime object."""
@@ -50,6 +51,7 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-locals
 def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=None):
     """Fetch repositories with PR activity since the given date"""
     logger = logging.getLogger(__name__)

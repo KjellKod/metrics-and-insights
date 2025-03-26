@@ -1,11 +1,12 @@
 from collections import defaultdict
 from datetime import datetime
+import os
 
 # pylint: disable=import-error
 from jira_utils import get_tickets_from_jira, verbose_print
 
 # Global variable for verbosity
-EXCEPTIONS = ["ENG-8158"]
+EXCEPTIONS = []  # RELEASE-123 tickets that were wrongly tagged as failed and corrected in this script
 
 
 def exceptions_check(ticket_key):
@@ -52,7 +53,8 @@ def count_failed_releases(issue):
 
 
 def analyze_release_tickets(start_date, end_date):
-    jql_query = f"project IN (ENG, ONF) AND summary ~ 'Production Release' AND type = 'Release' AND status changed to Released during ({start_date}, {end_date}) ORDER BY created ASC"
+    project = os.getenv("RELEASE_INSIGHT_PROJECT")
+    jql_query = f"project IN ({project}) AND summary ~ 'Production Release' AND type = 'Release' AND status changed to Released during ({start_date}, {end_date}) ORDER BY created ASC"
     release_tickets = get_tickets_from_jira(jql_query)
     (
         release_info,
