@@ -150,7 +150,7 @@ Most scripts support data export for further analysis:
 
 
 ### Data Export
-All scripts support CSV export via the `-csv` flag for further analysis or dashboard creation. Example usage:
+Many scripts support CSV export via the `-csv` flag for further analysis or dashboard creation. Example usage:
 
 
 ## Requirements ##
