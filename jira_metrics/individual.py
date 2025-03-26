@@ -79,7 +79,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
         print(f"No tickets found for {identifier}")
         sys.exit(1)
 
-    verbose_print(f"Found {len(tickets)} tickets")
+    verbose_print(f"Received {len(tickets)} tickets")
 
     metrics_per_month = defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0}))
     assignee_metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0})))
@@ -96,10 +96,16 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
         if not released_timestamp:
             sys.exit("Fatal error: Released ticket, missing released timestamp and done timestamp.")
 
-        team = get_team(issue)
-        if team.lower() != team_name:
-            print(f"Skipping issue {issue.key} as it does not belong to team {team_name}")
-            continue
+        # Handle team identification based on whether we're using team or project
+        if team_name:
+            team = get_team(issue)
+            if team.lower() != team_name.lower():
+                verbose_print(f"Skipping issue {issue.key} as it does not belong to team {team_name}")
+                continue
+        else:
+            # When using project, use the project key as the team identifier
+            team = project_key
+
         assignee_raw = issue.fields.assignee
         assignee = assignee_raw.displayName if assignee_raw else "Unassigned"
         month_key = released_timestamp.strftime("%Y-%m")
