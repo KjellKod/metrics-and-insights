@@ -36,19 +36,25 @@ Example workflow:
 
 ## Repository Structure ##
 
+├── git_metrics/  │  │   │ ├── lines_changed.py  │ ├── releases.py  │
+
 ```
-│   ├── releases.py
-│   ├── pr_metrics.py
-│   ├── lines_changed.py
+├── git_metrics/                        # Scripts for analyzing GitHub repository metrics
+│   ├── releases.py                     # Analyze release patterns
+│   ├── lines_changed.py                # Track code volume changes
 |   |── repo_commit_report.sh
+│   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
+|   ├── active_devs_one_off.py          # Track active developers
+|   ├── active_repos_one_off.py         # Identify active repositories
 │
 │
-├── jira/                 # Scripts for extracting metrics from Jira
-│   ├── engineering_excellence.py
-│   ├── cycle_time.py
-│   ├── release_failure.py
-│   ├── released_tickets.py
-│   ├── jira_utils.py # helper utility 
+├── jira_metrics/                   # Scripts for extracting metrics from Jira
+│   ├── engineering_excellence.py   # Track engineering excellence vs product wor
+│   ├── cycle_time.py               # Analyze time from code review to release
+│   ├── release_failure.py          # Analyze release failures and impact
+│   ├── individual.py               # Individual contributor metrics analysis
+│   ├── released_tickets.p          # Track monthly released ticket counts
+│   ├── jira_utils.py               # helper utility 
 │
 ├── tests/                # Test suite
 │   ├── __init__.py       
@@ -58,6 +64,94 @@ Example workflow:
 ├── requirements.txt      # dependencies
 └── README.md             # overview
 ```
+
+
+## Important Note on Metrics
+These metrics should be used as conversation starters and indicators, not as absolute measures of performance. They are most valuable when:
+- Used to identify trends over time
+- Combined with qualitative feedback
+- Discussed openly with teams
+- Used to find areas needing support or improvement
+
+
+## Key Components Jira Metrics ##
+
+*jira_metrics/*
+Scripts for extracting various engineering metrics from Jira:
+
+- **cycle_time.py**: Calculates and analyzes cycle time from code review to release status. Shows median and average cycle times per team and outputs monthly trends. Helps identify delivery pipeline bottlenecks.
+
+- **engineering_excellence.py**: Tracks the balance between product work and engineering excellence initiatives (debt reduction, critical work). Provides monthly breakdowns per team and calculates running annual averages for engineering excellence focus.
+
+- **individual.py**: Analyzes individual contributor metrics including points completed and ticket counts. Supports team or project-based analysis and shows top contributors over rolling periods. Note: intended for identifying support needs, not performance evaluation.
+
+- **jira_utils.py**: Shared utility module providing common functionality like:
+  - Jira authentication and connection handling
+  - Status tracking and timestamp analysis
+  - Team and project configuration
+  - CSV export capabilities
+  - Argument parsing and verbose logging
+
+- **release_failure.py**: Analyzes release tickets and their linked work items to track:
+  - Release success/failure rates
+  - Impact of failed releases (affected tickets)
+  - Monthly and annual failure trends per team
+
+- **released_tickets.py**: Provides monthly statistics on successfully released tickets including:
+  - Ticket counts per team/project
+  - Story point tracking (when available)
+  - Month-over-month release velocity
+
+## Key Components Git Metrics ##
+
+*git_metrics/*
+Scripts for extracting metrics from GitHub repositories:
+
+- **active_devs_one_off.py**: One-off script to identify active developers within a specified timeframe (default 60 days). Shows:
+  - Developer activity patterns
+  - Contribution frequency
+  - Active developer count
+
+- **active_repos_one_off.py**: One-off script to identify active repositories in your organization:
+  - Lists repositories with recent PR activity
+  - Shows PR counts and last activity dates
+  - Helps identify maintenance needs
+
+- **ci_pr_performance_metrics.py**: Comprehensive analysis of PR and CI performance:
+  - Merge time statistics
+  - CI build durations
+  - Review patterns
+  - Success/failure rates
+  - Monthly and yearly trends
+  Options:
+  ```bash
+  -v, --verbose           Enable verbose output
+  --force-fresh          Ignore cache and fetch fresh data
+  --load-from-file FILE  Load from cached data file
+  --save-to-file FILE    Save data to cache file
+  --start-date DATE      Analysis start date (YYYY-MM-DD)
+  ```
+- **lines_changed.py**: Analyzes code volume changes over time:
+  - Tracks additions and deletions
+  - Shows net code changes
+  - Supports date range analysis
+  Usage:
+  ```bash
+  python3 git_metrics/lines_changed.py --start-date YYYY-MM-DD --end-date YYYY-MM-DD
+  ```
+- **releases.py**: Tracks and analyzes release patterns:
+  - Monthly release counts
+  - Release naming patterns
+  - Release frequency trends
+  - Supports CSV export with -csv flag
+
+### Data Export
+Most scripts support data export for further analysis:
+
+
+### Data Export
+All scripts support CSV export via the `-csv` flag for further analysis or dashboard creation. Example usage:
+
 
 ## Requirements ##
 
