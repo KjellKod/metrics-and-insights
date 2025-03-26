@@ -19,44 +19,46 @@ from jira_utils import (
 
 load_dotenv()
 
-
-# 1) story points
-# completed story points per individual
-# average story points in the team
-# ratio of individual story points to the average story points
-
-# 2 ) completed tickets
-# completed tickets per individual
-# average completed tickets in the team
-# ratio of individual completed tickets to the average completed tickets
-
-# 3) individual time per point to complete ticket.
-# Average time per point to complete ticket in the team
-
-# 4) Number of PRs reviewed per individual
-# Average PRs reviewed in the team
-# Review throughness ? (comments given, time to address comments in their own PRs)
-# Ratio of individual PRs reviewed to the average PRs reviewed
-
-
 # Global variable for verbosity
 CUSTOM_FIELD_STORYPOINTS = os.getenv("CUSTOM_FIELD_STORYPOINTS")
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 
 
+def show_usage():
+    """Display script usage information"""
+    print("\nJIRA Individual Metrics Report")
+    print("=============================")
+    print("\nThis script analyzes individual contributor metrics from JIRA.")
+    print("\nUsage:")
+    print("  By team:    python3 jira_metrics/individual.py -team <team_name>")
+    print("  By project: python3 jira_metrics/individual.py -project <project_key>")
+    print("\nExample:")
+    print("  python3 jira_metrics/individual.py -team swedes")
+    print("  python3 jira_metrics/individual.py -project SWE")
+    print("\nOptional flags:")
+    print("  -verbose    Show detailed processing information")
+    print("  -csv        Generate CSV report")
+    sys.exit(1)
+
+
 def parse_arguments():
-    # pylint: disable=global-statement
-    # Define the argument parser
+    """Parse and validate command line arguments"""
+    if len(sys.argv) == 1:
+        show_usage()
+
     parser = get_common_parser()
-    parser.add_argument(
-        "-team",
-        required=True,
-        help="Specify the team name to process. `python3 -team <teamName>`",
-    )
-    args = parser.parse_args()
-    global VERBOSE
-    VERBOSE = args.verbose
-    return args
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-team", help="Process metrics for specified team")
+    group.add_argument("-project", help="Process metrics for specified project")
+
+    try:
+        args = parser.parse_args()
+        global VERBOSE
+        VERBOSE = args.verbose
+        return args
+    except Exception as e:
+        print(f"\nError: {str(e)}")
+        show_usage()
 
 
 def calculate_points(issue):
@@ -64,10 +66,21 @@ def calculate_points(issue):
     return getattr(issue.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}") or 0
 
 
-def calculate_individual_jira_metrics(start_date, end_date, team_name):
+def calculate_individual_jira_metrics(start_date, end_date, team_name=None, project_key=None):
+    identifier = team_name or project_key
+    print(f"\nFetching JIRA data for {team_name and 'team' or 'project'}: {identifier}")
+    print(f"Period: {start_date} to {end_date}\n")
 
-    jql_query = construct_jql(team_name, start_date, end_date)
+    jql_query = construct_jql(team_name, project_key, start_date, end_date)
+    verbose_print(f"Using JQL: {jql_query}")
+
     tickets = get_tickets_from_jira(jql_query)
+    if not tickets:
+        print(f"No tickets found for {identifier}")
+        sys.exit(1)
+
+    verbose_print(f"Found {len(tickets)} tickets")
+
     metrics_per_month = defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0}))
     assignee_metrics = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"points": 0, "tickets": 0})))
 
@@ -184,13 +197,15 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
     return top_contributors
 
 
-def construct_jql(team_name, start_date, end_date):
-    if team_name.lower() == "mobile":
-        return f'project = MOB AND status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC'
-    elif team_name.lower() == "devops":
-        return f'project = DevOps AND status IN ("Released", "Done")  AND (status changed TO ("Released", "Done") during ({start_date}, {end_date}) AND issuetype IN (Task, Bug, Story, Spike)) ORDER BY updated ASC'
+def construct_jql(team_name=None, project_key=None, start_date=None, end_date=None):
+    base_jql = f'status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike)'
+
+    if project_key:
+        return f"project = {project_key} AND {base_jql} ORDER BY updated ASC"
+    elif team_name:
+        return f'project in ({", ".join(projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'
     else:
-        return f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during (\"{start_date}\", \"{end_date}\") AND issueType in (Task, Bug, Story, Spike) AND \"Team[Dropdown]\" = \"{team_name}\" ORDER BY updated ASC"
+        raise ValueError("Either team_name or project_key must be provided")
 
 
 def transform_month(month):
@@ -249,28 +264,48 @@ def main():
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
-    team_name = args.team
-    metrics_per_month, assignee_metrics = calculate_individual_jira_metrics(start_date, end_date, team_name)
-    process_and_display_metrics(metrics_per_month, assignee_metrics)
 
-    # Calculate and display rolling top contributors based on average ratios
-    top_contributors = calculate_rolling_top_contributors(assignee_metrics, end_date)
+    identifier = args.team if args.team else args.project
 
-    print("\nTop 3 contributors over the last 3 months based on average ratio to team performance:")
+    try:
+        metrics_per_month, assignee_metrics = calculate_individual_jira_metrics(
+            start_date, end_date, team_name=args.team, project_key=args.project
+        )
 
-    print("\nBased on Story Points:")
-    for i, (contributor, avg_ratio, total_points) in enumerate(top_contributors["points"], 1):
-        print(f"{i}. {contributor}[{total_points}]: Average ratio of {avg_ratio:.2f}")
+        if not metrics_per_month:
+            print(f"No metrics data found for {identifier}")
+            sys.exit(1)
 
-    print("\nBased on Number of Tickets:")
-    for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets"], 1):
-        print(f"{i}. {contributor}[{total_tickets}]: Average ratio of {avg_ratio:.2f}")
+        print("\nProcessing metrics data...")
+        process_and_display_metrics(metrics_per_month, assignee_metrics)
 
-    if args.csv:
-        csv_output_file = f"{team_name}_individual_metrics.csv"
-        write_csv(assignee_metrics, csv_output_file)
-    else:
-        print("CSV output disabled. Use -csv flag to enable.")
+        # Calculate and display rolling top contributors
+        print("\nCalculating top contributors...")
+        top_contributors = calculate_rolling_top_contributors(assignee_metrics, end_date)
+
+        print("\nTop 3 contributors over the last 3 months based on average ratio to team performance:")
+
+        print("\nBased on Story Points:")
+        for i, (contributor, avg_ratio, total_points) in enumerate(top_contributors["points"], 1):
+            print(f"{i}. {contributor}[{total_points}]: Average ratio of {avg_ratio:.2f}")
+
+        print("\nBased on Number of Tickets:")
+        for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets"], 1):
+            print(f"{i}. {contributor}[{total_tickets}]: Average ratio of {avg_ratio:.2f}")
+
+        if args.csv:
+            csv_output_file = f"{identifier}_individual_metrics.csv"
+            write_csv(assignee_metrics, csv_output_file)
+        else:
+            print("\nTip: Use -csv flag to generate a CSV report")
+
+    except Exception as e:
+        print(f"\nError: {str(e)}")
+        if VERBOSE:
+            import traceback
+
+            traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

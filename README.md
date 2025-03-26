@@ -123,8 +123,8 @@ export CUSTOM_FIELD_TEAM=10075
 export CUSTOM_FIELD_WORK_TYPE=10079
 export CUSTOM_FIELD_STORYPOINTS=10025
 
-# -- used for when the `team` field isn't defined for a project
-# example export TEAM_INT="mint"
+# TEAM_<ONE> etc is used for when the team field isn't used in for a project but might make sense see 
+# example export TEAM_SWE="scandinavian_group"
 ```
 
 
