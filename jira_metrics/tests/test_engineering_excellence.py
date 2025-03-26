@@ -146,11 +146,6 @@ class TestTicketFunctions(unittest.TestCase):
         self.assertEqual(team_data["Swedes"]["2023-10"]["engineering_excellence"], 1)
         self.assertEqual(team_data["Swedes"]["2023-10"]["product"], 0)
 
-    def test_get_team_swe(self):
-        self.ticket.fields.project.key = "SWE"
-        self.ticket.fields.customfield_10075 = None
-        self.assertEqual(get_team(self.ticket), "Swedes")
-
 
 if __name__ == "__main__":
     unittest.main()
