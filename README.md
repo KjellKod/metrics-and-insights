@@ -1,5 +1,42 @@
+# Engineering Metrics and Insights
+
+This repository contains a collection of scripts for gathering and analyzing engineering metrics from Jira and GitHub. The goal is to help engineering teams identify areas for process improvement, track progress, and make data-driven decisions.
+
+## Purpose and Usage
+
+These tools are designed to provide insights into various aspects of the software development lifecycle:
+
+- **Delivery Performance**: Track cycle times, release frequencies, and release failures
+- **Engineering Excellence**: Monitor balance between product work and technical improvements
+- **Code Review Process**: Analyze PR review times and patterns
+- **Team Workload**: Understand ticket distribution and completion patterns
+
+### Important Note on Metrics
+These metrics should be used as conversation starters and indicators, not as absolute measures of performance. They are most valuable when:
+- Used to identify trends over time
+- Combined with qualitative feedback
+- Discussed openly with teams
+- Used to find areas needing support or improvement
+
+### Data Export and Visualization
+Most scripts include a `-csv` flag that exports data to CSV files, making it easy to:
+- Import into spreadsheet tools (Google Sheets, Excel)
+- Create custom dashboards
+- Combine with other data sources
+- Share insights with stakeholders
+- Track trends over time
+
+Example workflow:
+1. Run scripts regularly (e.g., monthly)
+2. Export to CSV
+3. Import into shared spreadsheet
+4. Create visualizations
+5. Discuss trends with team
+
+
+## Repository Structure ##
+
 ```
-from GitHub
 │   ├── releases.py
 │   ├── pr_metrics.py
 │   ├── lines_changed.py
@@ -22,7 +59,8 @@ from GitHub
 └── README.md             # overview
 ```
 
-## Requirementsi ##
+## Requirements ##
+
 Install the necessary python frameworks with: 
 ```
 python3 -m venv venv
