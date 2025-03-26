@@ -24,7 +24,11 @@ from GitHub
 
 ## Requirementsi ##
 Install the necessary python frameworks with: 
-`pip install --upgrade -r requirements.txt`
+```
+python3 -m venv venv
+source venv/bin/activate
+pip3 install --upgrade -r requirements.txt
+```
 
 If you do python dependency changes, please add them later in your virtual environment with 
 `pip3 freeze requirements.txt`
@@ -109,6 +113,7 @@ export GITHUB_TOKEN_READONLY_WEB="your_github_token"
 export GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
+export RELEASE_INSIGHT_PROJECT="MY_PROJECT_TRACKING_RELEASES"
 export TEAM_ONE="first_team" 
 
 # NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
