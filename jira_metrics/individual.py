@@ -68,6 +68,7 @@ def calculate_points(issue):
     return getattr(issue.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}") or 0
 
 
+# pylint: disable=too-many-locals
 def calculate_individual_jira_metrics(start_date, end_date, team_name=None, project_key=None):
     identifier = team_name or project_key
     print(f"\nFetching JIRA data for {team_name and 'team' or 'project'}: {identifier}")
@@ -123,6 +124,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
     return metrics_per_month, assignee_metrics
 
 
+# pylint: disable=too-many-locals
 def process_and_display_metrics(metrics_per_month, assignee_metrics):
     for month, metrics in sorted(metrics_per_month.items()):
         print(f"\nMonth: {month}")
@@ -153,6 +155,7 @@ def process_and_display_metrics(metrics_per_month, assignee_metrics):
                 )
 
 
+# pylint: disable=too-many-locals
 def calculate_rolling_top_contributors(assignee_metrics, end_date):
     end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
@@ -205,6 +208,7 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
     return top_contributors
 
 
+# pylint: disable=too-many-locals
 def construct_jql(team_name=None, project_key=None, start_date=None, end_date=None):
     base_jql = f'status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike)'
 
@@ -213,8 +217,8 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
 
     if team_name:
         return f'project in ({", ".join(projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'
-    else:
-        raise ValueError("Either team_name or project_key must be provided")
+
+    raise ValueError("Either team_name or project_key must be provided")
 
 
 def transform_month(month):
