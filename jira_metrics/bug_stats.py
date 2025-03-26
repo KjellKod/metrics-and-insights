@@ -9,9 +9,11 @@ import logging
 import csv
 from dotenv import load_dotenv
 
-load_dotenv()  # Add this after imports
+# pylint: disable=import-error
+from jira_utils import get_tickets_from_jira, print_env_variables
 
-from jira_utils import get_jira_instance, get_tickets_from_jira, print_env_variables
+
+load_dotenv()  # Add this after imports
 
 
 def setup_logging():
@@ -46,6 +48,7 @@ def build_jql_queries(year, projects):
     }
 
 
+# pylint: disable=too-many-locals
 def fetch_bug_statistics(year, projects, progress_callback=None):
     """
     Fetch bug statistics for a given year, broken down by project.
@@ -93,6 +96,7 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
     return stats
 
 
+# pylint: disable=superfluous-parens
 def validate_years(start_year, end_year):
     """Validate the provided year range."""
     current_year = datetime.now().year

@@ -160,6 +160,7 @@ def get_tickets_from_jira(jql_query):
     return total_tickets
 
 
+# pylint: disable=too-many-locals
 def get_tickets_from_graphql(start_date, end_date):
     """
     Retrieve tickets using GraphQL instead of JIRA REST API

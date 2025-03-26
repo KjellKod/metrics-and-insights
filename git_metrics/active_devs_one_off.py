@@ -1,11 +1,12 @@
 import os
 import sys
 import logging
-import requests
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from lines_changed import setup_logging
+import requests
 
+# pylint: disable=pointless-string-statement
 """
 Active Repositories Report Generator
 ================================
@@ -44,6 +45,7 @@ The script will output:
 load_dotenv()
 
 
+# pylint: disable=too-many-locals
 def fetch_active_repositories(api_config, org_name, since_date):
     """Fetch repositories with PR activity since the given date"""
     logger = logging.getLogger(__name__)

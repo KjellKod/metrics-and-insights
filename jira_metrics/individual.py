@@ -3,9 +3,11 @@ import sys
 from calendar import month_abbr
 from collections import defaultdict
 from datetime import datetime
+import traceback
 import csv
 from dotenv import load_dotenv
 
+# pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
     get_common_parser,
@@ -208,7 +210,8 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
 
     if project_key:
         return f"project = {project_key} AND {base_jql} ORDER BY updated ASC"
-    elif team_name:
+
+    if team_name:
         return f'project in ({", ".join(projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'
     else:
         raise ValueError("Either team_name or project_key must be provided")
@@ -308,8 +311,6 @@ def main():
     except Exception as e:
         print(f"\nError: {str(e)}")
         if VERBOSE:
-            import traceback
-
             traceback.print_exc()
         sys.exit(1)
 

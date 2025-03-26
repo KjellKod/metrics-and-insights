@@ -1,14 +1,18 @@
 import os
-import requests
+
 import statistics
 import json
 import argparse
 import time
 import random
+import traceback
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
+import requests
 
+
+# pylint: disable=pointless-string-statement
 """
 GitHub PR Metrics Analysis Script
 
@@ -127,7 +131,7 @@ def load_from_file(filename):
         print(f"File {filename} does not exist.")
         return None
     try:
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, list) or not all(isinstance(pr, dict) for pr in data):
             print(f"Invalid data structure in {filename}")
@@ -141,7 +145,7 @@ def load_from_file(filename):
 def save_to_file(data, filename):
     verbose_print(f"Saving data to {filename}")
     try:
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f)
         print(f"Saved data to {filename}")
     except IOError:
@@ -364,6 +368,7 @@ def get_pull_requests(start_date):
         raise
 
 
+# pylint: disable=too-many-locals
 def calculate_metrics(prs):
     """Calculate enhanced metrics from GraphQL data."""
     pr_metrics = defaultdict(list)
@@ -436,6 +441,7 @@ def calculate_metrics(prs):
     return pr_metrics
 
 
+# pylint: disable=too-many-locals
 def get_merged_prs_for_years(start_year, end_year):
     """Get yearly PR counts using GraphQL."""
     query = """
@@ -499,16 +505,27 @@ def get_pr_reviews(pr_number):
     # Ensure reviews is a list
     if isinstance(reviews, list):
         return reviews
-    else:
-        print(f"Unexpected response format for PR #{pr_number} reviews: {reviews}")
-        return []
+
+    print(f"Unexpected response format for PR #{pr_number} reviews: {reviews}")
+    return []
 
 
 def is_pr_approved(reviews):
     return any(review["state"] == "APPROVED" for review in reviews)
 
 
-def get_pr_commits(pr_number):
+# pylint: disable=too-many-locals
+def get_pr_commits(pr_number, headers=None):
+    """
+    Get all commits for a given PR number.
+
+    Args:
+        pr_number: The PR number to get commits for
+        headers: Optional request headers. If None, will use default GitHub API headers
+    """
+    if headers is None:
+        headers = setup_github_api()["headers"]
+
     url = f"{base_url}/pulls/{pr_number}/commits"
     commits = []
     while url:
@@ -518,6 +535,7 @@ def get_pr_commits(pr_number):
     return commits
 
 
+# pylint: disable=too-many-locals
 def get_check_runs(pr_number):
     commits = get_pr_commits(pr_number)
     all_check_runs = []
@@ -538,6 +556,7 @@ def get_check_runs(pr_number):
     return all_check_runs
 
 
+# pylint: disable=too-many-locals
 def print_metrics(pr_metrics):
     # First, organize PRs by year
     yearly_prs = defaultdict(list)
@@ -654,8 +673,6 @@ def main():
 
     except Exception as e:
         print(f"Error in main: {str(e)}")
-        import traceback
-
         traceback.print_exc()
 
 
