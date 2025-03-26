@@ -36,8 +36,6 @@ Example workflow:
 
 ## Repository Structure ##
 
-├── git_metrics/  │  │   │ ├── lines_changed.py  │ ├── releases.py  │
-
 ```
 ├── git_metrics/                        # Scripts for analyzing GitHub repository metrics
 │   ├── releases.py                     # Analyze release patterns
@@ -74,7 +72,7 @@ These metrics should be used as conversation starters and indicators, not as abs
 - Used to find areas needing support or improvement
 
 
-## Key Components Jira Metrics ##
+## Jira Metrics -- Key Components  ##
 
 *jira_metrics/*
 Scripts for extracting various engineering metrics from Jira:
@@ -102,7 +100,7 @@ Scripts for extracting various engineering metrics from Jira:
   - Story point tracking (when available)
   - Month-over-month release velocity
 
-## Key Components Git Metrics ##
+## Git Metrics -- Key Components  ##
 
 *git_metrics/*
 Scripts for extracting metrics from GitHub repositories:
