@@ -19,6 +19,10 @@ GitHub PR Metrics Analysis Script
 Analyzes Pull Request (PR) metrics including merge times, CI performance, and review patterns.
 Data is cached by default to handle rate limits and allow resume capability.
 
+An easy "sanity check" of the produced result can be to use Github's page and view the closed
+PRs. Use this filter to see if it corresponds to the results from this script for a given 
+time period: `is:pr is:closed is:merged closed:2025-02-01..2025-02-28` 
+
 Examples:
   # Normal run with caching enabled
   python ci_pr_performance_metrics.py
