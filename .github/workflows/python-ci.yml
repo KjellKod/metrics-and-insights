@@ -40,7 +40,7 @@ jobs:
         
     - name: Test with pytest
       run: |
-        pytest -v --junitxml=unittests.xml --cov=jira_metrics --cov-report=xml --cov-branch
+        pytest -v --junitxml=unittests.xml --cov=jira_metrics --cov-report=xml --cov-branch --cov-fail-under=50
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
