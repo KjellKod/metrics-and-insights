@@ -41,6 +41,7 @@ Example workflow:
 │   ├── releases.py                     # Analyze release patterns
 │   ├── lines_changed.py                # Track code volume changes
 |   |── repo_commit_report.sh
+|   |── code_review_metrics.py
 │   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
 |   ├── active_devs_one_off.py          # Track active developers
 |   ├── active_repos_one_off.py         # Identify active repositories
@@ -71,77 +72,6 @@ These metrics should be used as conversation starters and indicators, not as abs
 - Discussed openly with teams
 - Used to find areas needing support or improvement
 
-
-## Jira Metrics -- Key Components  ##
-
-*jira_metrics/*
-Scripts for extracting various engineering metrics from Jira:
-
-- **cycle_time.py**: Calculates and analyzes cycle time from code review to release status. Shows median and average cycle times per team and outputs monthly trends. Helps identify delivery pipeline bottlenecks.
-
-- **engineering_excellence.py**: Tracks the balance between product work and engineering excellence initiatives (debt reduction, critical work). Provides monthly breakdowns per team and calculates running annual averages for engineering excellence focus.
-
-- **individual.py**: Analyzes individual contributor metrics including points completed and ticket counts. Supports team or project-based analysis and shows top contributors over rolling periods. Note: intended for identifying support needs, not performance evaluation.
-
-- **jira_utils.py**: Shared utility module providing common functionality like:
-  - Jira authentication and connection handling
-  - Status tracking and timestamp analysis
-  - Team and project configuration
-  - CSV export capabilities
-  - Argument parsing and verbose logging
-
-- **release_failure.py**: Analyzes release tickets and their linked work items to track:
-  - Release success/failure rates
-  - Impact of failed releases (affected tickets)
-  - Monthly and annual failure trends per team
-
-- **released_tickets.py**: Provides monthly statistics on successfully released tickets including:
-  - Ticket counts per team/project
-  - Story point tracking (when available)
-  - Month-over-month release velocity
-
-## Git Metrics -- Key Components  ##
-
-*git_metrics/*
-Scripts for extracting metrics from GitHub repositories:
-
-- **active_devs_one_off.py**: One-off script to identify active developers within a specified timeframe (default 60 days). Shows:
-  - Developer activity patterns
-  - Contribution frequency
-  - Active developer count
-
-- **active_repos_one_off.py**: One-off script to identify active repositories in your organization:
-  - Lists repositories with recent PR activity
-  - Shows PR counts and last activity dates
-  - Helps identify maintenance needs
-
-- **ci_pr_performance_metrics.py**: Comprehensive analysis of PR and CI performance:
-  - Merge time statistics
-  - CI build durations
-  - Review patterns
-  - Success/failure rates
-  - Monthly and yearly trends
-  Options:
-  ```bash
-  -v, --verbose           Enable verbose output
-  --force-fresh          Ignore cache and fetch fresh data
-  --load-from-file FILE  Load from cached data file
-  --save-to-file FILE    Save data to cache file
-  --start-date DATE      Analysis start date (YYYY-MM-DD)
-  ```
-- **lines_changed.py**: Analyzes code volume changes over time:
-  - Tracks additions and deletions
-  - Shows net code changes
-  - Supports date range analysis
-  Usage:
-  ```bash
-  python3 git_metrics/lines_changed.py --start-date YYYY-MM-DD --end-date YYYY-MM-DD
-  ```
-- **releases.py**: Tracks and analyzes release patterns:
-  - Monthly release counts
-  - Release naming patterns
-  - Release frequency trends
-  - Supports CSV export with -csv flag
 
 ### Data Export
 Most scripts support data export for further analysis:
@@ -222,6 +152,7 @@ JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/api/graph
 GITHUB_TOKEN_READONLY_WEB="your_github_token"
 GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner_or_organization"
 GITHUB_REPO_FOR_RELEASE_TRACKING="your_github_repo_name"
+GITHUB_REPO_FOR_PR_TRACKING="your_github_repo_name"
 JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 TEAM_<NAME>="a team name, for issues when they can't be parsed or doesn't exist in team-only project the <NAME> should correspond to the PROJECT" 
 
@@ -242,6 +173,7 @@ export JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/ap
 export GITHUB_TOKEN_READONLY_WEB="your_github_token"
 export GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner"
 export GITHUB_METRIC_REPO="your_github_repo_name"
+export GITHUB_REPO_FOR_PR_TRACKING=="your_github_repo_name"
 export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
 export RELEASE_INSIGHT_PROJECT="MY_PROJECT_TRACKING_RELEASES"
 export TEAM_ONE="first_team" 
