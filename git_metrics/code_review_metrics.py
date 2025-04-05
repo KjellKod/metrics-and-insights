@@ -258,11 +258,37 @@ def write_to_csv(data, filename="pr_review_metrics.csv"):
         "Time to First Approval (h)",
         "Time from Approval to Merge (h)",
     ]
+
+    # Make a copy of the data to format dates for CSV display
+    formatted_data = []
+    for row in data:
+        formatted_row = row.copy() if isinstance(row, list) else row[:]
+
+        # Format dates in positions 1, 2, and 4 (Created At, Merged At, First Review Start)
+        for i in [1, 2, 4]:
+            if i < len(formatted_row) and formatted_row[i]:
+                # If it's already a date string, try to simplify it
+                if isinstance(formatted_row[i], str) and "T" in formatted_row[i]:
+                    try:
+                        dt = datetime.strptime(formatted_row[i], "%Y-%m-%dT%H:%M:%SZ")
+                        formatted_row[i] = dt.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+                # If it's a date with time, simplify to just date
+                elif isinstance(formatted_row[i], str) and " " in formatted_row[i]:
+                    try:
+                        dt = datetime.strptime(formatted_row[i], "%Y-%m-%d %H:%M:%S")
+                        formatted_row[i] = dt.strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+
+        formatted_data.append(formatted_row)
+
     try:
         with open(filename, mode="w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             writer.writerow(headers)
-            writer.writerows(data)
+            writer.writerows(formatted_data)
     except IOError as e:
         print(f"Error writing to CSV file: {e}")
 
