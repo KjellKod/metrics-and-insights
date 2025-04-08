@@ -223,7 +223,8 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
 
 def transform_month(month):
     # Extract the month part and convert it to abbreviated month name
-    return month_abbr[int(month)]
+    year, month_str = month.split('-')
+    return f"{year} {month_abbr[int(month_str)]}"
 
 
 def write_csv(assignee_metrics, output_file):
@@ -238,7 +239,7 @@ def write_csv(assignee_metrics, output_file):
         transformed_months = [transform_month(month) for month in all_months]
 
         # Write Points data
-        writer.writerow([f"{current_year} Assignee Points"] + transformed_months)
+        writer.writerow(["Assignee Released Points"] + transformed_months)
         all_assignees = set()
         for month_data in assignee_metrics.values():
             for team_data in month_data.values():
@@ -258,7 +259,7 @@ def write_csv(assignee_metrics, output_file):
         writer.writerow([])
 
         # Write Tickets data
-        writer.writerow([f"{current_year} Assignee Tickets"] + transformed_months)
+        writer.writerow(["Assignee Released Tickets"] + transformed_months)
         for assignee in sorted(all_assignees):
             row_data = [assignee]
             for month in all_months:
