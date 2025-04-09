@@ -172,7 +172,7 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
     for month in months:
         # Aggregate all assignees across teams if using project filter
         all_assignees = {}
-        for team, team_assignees in assignee_metrics[month].items():
+        for _, team_assignees in assignee_metrics[month].items():
             for assignee, metrics in team_assignees.items():
                 if assignee not in all_assignees:
                     all_assignees[assignee] = {"points": 0, "tickets": 0}
@@ -259,7 +259,6 @@ def write_csv(assignee_metrics, output_file):
 
         # Get all unique months and sort them
         all_months = sorted(set(month for month in assignee_metrics.keys()))
-        current_year = all_months[0].split("-")[0] if all_months else "Year"
 
         # Transform month names
         transformed_months = [transform_month(month) for month in all_months]
