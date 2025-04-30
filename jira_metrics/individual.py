@@ -162,32 +162,50 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
     # Get the last three months (including the end_date month)
     months = sorted(assignee_metrics.keys())[-3:]
 
-    rolling_window_ratios = defaultdict(lambda: {"points": [], "tickets": []})
-    total_metrics = defaultdict(lambda: {"points": 0, "tickets": 0})
+    # Track total metrics across all months
+    total_metrics = defaultdict(lambda: {"points": 0, "tickets": 0, "months_active": 0})
 
+    # Track monthly ratios
+    monthly_ratios = defaultdict(lambda: {"points": [], "tickets": []})
+
+    # Calculate team totals and averages per month, then individual ratios
     for month in months:
-        # for team, assignees in assignee_metrics[month].items():
-        for _, assignees in assignee_metrics[month].items():
-            team_total_points = sum(assignee["points"] for assignee in assignees.values())
-            team_total_tickets = sum(assignee["tickets"] for assignee in assignees.values())
-            team_size = len(assignees)
-            team_average_points = team_total_points / team_size if team_size > 0 else 0
-            team_average_tickets = team_total_tickets / team_size if team_size > 0 else 0
+        # Aggregate all assignees across teams if using project filter
+        all_assignees = {}
+        for _, team_assignees in assignee_metrics[month].items():
+            for assignee, metrics in team_assignees.items():
+                if assignee not in all_assignees:
+                    all_assignees[assignee] = {"points": 0, "tickets": 0}
+                all_assignees[assignee]["points"] += metrics["points"]
+                all_assignees[assignee]["tickets"] += metrics["tickets"]
 
-            for assignee, metrics in assignees.items():
-                if team_average_points > 0:
-                    points_ratio = metrics["points"] / team_average_points
-                    rolling_window_ratios[assignee]["points"].append(points_ratio)
-                if team_average_tickets > 0:
-                    tickets_ratio = metrics["tickets"] / team_average_tickets
-                    rolling_window_ratios[assignee]["tickets"].append(tickets_ratio)
+                # Add to running totals
                 total_metrics[assignee]["points"] += metrics["points"]
                 total_metrics[assignee]["tickets"] += metrics["tickets"]
 
-    # Calculate average ratios over the 3-month period for each assignee
+        # Mark this person as active this month
+        for assignee in all_assignees:
+            if all_assignees[assignee]["points"] > 0 or all_assignees[assignee]["tickets"] > 0:
+                total_metrics[assignee]["months_active"] += 1
+
+        # Calculate team average for this month
+        active_assignees = sum(1 for a in all_assignees.values() if a["points"] > 0 or a["tickets"] > 0)
+        if active_assignees > 0:
+            month_avg_points = sum(a["points"] for a in all_assignees.values()) / active_assignees
+            month_avg_tickets = sum(a["tickets"] for a in all_assignees.values()) / active_assignees
+
+            # Calculate ratios for active assignees
+            for assignee, metrics in all_assignees.items():
+                if metrics["points"] > 0 or metrics["tickets"] > 0:
+                    if month_avg_points > 0:
+                        monthly_ratios[assignee]["points"].append(metrics["points"] / month_avg_points)
+                    if month_avg_tickets > 0:
+                        monthly_ratios[assignee]["tickets"].append(metrics["tickets"] / month_avg_tickets)
+
+    # Calculate average ratios over active months
     average_ratios = {"points": {}, "tickets": {}}
 
-    for assignee, ratios in rolling_window_ratios.items():
+    for assignee, ratios in monthly_ratios.items():
         if ratios["points"]:
             average_ratios["points"][assignee] = sum(ratios["points"]) / len(ratios["points"])
         if ratios["tickets"]:
@@ -195,13 +213,21 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 
     # Sort by average ratio and get top 3 for both metrics
     top_contributors = {
-        "points": [
+        "points_ratio": [
             (assignee, ratio, total_metrics[assignee]["points"])
             for assignee, ratio in sorted(average_ratios["points"].items(), key=lambda x: x[1], reverse=True)[:3]
         ],
-        "tickets": [
+        "tickets_ratio": [
             (assignee, ratio, total_metrics[assignee]["tickets"])
             for assignee, ratio in sorted(average_ratios["tickets"].items(), key=lambda x: x[1], reverse=True)[:3]
+        ],
+        "points_total": [
+            (assignee, total_metrics[assignee]["points"])
+            for assignee in sorted(total_metrics.keys(), key=lambda x: total_metrics[x]["points"], reverse=True)[:3]
+        ],
+        "tickets_total": [
+            (assignee, total_metrics[assignee]["tickets"])
+            for assignee in sorted(total_metrics.keys(), key=lambda x: total_metrics[x]["tickets"], reverse=True)[:3]
         ],
     }
 
@@ -223,7 +249,8 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
 
 def transform_month(month):
     # Extract the month part and convert it to abbreviated month name
-    return month_abbr[int(month)]
+    year, month_str = month.split("-")
+    return f"{year} {month_abbr[int(month_str)]}"
 
 
 def write_csv(assignee_metrics, output_file):
@@ -232,13 +259,12 @@ def write_csv(assignee_metrics, output_file):
 
         # Get all unique months and sort them
         all_months = sorted(set(month for month in assignee_metrics.keys()))
-        current_year = all_months[0].split("-")[0] if all_months else "Year"
 
         # Transform month names
         transformed_months = [transform_month(month) for month in all_months]
 
         # Write Points data
-        writer.writerow([f"{current_year} Assignee Points"] + transformed_months)
+        writer.writerow(["Assignee Released Points"] + transformed_months)
         all_assignees = set()
         for month_data in assignee_metrics.values():
             for team_data in month_data.values():
@@ -258,7 +284,7 @@ def write_csv(assignee_metrics, output_file):
         writer.writerow([])
 
         # Write Tickets data
-        writer.writerow([f"{current_year} Assignee Tickets"] + transformed_months)
+        writer.writerow(["Assignee Released Tickets"] + transformed_months)
         for assignee in sorted(all_assignees):
             row_data = [assignee]
             for month in all_months:
@@ -292,19 +318,29 @@ def main():
         print("\nProcessing metrics data...")
         process_and_display_metrics(metrics_per_month, assignee_metrics)
 
-        # Calculate and display rolling top contributors
+        # Calculate and display top contributors
         print("\nCalculating top contributors...")
         top_contributors = calculate_rolling_top_contributors(assignee_metrics, end_date)
 
         print("\nTop 3 contributors over the last 3 months based on average ratio to team performance:")
 
-        print("\nBased on Story Points:")
-        for i, (contributor, avg_ratio, total_points) in enumerate(top_contributors["points"], 1):
+        print("\nBased on Story Points Ratio (relative to team average):")
+        for i, (contributor, avg_ratio, total_points) in enumerate(top_contributors["points_ratio"], 1):
             print(f"{i}. {contributor}[{total_points}]: Average ratio of {avg_ratio:.2f}")
 
-        print("\nBased on Number of Tickets:")
-        for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets"], 1):
+        print("\nBased on Number of Tickets Ratio (relative to team average):")
+        for i, (contributor, avg_ratio, total_tickets) in enumerate(top_contributors["tickets_ratio"], 1):
             print(f"{i}. {contributor}[{total_tickets}]: Average ratio of {avg_ratio:.2f}")
+
+        print("\nTop 3 contributors over the last 3 months based on absolute output:")
+
+        print("\nBased on Total Story Points:")
+        for i, (contributor, total_points) in enumerate(top_contributors["points_total"], 1):
+            print(f"{i}. {contributor}: {total_points} points")
+
+        print("\nBased on Total Number of Tickets:")
+        for i, (contributor, total_tickets) in enumerate(top_contributors["tickets_total"], 1):
+            print(f"{i}. {contributor}: {total_tickets} tickets")
 
         if args.csv:
             csv_output_file = f"{identifier}_individual_metrics.csv"
