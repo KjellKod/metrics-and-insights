@@ -160,7 +160,7 @@ class PRMetricsWriter(MetricsWriter):
             "Hours to Merge"
         ]
 
-    def write(self, pr_data: List[PRData]) -> None:
+    def write(self, pr_data: List[PRData], monthly_metrics: dict) -> None:
         with open(self.output_file, mode='w', newline='', encoding='utf-8') as csv_file:
             writer = csv.writer(csv_file)
             
@@ -168,95 +168,106 @@ class PRMetricsWriter(MetricsWriter):
             months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
             authors = sorted(set(pr.author for pr in pr_data))
             
-            # Section 1: Monthly Overview
-            writer.writerow(['MONTHLY OVERVIEW'])
-            writer.writerow([
-                'Month',
-                'Total PRs',
-                'Total Lines Changed',
-                'Avg PR Size',
-                'Median Merge Time (hours)',
-                'PRs > 24h to Merge',
-                'PRs > 1000 Lines',
-                'Most Active Author',
-                'PRs by Most Active Author'
-            ])
-            
+            # PR Count
+            writer.writerow(['PR Count'])
+            writer.writerow(['Month'] + authors)
             for month in months:
-                month_prs = [pr for pr in pr_data if pr.date.strftime("%Y-%m") == month]
-                total_prs = len(month_prs)
-                total_lines = sum(pr.additions + pr.deletions for pr in month_prs)
-                avg_size = total_lines / total_prs if total_prs else 0
-                median_merge = median(pr.hours_to_merge for pr in month_prs) if month_prs else 0
-                slow_prs = sum(1 for pr in month_prs if pr.hours_to_merge > 24)
-                large_prs = sum(1 for pr in month_prs if pr.additions + pr.deletions > 1000)
-                
-                # Find most active author
-                author_counts = {}
-                for pr in month_prs:
-                    author_counts[pr.author] = author_counts.get(pr.author, 0) + 1
-                most_active = max(author_counts.items(), key=lambda x: x[1]) if author_counts else ('N/A', 0)
-                
-                writer.writerow([
-                    month,
-                    total_prs,
-                    total_lines,
-                    round(avg_size, 2),
-                    round(median_merge, 2),
-                    slow_prs,
-                    large_prs,
-                    most_active[0],
-                    most_active[1]
-                ])
-            
-            # Add blank lines between sections
-            writer.writerow([])
-            writer.writerow([])
-            
-            # Section 2: Monthly Author Performance
-            writer.writerow(['MONTHLY AUTHOR PERFORMANCE'])
-            writer.writerow(['Month', 'Author'] + [
-                'PR Count',
-                'Lines Changed',
-                'Avg PR Size',
-                'Avg Merge Time',
-                'Median Merge Time',
-                'PRs > 24h',
-                'PRs > 1000 Lines'
-            ])
-            
-            for month in months:
+                row = [month]
                 for author in authors:
-                    author_month_prs = [pr for pr in pr_data 
-                                      if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    if not author_month_prs:
-                        continue
-                        
-                    total_prs = len(author_month_prs)
-                    total_lines = sum(pr.additions + pr.deletions for pr in author_month_prs)
-                    avg_size = total_lines / total_prs
-                    avg_merge = sum(pr.hours_to_merge for pr in author_month_prs) / total_prs
-                    median_merge = median(pr.hours_to_merge for pr in author_month_prs)
-                    slow_prs = sum(1 for pr in author_month_prs if pr.hours_to_merge > 24)
-                    large_prs = sum(1 for pr in author_month_prs if pr.additions + pr.deletions > 1000)
-                    
-                    writer.writerow([
-                        month,
-                        author,
-                        total_prs,
-                        total_lines,
-                        round(avg_size, 2),
-                        round(avg_merge, 2),
-                        round(median_merge, 2),
-                        slow_prs,
-                        large_prs
-                    ])
+                    count = sum(1 for pr in pr_data 
+                              if pr.date.strftime("%Y-%m") == month and pr.author == author)
+                    row.append(count)
+                writer.writerow(row)
             
-            # Add blank lines between sections
+            writer.writerow([])
+            
+            # Median Hours to Merge
+            writer.writerow(['Median Hours to Merge'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    prs = [pr for pr in pr_data 
+                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    median_time = median(pr.hours_to_merge for pr in prs) if prs else 0
+                    row.append(round(median_time, 2))
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Median Lines Added
+            writer.writerow(['Median Lines Added'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    prs = [pr for pr in pr_data 
+                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    median_lines = median(pr.additions for pr in prs) if prs else 0
+                    row.append(median_lines)
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Median Lines Removed
+            writer.writerow(['Median Lines Removed'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    prs = [pr for pr in pr_data 
+                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    median_lines = median(pr.deletions for pr in prs) if prs else 0
+                    row.append(median_lines)
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Median Files Changed
+            writer.writerow(['Median Files Changed'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    prs = [pr for pr in pr_data 
+                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    median_files = median(pr.changed_files for pr in prs) if prs else 0
+                    row.append(median_files)
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Average Hours to Merge
+            writer.writerow(['Average Hours to Merge'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    prs = [pr for pr in pr_data 
+                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    avg_time = sum(pr.hours_to_merge for pr in prs) / len(prs) if prs else 0
+                    row.append(round(avg_time, 2))
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Average Review Response Time
+            writer.writerow(['Average Review Response Time (hours)'])
+            writer.writerow(['Month'] + authors)
+            for month in months:
+                row = [month]
+                for author in authors:
+                    metrics = monthly_metrics.get((month, author), {})
+                    response_times = metrics.get('review_response_times', [])
+                    avg_time = sum(response_times) / len(response_times) if response_times else 0
+                    row.append(round(avg_time, 2))
+                writer.writerow(row)
+            
+            # Add blank lines before detailed data
             writer.writerow([])
             writer.writerow([])
             
-            # Section 3: Detailed PR Data
+            # Detailed PR Data
             writer.writerow(['DETAILED PR DATA'])
             writer.writerow(self.headers)
             
@@ -327,15 +338,9 @@ class ReviewMetricsWriter(MetricsWriter):
     def __init__(self, users: List[str]):
         self.users = [u.lower() for u in users]  # Store normalized usernames
 
-    def write(self, review_metrics: dict) -> None:
+    def write(self, review_metrics: dict, pr_data: List[PRData]) -> None:
         with open("pr_review_monthly_metrics.csv", mode='w', newline='', encoding='utf-8') as csv_file:
             writer = csv.writer(csv_file)
-            
-            # Write detailed format
-            writer.writerow([
-                "Month", "Reviewer", "Reviews Participated",
-                "Reviews Approved", "Comments Made"
-            ])
             
             # Filter metrics to only include specified users
             filtered_metrics = {
@@ -344,14 +349,58 @@ class ReviewMetricsWriter(MetricsWriter):
                 if reviewer.lower() in self.users
             }
             
-            for (month, reviewer) in sorted(filtered_metrics.keys()):
-                metrics = filtered_metrics[(month, reviewer)]
-                writer.writerow([
-                    month, reviewer,
-                    metrics['reviews_participated'],
-                    metrics['reviews_approved'],
-                    metrics['comments_made']
-                ])
+            # Get unique months and reviewers
+            months = sorted(set(month for month, _ in filtered_metrics.keys()))
+            reviewers = sorted(set(reviewer for _, reviewer in filtered_metrics.keys()))
+            
+            # PRs Authored
+            writer.writerow(['PRs Authored'])
+            writer.writerow(['Month'] + reviewers)
+            for month in months:
+                row = [month]
+                for reviewer in reviewers:
+                    # Count PRs authored by this reviewer in this month
+                    pr_count = sum(1 for pr in pr_data 
+                                 if pr.date.strftime("%Y-%m") == month 
+                                 and pr.author.lower() == reviewer.lower())
+                    row.append(pr_count)
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Reviews Participated
+            writer.writerow(['Reviews Participated'])
+            writer.writerow(['Month'] + reviewers)
+            for month in months:
+                row = [month]
+                for reviewer in reviewers:
+                    metrics = filtered_metrics.get((month, reviewer), {})
+                    row.append(metrics.get('reviews_participated', 0))
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Reviews Approved
+            writer.writerow(['Reviews Approved'])
+            writer.writerow(['Month'] + reviewers)
+            for month in months:
+                row = [month]
+                for reviewer in reviewers:
+                    metrics = filtered_metrics.get((month, reviewer), {})
+                    row.append(metrics.get('reviews_approved', 0))
+                writer.writerow(row)
+            
+            writer.writerow([])
+            
+            # Comments Made
+            writer.writerow(['Comments Made'])
+            writer.writerow(['Month'] + reviewers)
+            for month in months:
+                row = [month]
+                for reviewer in reviewers:
+                    metrics = filtered_metrics.get((month, reviewer), {})
+                    row.append(metrics.get('comments_made', 0))
+                writer.writerow(row)
 
 class PRMetricsCollector:
     """Main class for collecting and processing PR metrics"""
@@ -360,7 +409,6 @@ class PRMetricsCollector:
         self.users = users
         self.metrics_writers = {
             'pr': PRMetricsWriter("pr_metrics.csv"),
-            'monthly': MonthlyMetricsWriter(),
             'review': ReviewMetricsWriter(users)
         }
         # Cache for PR creation times
@@ -526,9 +574,8 @@ class PRMetricsCollector:
                         monthly_metrics: dict,
                         review_metrics: dict) -> None:
         """Generate all metric reports"""
-        self.metrics_writers['pr'].write(pr_data)
-        self.metrics_writers['monthly'].write(monthly_metrics)
-        self.metrics_writers['review'].write(review_metrics)
+        self.metrics_writers['pr'].write(pr_data, monthly_metrics)
+        self.metrics_writers['review'].write(review_metrics, pr_data)
 
 def main():
     # Load environment variables
