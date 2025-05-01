@@ -45,11 +45,11 @@ python3 fetch_pr_metrics_with_args.py --repos 'org/repo1,org/repo2' \
 
 Arguments
 ---------
---repos:       Comma-separated list of GitHub repositories (org/repo format)
+--repos:       Comma-separated list of GitHub repos (e.g., 'org1/repo1,org2/repo2')
 --users:       Comma-separated list of GitHub usernames
---date_start:  Start date for PR analysis (YYYY-MM-DD)
---date_end:    End date for PR analysis (YYYY-MM-DD)
---output:      Optional: Name of the main output file (default: pr_metrics.csv)
+--date_start:  Start date in YYYY-MM-DD format
+--date_end:    End date in YYYY-MM-DD format
+--output:      Output CSV file name (default: pr_metrics.csv)
 
 Example
 -------
@@ -74,9 +74,17 @@ from statistics import median
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+def get_pr_reviews(pr_number, repo, headers):
+    """Fetch review data for a PR"""
+    reviews_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
+    try:
+        response = requests.get(reviews_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching reviews for PR {reviews_url}: {str(e)}")
+        return []
 
 def main():
     # Load environment variables
@@ -93,6 +101,7 @@ def main():
     args = parser.parse_args()
     REPOS = [r.strip() for r in args.repos.split(",")]
     USERS = [u.strip() for u in args.users.split(",")]
+    normalized_users = [u.strip().lower() for u in USERS]
     START_DATE = args.date_start
     END_DATE = args.date_end
     OUTPUT_FILE = args.output
@@ -128,6 +137,9 @@ def main():
     # Create output directory if it doesn't exist
     output_path = Path(OUTPUT_FILE)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Add review metrics tracking
+    monthly_review_metrics = {}
 
     # Process and write data
     try:
@@ -184,6 +196,31 @@ def main():
                                     hours_to_merge
                                 ]
                             })
+
+                            # Fetch review data
+                            pr_number = pr_data["number"]
+                            reviews = get_pr_reviews(pr_number, repo, API_HEADERS)
+                            
+                            # Process reviews
+                            for review in reviews:
+                                reviewer = review['user']['login']
+                                review_state = review['state']
+                                month = merged_at.strftime("%Y-%m")
+                                
+                                if reviewer.lower() in normalized_users:
+                                    key = (month, reviewer)
+                                    if key not in monthly_review_metrics:
+                                        monthly_review_metrics[key] = {
+                                            'reviews_participated': 0,
+                                            'reviews_approved': 0,
+                                            'comments_made': 0
+                                        }
+                                    
+                                    monthly_review_metrics[key]['reviews_participated'] += 1
+                                    if review_state == 'APPROVED':
+                                        monthly_review_metrics[key]['reviews_approved'] += 1
+                                    if review.get('body'):  # Count comments in reviews
+                                        monthly_review_metrics[key]['comments_made'] += 1
 
                     except requests.exceptions.RequestException as e:
                         logger.error(f"Error fetching data for {repo} and {author}: {str(e)}")
@@ -393,10 +430,43 @@ def main():
             except IOError as e:
                 logger.error(f"Error writing to monthly volume metrics file {volume_metrics_file}: {str(e)}")
 
+            # Write review metrics
+            review_metrics_file = "pr_review_monthly_metrics.csv"
+            review_metrics_path = Path(review_metrics_file)
+            try:
+                with open(review_metrics_file, mode='w', newline='', encoding='utf-8') as metrics_csv:
+                    metrics_writer = csv.writer(metrics_csv)
+                    metrics_writer.writerow([
+                        "Month",
+                        "Reviewer",
+                        "Reviews Participated",
+                        "Reviews Approved",
+                        "Comments Made"
+                    ])
+                    
+                    if monthly_review_metrics:
+                        for (month, reviewer) in sorted(monthly_review_metrics.keys()):
+                            metrics = monthly_review_metrics[(month, reviewer)]
+                            row = [
+                                month,
+                                reviewer,
+                                metrics['reviews_participated'],
+                                metrics['reviews_approved'],
+                                metrics['comments_made']
+                            ]
+                            metrics_writer.writerow(row)
+                        logger.info(f"✓ Successfully wrote monthly review metrics to: {review_metrics_path.absolute()}")
+                    else:
+                        logger.warning("No review data found to write to file")
+            finally:
+                # Close the file if it was opened
+                metrics_csv.close()
+                logger.info(f"✓ Successfully closed review metrics file: {review_metrics_path.absolute()}")
             logger.info(f"\nSummary:")
             logger.info(f"✓ Successfully wrote detailed data to: {output_path.absolute()}")
             logger.info(f"✓ Successfully wrote monthly metrics to: {metrics_path.absolute()}")
             logger.info(f"✓ Successfully wrote monthly author metrics to: {volume_metrics_path.absolute()}")
+            logger.info(f"✓ Successfully wrote review metrics to: {review_metrics_path.absolute()}")
             logger.info(f"✓ Total PRs processed: {total_prs}")
             logger.info(f"✓ Date range: {START_DATE} to {END_DATE}")
             logger.info(f"✓ Repositories processed: {len(REPOS)}")
