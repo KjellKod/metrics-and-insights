@@ -163,9 +163,106 @@ class PRMetricsWriter(MetricsWriter):
     def write(self, pr_data: List[PRData]) -> None:
         with open(self.output_file, mode='w', newline='', encoding='utf-8') as csv_file:
             writer = csv.writer(csv_file)
+            
+            # Get unique months and authors
+            months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
+            authors = sorted(set(pr.author for pr in pr_data))
+            
+            # Section 1: Monthly Overview
+            writer.writerow(['MONTHLY OVERVIEW'])
+            writer.writerow([
+                'Month',
+                'Total PRs',
+                'Total Lines Changed',
+                'Avg PR Size',
+                'Median Merge Time (hours)',
+                'PRs > 24h to Merge',
+                'PRs > 1000 Lines',
+                'Most Active Author',
+                'PRs by Most Active Author'
+            ])
+            
+            for month in months:
+                month_prs = [pr for pr in pr_data if pr.date.strftime("%Y-%m") == month]
+                total_prs = len(month_prs)
+                total_lines = sum(pr.additions + pr.deletions for pr in month_prs)
+                avg_size = total_lines / total_prs if total_prs else 0
+                median_merge = median(pr.hours_to_merge for pr in month_prs) if month_prs else 0
+                slow_prs = sum(1 for pr in month_prs if pr.hours_to_merge > 24)
+                large_prs = sum(1 for pr in month_prs if pr.additions + pr.deletions > 1000)
+                
+                # Find most active author
+                author_counts = {}
+                for pr in month_prs:
+                    author_counts[pr.author] = author_counts.get(pr.author, 0) + 1
+                most_active = max(author_counts.items(), key=lambda x: x[1]) if author_counts else ('N/A', 0)
+                
+                writer.writerow([
+                    month,
+                    total_prs,
+                    total_lines,
+                    round(avg_size, 2),
+                    round(median_merge, 2),
+                    slow_prs,
+                    large_prs,
+                    most_active[0],
+                    most_active[1]
+                ])
+            
+            # Add blank lines between sections
+            writer.writerow([])
+            writer.writerow([])
+            
+            # Section 2: Monthly Author Performance
+            writer.writerow(['MONTHLY AUTHOR PERFORMANCE'])
+            writer.writerow(['Month', 'Author'] + [
+                'PR Count',
+                'Lines Changed',
+                'Avg PR Size',
+                'Avg Merge Time',
+                'Median Merge Time',
+                'PRs > 24h',
+                'PRs > 1000 Lines'
+            ])
+            
+            for month in months:
+                for author in authors:
+                    author_month_prs = [pr for pr in pr_data 
+                                      if pr.date.strftime("%Y-%m") == month and pr.author == author]
+                    if not author_month_prs:
+                        continue
+                        
+                    total_prs = len(author_month_prs)
+                    total_lines = sum(pr.additions + pr.deletions for pr in author_month_prs)
+                    avg_size = total_lines / total_prs
+                    avg_merge = sum(pr.hours_to_merge for pr in author_month_prs) / total_prs
+                    median_merge = median(pr.hours_to_merge for pr in author_month_prs)
+                    slow_prs = sum(1 for pr in author_month_prs if pr.hours_to_merge > 24)
+                    large_prs = sum(1 for pr in author_month_prs if pr.additions + pr.deletions > 1000)
+                    
+                    writer.writerow([
+                        month,
+                        author,
+                        total_prs,
+                        total_lines,
+                        round(avg_size, 2),
+                        round(avg_merge, 2),
+                        round(median_merge, 2),
+                        slow_prs,
+                        large_prs
+                    ])
+            
+            # Add blank lines between sections
+            writer.writerow([])
+            writer.writerow([])
+            
+            # Section 3: Detailed PR Data
+            writer.writerow(['DETAILED PR DATA'])
             writer.writerow(self.headers)
             
-            for pr in sorted(pr_data, key=lambda x: x.date):
+            # Sort PRs by date (earliest first)
+            sorted_prs = sorted(pr_data, key=lambda x: x.date)
+            for pr in sorted_prs:
                 writer.writerow([
                     pr.date.date(),
                     pr.author,
