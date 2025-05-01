@@ -23,7 +23,15 @@ Output Files
    Monthly metrics broken down by author, including:
    - PR count per author
    - Median hours to merge
-   - Median lines added/removed
+   - Median lines added
+   - Median lines removed
+
+4. pr_review_monthly_metrics.csv:
+   Monthly review metrics showing:
+   - Reviews participated
+   - Reviews approved by person example: `is:pr is:merged merged:2025-01-01..2025-01-31 reviewed-by:<username>` in the github UI. 
+   - Comments made
+
 
 Requirements
 -----------
@@ -37,7 +45,7 @@ GITHUB_TOKEN_READONLY_WEB: GitHub Personal Access Token
 
 Usage
 -----
-python3 fetch_pr_metrics_with_args.py --repos 'org/repo1,org/repo2' \
+python3 fetch_pr_metrics_with_args.py --repos 'org/repo1,org2/repo2' \
                                     --users 'user1,user2' \
                                     --date_start '2023-01-01' \
                                     --date_end '2023-12-31' \
@@ -50,14 +58,6 @@ Arguments
 --date_start:  Start date in YYYY-MM-DD format
 --date_end:    End date in YYYY-MM-DD format
 --output:      Output CSV file name (default: pr_metrics.csv)
-
-Example
--------
-python3 fetch_pr_metrics_with_args.py \
-    --repos 'facebook/react,facebook/jest' \
-    --users 'user1,user2' \
-    --date_start '2023-01-01' \
-    --date_end '2023-12-31'
 """
 
 import os
@@ -75,16 +75,182 @@ from statistics import median
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def parse_datetime(date_str):
+    """Convert GitHub date string to datetime object"""
+    return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+
+def calculate_hours_between(start_date_str, end_date_str):
+    """Calculate hours between two datetime strings"""
+    start = parse_datetime(start_date_str)
+    end = parse_datetime(end_date_str)
+    return round((end - start).total_seconds() / 3600, 2)
+
 def get_pr_reviews(pr_number, repo, headers):
-    """Fetch review data for a PR"""
-    reviews_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
+    """Fetch both reviews and review comments for a PR"""
+    base_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    
     try:
-        response = requests.get(reviews_url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        # Get all reviews (includes APPROVED, CHANGES_REQUESTED, COMMENTED)
+        reviews_url = f"{base_url}/reviews"
+        reviews_response = requests.get(reviews_url, headers=headers)
+        reviews_response.raise_for_status()
+        reviews = reviews_response.json()
+
+        # Get all review comments
+        comments_url = f"{base_url}/comments"
+        comments_response = requests.get(comments_url, headers=headers)
+        comments_response.raise_for_status()
+        review_comments = comments_response.json()
+
+        # Get issue comments (these can also be review-related)
+        issue_comments_url = f"{base_url.replace('/pulls/', '/issues/')}/comments"
+        issue_comments_response = requests.get(issue_comments_url, headers=headers)
+        issue_comments_response.raise_for_status()
+        issue_comments = issue_comments_response.json()
+
+        return {
+            'reviews': reviews,
+            'review_comments': review_comments,
+            'issue_comments': issue_comments
+        }
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching reviews for PR {reviews_url}: {str(e)}")
-        return []
+        logger.error(f"Error fetching reviews/comments for PR {pr_number} in {repo}: {str(e)}")
+        return {'reviews': [], 'review_comments': [], 'issue_comments': []}
+
+def process_pr_reviews(pr_number, repo, month, normalized_users, monthly_review_metrics, api_headers):
+    """Process all review activity for a PR"""
+    review_data = get_pr_reviews(pr_number, repo, api_headers)
+    
+    # Track unique reviewers for this PR
+    pr_reviewers = set()
+    
+    # Process formal reviews
+    for review in review_data['reviews']:
+        reviewer = review['user']['login']
+        if reviewer.lower() in normalized_users:
+            pr_reviewers.add(reviewer)
+            key = (month, reviewer)
+            monthly_review_metrics.setdefault(key, {
+                'reviews_participated': 0,
+                'reviews_approved': 0,
+                'comments_made': 0
+            })
+            
+            if review['state'] == 'APPROVED':
+                monthly_review_metrics[key]['reviews_approved'] += 1
+            if review.get('body'):
+                monthly_review_metrics[key]['comments_made'] += 1
+
+    # Process review comments (inline comments)
+    for comment in review_data['review_comments']:
+        reviewer = comment['user']['login']
+        if reviewer.lower() in normalized_users:
+            pr_reviewers.add(reviewer)
+            key = (month, reviewer)
+            monthly_review_metrics.setdefault(key, {
+                'reviews_participated': 0,
+                'reviews_approved': 0,
+                'comments_made': 0
+            })
+            monthly_review_metrics[key]['comments_made'] += 1
+
+    # Process issue comments
+    for comment in review_data['issue_comments']:
+        reviewer = comment['user']['login']
+        if reviewer.lower() in normalized_users:
+            pr_reviewers.add(reviewer)
+            key = (month, reviewer)
+            monthly_review_metrics.setdefault(key, {
+                'reviews_participated': 0,
+                'reviews_approved': 0,
+                'comments_made': 0
+            })
+            monthly_review_metrics[key]['comments_made'] += 1
+
+    # Count unique PR participation
+    for reviewer in pr_reviewers:
+        key = (month, reviewer)
+        monthly_review_metrics[key]['reviews_participated'] += 1
+
+    return monthly_review_metrics
+
+def write_monthly_volume_metrics(monthly_author_metrics, filename="pr_volume_monthly_metrics.csv"):
+    """
+    Write monthly volume metrics by author to CSV file.
+    
+    Args:
+        monthly_author_metrics (dict): Dictionary containing metrics data
+        filename (str): Output filename for the CSV
+    """
+    volume_metrics_path = Path(filename)
+    try:
+        with open(filename, mode='w', newline='', encoding='utf-8') as metrics_csv:
+            metrics_writer = csv.writer(metrics_csv)
+            metrics_writer.writerow([
+                "Month",
+                "Author",
+                "PR Count",
+                "Median Hours to Merge",
+                "Median Lines Added",
+                "Median Lines Removed"
+            ])
+            
+            for (month, author) in sorted(monthly_author_metrics.keys()):
+                metrics = monthly_author_metrics[(month, author)]
+                row = [
+                    month,
+                    author,
+                    metrics['pr_count'],
+                    round(median(metrics['hours_to_merge']), 2),
+                    round(median(metrics['lines_added']), 2),
+                    round(median(metrics['lines_removed']), 2)
+                ]
+                metrics_writer.writerow(row)
+        
+        logger.info(f"✓ Successfully wrote monthly volume metrics by author to: {volume_metrics_path.absolute()}")
+        return volume_metrics_path
+    except IOError as e:
+        logger.error(f"Error writing to monthly volume metrics file {filename}: {str(e)}")
+        return None
+
+def write_monthly_merge_times(sorted_pr_data, filename="pr_merge_times_monthly.csv"):
+    """
+    Write monthly merge time metrics to CSV file.
+    
+    Args:
+        sorted_pr_data (list): List of PR data entries
+        filename (str): Output filename for the CSV
+    """
+    # Calculate median merge times per month
+    median_merge_times = {}
+    for pr_entry in sorted_pr_data:
+        date = pr_entry['row'][0]
+        month = date.strftime("%Y-%m")
+        hours_to_merge = pr_entry['row'][7]  # Hours to merge is the last column
+        
+        if month not in median_merge_times:
+            median_merge_times[month] = []
+        median_merge_times[month].append(hours_to_merge)
+
+    # Write median merge times to CSV
+    merge_time_path = Path(filename)
+    try:
+        with open(filename, mode='w', newline='', encoding='utf-8') as merge_csv:
+            merge_writer = csv.writer(merge_csv)
+            
+            # Write headers
+            merge_writer.writerow(["Month", "Median Hours to Merge", "Number of PRs"])
+            
+            # Calculate and write median for each month
+            for month in sorted(median_merge_times.keys()):
+                monthly_hours = median_merge_times[month]
+                monthly_median = round(median(monthly_hours), 2)
+                monthly_pr_count = len(monthly_hours)
+                merge_writer.writerow([month, monthly_median, monthly_pr_count])
+        
+        logger.info(f"✓ Successfully wrote monthly merge time data to: {merge_time_path.absolute()}")
+    except IOError as e:
+        logger.error(f"Error writing to monthly merge time file {filename}: {str(e)}")
 
 def main():
     # Load environment variables
@@ -155,81 +321,113 @@ def main():
                 for author in USERS:
                     logger.info(f"Fetching PRs for {author} in {repo}")
                     
-                    SEARCH_URL = f"{GITHUB_API}/search/issues"
-                    query = f"repo:{repo} is:pr is:merged author:{author} merged:{START_DATE}..{END_DATE}"
-                    params = {
-                        "q": query,
-                        "per_page": 100,
-                        "page": 1
-                    }
+                    # Instead of just searching for authored PRs, also search for reviewed PRs
+                    for search_type in ['author', 'reviewed-by']:
+                        SEARCH_URL = f"{GITHUB_API}/search/issues"
+                        query = f"repo:{repo} is:pr is:merged {search_type}:{author} merged:{START_DATE}..{END_DATE}"
+                        params = {
+                            "q": query,
+                            "per_page": 100,
+                            "page": 1
+                        }
 
-                    try:
-                        response = requests.get(SEARCH_URL, headers=API_HEADERS, params=params)
-                        response.raise_for_status()
-                        data = response.json()
-                        
-                        pr_count = data.get("total_count", 0)
-                        total_prs += pr_count
-                        logger.info(f"Found {pr_count} PRs for {author} in {repo}")
-
-                        for pr in data.get("items", []):
-                            pr_url = pr["pull_request"]["url"]
-                            pr_response = requests.get(pr_url, headers=API_HEADERS)
-                            pr_response.raise_for_status()
-                            pr_data = pr_response.json()
-
-                            created_at = datetime.fromisoformat(pr_data["created_at"].replace("Z", "+00:00"))
-                            merged_at = datetime.fromisoformat(pr_data["merged_at"].replace("Z", "+00:00"))
-                            hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
-
-                            # Store data in list instead of writing immediately
-                            all_pr_data.append({
-                                'date': merged_at.date(),
-                                'row': [
-                                    merged_at.date(),
-                                    pr_data["user"]["login"],
-                                    repo,
-                                    pr_data["number"],
-                                    pr_data["additions"],
-                                    pr_data["deletions"],
-                                    pr_data["changed_files"],
-                                    hours_to_merge
-                                ]
-                            })
-
-                            # Fetch review data
-                            pr_number = pr_data["number"]
-                            reviews = get_pr_reviews(pr_number, repo, API_HEADERS)
+                        try:
+                            response = requests.get(SEARCH_URL, headers=API_HEADERS, params=params)
+                            response.raise_for_status()
+                            data = response.json()
                             
-                            # Process reviews
-                            for review in reviews:
-                                reviewer = review['user']['login']
-                                review_state = review['state']
+                            pr_count = data.get("total_count", 0)
+                            total_prs += pr_count
+                            logger.info(f"Found {pr_count} PRs for {author} in {repo}")
+
+                            for pr in data.get("items", []):
+                                pr_url = pr["pull_request"]["url"]
+                                pr_response = requests.get(pr_url, headers=API_HEADERS)
+                                pr_response.raise_for_status()
+                                pr_data = pr_response.json()
+
+                                created_at = datetime.fromisoformat(pr_data["created_at"].replace("Z", "+00:00"))
+                                merged_at = datetime.fromisoformat(pr_data["merged_at"].replace("Z", "+00:00"))
+                                hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
+
+                                # Store data in list instead of writing immediately
+                                all_pr_data.append({
+                                    'date': merged_at.date(),
+                                    'row': [
+                                        merged_at.date(),
+                                        pr_data["user"]["login"],
+                                        repo,
+                                        pr_data["number"],
+                                        pr_data["additions"],
+                                        pr_data["deletions"],
+                                        pr_data["changed_files"],
+                                        hours_to_merge
+                                    ]
+                                })
+
+                                # Fetch review data
+                                pr_number = pr_data["number"]
+                                merged_at = parse_datetime(pr_data["merged_at"])
                                 month = merged_at.strftime("%Y-%m")
                                 
-                                if reviewer.lower() in normalized_users:
-                                    key = (month, reviewer)
-                                    if key not in monthly_review_metrics:
-                                        monthly_review_metrics[key] = {
-                                            'reviews_participated': 0,
-                                            'reviews_approved': 0,
-                                            'comments_made': 0
-                                        }
-                                    
-                                    monthly_review_metrics[key]['reviews_participated'] += 1
-                                    if review_state == 'APPROVED':
-                                        monthly_review_metrics[key]['reviews_approved'] += 1
-                                    if review.get('body'):  # Count comments in reviews
-                                        monthly_review_metrics[key]['comments_made'] += 1
-
-                    except requests.exceptions.RequestException as e:
-                        logger.error(f"Error fetching data for {repo} and {author}: {str(e)}")
-                        continue
+                                # Process reviews for this PR
+                                monthly_review_metrics = process_pr_reviews(
+                                    pr_number,
+                                    repo,
+                                    month,
+                                    normalized_users,
+                                    monthly_review_metrics,
+                                    API_HEADERS
+                                )
+                            
+                        except requests.exceptions.RequestException as e:
+                            logger.error(f"Error fetching data for {repo} and {author}: {str(e)}")
+                            continue
 
             # Sort all PR data by date and write to file
             sorted_pr_data = sorted(all_pr_data, key=lambda x: x['date'])
             for pr_entry in sorted_pr_data:
                 print_and_write_row(pr_entry['row'], writer)
+
+            # Initialize data structures for metrics
+            monthly_author_metrics = {}
+            monthly_metrics = {}
+            
+            # Process all PR data for metrics
+            for pr_entry in sorted_pr_data:
+                date = pr_entry['row'][0]
+                author = pr_entry['row'][1]
+                month = date.strftime("%Y-%m")
+                
+                # Initialize metrics for this month/author if not exists
+                key = (month, author)
+                if key not in monthly_author_metrics:
+                    monthly_author_metrics[key] = {
+                        'pr_count': 0,
+                        'hours_to_merge': [],
+                        'lines_added': [],
+                        'lines_removed': []
+                    }
+                
+                # Update metrics
+                monthly_author_metrics[key]['pr_count'] += 1
+                monthly_author_metrics[key]['hours_to_merge'].append(pr_entry['row'][7])
+                monthly_author_metrics[key]['lines_added'].append(pr_entry['row'][4])
+                monthly_author_metrics[key]['lines_removed'].append(pr_entry['row'][5])
+
+                # Initialize and update monthly metrics
+                if month not in monthly_metrics:
+                    monthly_metrics[month] = {
+                        'hours_to_merge': [],
+                        'lines_added': [],
+                        'lines_removed': [],
+                        'total_changes': []
+                    }
+                
+                monthly_metrics[month]['hours_to_merge'].append(pr_entry['row'][7])
+                monthly_metrics[month]['lines_added'].append(pr_entry['row'][4])
+                monthly_metrics[month]['lines_removed'].append(pr_entry['row'][5])
+                monthly_metrics[month]['total_changes'].append(pr_entry['row'][4] + pr_entry['row'][5])
 
             # Create monthly PR volume aggregation
             monthly_data = {}
@@ -292,151 +490,20 @@ def main():
                 logger.error(f"Error writing to monthly PR volume file {volume_file}: {str(e)}")
 
             # Create monthly median time to merge data
-            median_merge_times = {}
-            for pr_entry in sorted_pr_data:
-                date = pr_entry['row'][0]
-                month = date.strftime("%Y-%m")
-                hours_to_merge = pr_entry['row'][7]  # Hours to merge is the last column
-                
-                if month not in median_merge_times:
-                    median_merge_times[month] = []
-                median_merge_times[month].append(hours_to_merge)
+            write_monthly_merge_times(sorted_pr_data, filename="pr_merge_times_monthly.csv")
 
-            # Write median merge times to CSV
-            merge_time_file = "pr_merge_times_monthly.csv"
-            merge_time_path = Path(merge_time_file)
-            try:
-                with open(merge_time_file, mode='w', newline='', encoding='utf-8') as merge_csv:
-                    merge_writer = csv.writer(merge_csv)
-                    
-                    # Write headers
-                    merge_writer.writerow(["Month", "Median Hours to Merge", "Number of PRs"])
-                    
-                    # Calculate and write median for each month
-                    for month in sorted(median_merge_times.keys()):
-                        monthly_hours = median_merge_times[month]
-                        monthly_median = round(median(monthly_hours), 2)
-                        monthly_pr_count = len(monthly_hours)
-                        merge_writer.writerow([month, monthly_median, monthly_pr_count])
-                
-                logger.info(f"✓ Successfully wrote monthly merge time data to: {merge_time_path.absolute()}")
-            except IOError as e:
-                logger.error(f"Error writing to monthly merge time file {merge_time_file}: {str(e)}")
-
-            # Create monthly metrics by author
-            monthly_author_metrics = {}
-            # Create overall monthly metrics
-            monthly_metrics = {}
-            
-            for pr_entry in sorted_pr_data:
-                date = pr_entry['row'][0]
-                author = pr_entry['row'][1]
-                month = date.strftime("%Y-%m")
-                
-                # For author-specific metrics
-                key = (month, author)
-                metrics = {
-                    'hours_to_merge': pr_entry['row'][7],
-                    'lines_added': pr_entry['row'][4],
-                    'lines_removed': pr_entry['row'][5],
-                    'total_changes': pr_entry['row'][4] + pr_entry['row'][5]
-                }
-                
-                # Author metrics
-                if key not in monthly_author_metrics:
-                    monthly_author_metrics[key] = {
-                        'pr_count': 0,
-                        'hours_to_merge': [],
-                        'lines_added': [],
-                        'lines_removed': []
-                    }
-                
-                monthly_author_metrics[key]['pr_count'] += 1
-                for metric_name, value in metrics.items():
-                    if metric_name != 'total_changes':  # Don't store total_changes in author metrics
-                        monthly_author_metrics[key][metric_name].append(value)
-
-                # Overall monthly metrics
-                if month not in monthly_metrics:
-                    monthly_metrics[month] = {
-                        'hours_to_merge': [],
-                        'lines_added': [],
-                        'lines_removed': [],
-                        'total_changes': []
-                    }
-                
-                for metric_name, value in metrics.items():
-                    monthly_metrics[month][metric_name].append(value)
-
-            # Write overall monthly metrics
-            metrics_file = "pr_monthly_metrics.csv"
-            metrics_path = Path(metrics_file)
-            try:
-                with open(metrics_file, mode='w', newline='', encoding='utf-8') as metrics_csv:
-                    metrics_writer = csv.writer(metrics_csv)
-                    metrics_writer.writerow([
-                        "Month",
-                        "PR Count",
-                        "Median Hours to Merge",
-                        "Median Lines Added",
-                        "Median Lines Removed",
-                        "Median Total Changes"
-                    ])
-                    
-                    for month in sorted(monthly_metrics.keys()):
-                        metrics = monthly_metrics[month]
-                        row = [
-                            month,
-                            len(metrics['hours_to_merge']),
-                            round(median(metrics['hours_to_merge']), 2),
-                            round(median(metrics['lines_added']), 2),
-                            round(median(metrics['lines_removed']), 2),
-                            round(median(metrics['total_changes']), 2)
-                        ]
-                        metrics_writer.writerow(row)
-                
-                logger.info(f"✓ Successfully wrote monthly metrics data to: {metrics_path.absolute()}")
-            except IOError as e:
-                logger.error(f"Error writing to monthly metrics file {metrics_file}: {str(e)}")
-
-            # Write monthly metrics by author
-            volume_metrics_file = "pr_volume_monthly_metrics.csv"
-            volume_metrics_path = Path(volume_metrics_file)
-            try:
-                with open(volume_metrics_file, mode='w', newline='', encoding='utf-8') as metrics_csv:
-                    metrics_writer = csv.writer(metrics_csv)
-                    metrics_writer.writerow([
-                        "Month",
-                        "Author",
-                        "PR Count",
-                        "Median Hours to Merge",
-                        "Median Lines Added",
-                        "Median Lines Removed"
-                    ])
-                    
-                    for (month, author) in sorted(monthly_author_metrics.keys()):
-                        metrics = monthly_author_metrics[(month, author)]
-                        row = [
-                            month,
-                            author,
-                            metrics['pr_count'],
-                            round(median(metrics['hours_to_merge']), 2),
-                            round(median(metrics['lines_added']), 2),
-                            round(median(metrics['lines_removed']), 2)
-                        ]
-                        metrics_writer.writerow(row)
-                
-                logger.info(f"✓ Successfully wrote monthly volume metrics by author to: {volume_metrics_path.absolute()}")
-            except IOError as e:
-                logger.error(f"Error writing to monthly volume metrics file {volume_metrics_file}: {str(e)}")
+            # Create monthly metrics by author and capture the path
+            volume_metrics_path = write_monthly_volume_metrics(monthly_author_metrics, filename="pr_volume_monthly_metrics.csv")
 
             # Write review metrics
             review_metrics_file = "pr_review_monthly_metrics.csv"
             review_metrics_path = Path(review_metrics_file)
             try:
                 with open(review_metrics_file, mode='w', newline='', encoding='utf-8') as metrics_csv:
-                    metrics_writer = csv.writer(metrics_csv)
-                    metrics_writer.writerow([
+                    writer = csv.writer(metrics_csv)
+                    
+                    # First format: Detailed rows
+                    writer.writerow([
                         "Month",
                         "Reviewer",
                         "Reviews Participated",
@@ -444,33 +511,82 @@ def main():
                         "Comments Made"
                     ])
                     
-                    if monthly_review_metrics:
-                        for (month, reviewer) in sorted(monthly_review_metrics.keys()):
-                            metrics = monthly_review_metrics[(month, reviewer)]
-                            row = [
-                                month,
-                                reviewer,
-                                metrics['reviews_participated'],
-                                metrics['reviews_approved'],
-                                metrics['comments_made']
-                            ]
-                            metrics_writer.writerow(row)
-                        logger.info(f"✓ Successfully wrote monthly review metrics to: {review_metrics_path.absolute()}")
-                    else:
-                        logger.warning("No review data found to write to file")
-            finally:
-                # Close the file if it was opened
-                metrics_csv.close()
-                logger.info(f"✓ Successfully closed review metrics file: {review_metrics_path.absolute()}")
-            logger.info(f"\nSummary:")
-            logger.info(f"✓ Successfully wrote detailed data to: {output_path.absolute()}")
-            logger.info(f"✓ Successfully wrote monthly metrics to: {metrics_path.absolute()}")
-            logger.info(f"✓ Successfully wrote monthly author metrics to: {volume_metrics_path.absolute()}")
-            logger.info(f"✓ Successfully wrote review metrics to: {review_metrics_path.absolute()}")
-            logger.info(f"✓ Total PRs processed: {total_prs}")
-            logger.info(f"✓ Date range: {START_DATE} to {END_DATE}")
-            logger.info(f"✓ Repositories processed: {len(REPOS)}")
-            logger.info(f"✓ Users analyzed: {len(USERS)}")
+                    for (month, reviewer) in sorted(monthly_review_metrics.keys()):
+                        metrics = monthly_review_metrics[(month, reviewer)]
+                        row = [
+                            month,
+                            reviewer,
+                            metrics['reviews_participated'],
+                            metrics['reviews_approved'],
+                            metrics['comments_made']
+                        ]
+                        writer.writerow(row)
+
+                    # Add blank lines between formats
+                    writer.writerow([])
+                    writer.writerow([])
+
+                    # Get unique months and reviewers
+                    months = sorted(set(month for month, _ in monthly_review_metrics.keys()))
+                    reviewers = sorted(set(reviewer for _, reviewer in monthly_review_metrics.keys()))
+
+                    # Write pivoted format for each metric
+                    metrics_to_pivot = [
+                        ('Reviews Participated', 'reviews_participated'),
+                        ('Reviews Approved', 'reviews_approved'),
+                        ('Comments Made', 'comments_made')
+                    ]
+
+                    for title, metric_key in metrics_to_pivot:
+                        # Write metric title
+                        writer.writerow([title])
+                        
+                        # Write header with reviewers
+                        writer.writerow(['Month'] + reviewers)
+                        
+                        # Write data rows
+                        for month in months:
+                            row = [month]
+                            for reviewer in reviewers:
+                                value = monthly_review_metrics.get((month, reviewer), {}).get(metric_key, 0)
+                                row.append(value)
+                            writer.writerow(row)
+                        
+                        # Add blank line between metrics
+                        writer.writerow([])
+
+                logger.info(f"✓ Successfully wrote review metrics to: {review_metrics_path.absolute()}")
+            except IOError as e:
+                logger.error(f"Error writing to review metrics file {review_metrics_file}: {str(e)}")
+
+            try:
+                logger.info("\nSummary:")
+                
+                # Log output files if they exist
+                if output_path.exists():
+                    logger.info(f"✓ Successfully wrote detailed data to: {output_path.absolute()}")
+                
+                metrics_file = Path("pr_monthly_metrics.csv")
+                if metrics_file.exists():
+                    logger.info(f"✓ Successfully wrote monthly metrics to: {metrics_file.absolute()}")
+                
+                volume_metrics_file = Path("pr_volume_monthly_metrics.csv")
+                if volume_metrics_file.exists():
+                    logger.info(f"✓ Successfully wrote monthly author metrics to: {volume_metrics_file.absolute()}")
+                
+                review_metrics_file = Path("pr_review_monthly_metrics.csv")
+                if review_metrics_file.exists():
+                    logger.info(f"✓ Successfully wrote review metrics to: {review_metrics_file.absolute()}")
+                
+                # Log summary statistics
+                logger.info(f"✓ Total PRs processed: {total_prs}")
+                logger.info(f"✓ Date range: {START_DATE} to {END_DATE}")
+                logger.info(f"✓ Repositories processed: {len(REPOS)}")
+                logger.info(f"✓ Users analyzed: {len(USERS)}")
+                
+            except Exception as e:
+                logger.error(f"Error during summary logging: {str(e)}")
+                sys.exit(1)
 
     except IOError as e:
         logger.error(f"Error writing to file {OUTPUT_FILE}: {str(e)}")
