@@ -59,27 +59,32 @@ Arguments
 --output:      Output CSV file name (default: pr_metrics.csv)
 """
 
+# Standard library imports
+import argparse
+import csv
+import logging
 import os
 import sys
-import argparse
-import requests
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime
-import csv
-from dotenv import load_dotenv
-import logging
 from pathlib import Path
 from statistics import median
-from dataclasses import dataclass
 from typing import Dict, List, Set, Tuple, Optional
-from abc import ABC, abstractmethod
+
+# Third-party imports
+import requests
+from dotenv import load_dotenv
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class PRData:
     """Data class to hold PR information"""
+
     date: datetime
     author: str
     repo: str
@@ -89,31 +94,57 @@ class PRData:
     changed_files: int
     hours_to_merge: float
 
+
+@dataclass
+class MonthlyMetrics:
+    """Data class to hold monthly metrics for an author"""
+
+    month: str
+    hours_to_merge: List[float]
+    lines_added: List[int]
+    lines_removed: List[int]
+    total_changes: List[int]
+    reviews_participated: int = 0
+    review_response_times: List[float] = field(default_factory=list)
+
+
+@dataclass
+class ReviewMetrics:
+    """Data class to hold review metrics for an author"""
+
+    reviews_participated: int = 0
+    reviews_approved: int = 0
+    comments_made: int = 0
+    review_response_times: List[float] = field(default_factory=list)
+
+
 class GitHubAPI:
     """Handles all GitHub API interactions"""
+
     def __init__(self, token: str):
         self.base_url = "https://api.github.com"
-        self.headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json"
-        }
+        self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
 
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
         """Fetch PRs for a given repo and author"""
+        logger.info(f"Fetching PRs for {author} in {repo}")
         search_url = f"{self.base_url}/search/issues"
         query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
         params = {"q": query, "per_page": 100, "page": 1}
-        
+
         try:
             response = requests.get(search_url, headers=self.headers, params=params)
             response.raise_for_status()
-            return response.json().get("items", [])
+            prs = response.json().get("items", [])
+            logger.info(f"Found {len(prs)} PRs for {author} in {repo}")
+            return prs
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching PRs for {author} in {repo}: {str(e)}")
             return []
 
     def get_pr_details(self, repo: str, pr_number: int) -> Optional[dict]:
         """Fetch detailed PR information"""
+        logger.debug(f"Fetching details for PR #{pr_number} in {repo}")
         pr_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         try:
             response = requests.get(pr_url, headers=self.headers)
@@ -125,292 +156,217 @@ class GitHubAPI:
 
     def get_pr_reviews(self, repo: str, pr_number: int) -> dict:
         """Fetch all review-related data for a PR"""
+        logger.debug(f"Fetching reviews for PR #{pr_number} in {repo}")
         base_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
-        
+
         try:
             reviews = requests.get(f"{base_url}/reviews", headers=self.headers).json()
             comments = requests.get(f"{base_url}/comments", headers=self.headers).json()
             issue_comments = requests.get(
-                f"{base_url.replace('/pulls/', '/issues/')}/comments",
-                headers=self.headers
+                f"{base_url.replace('/pulls/', '/issues/')}/comments", headers=self.headers
             ).json()
-            
-            return {
-                'reviews': reviews,
-                'review_comments': comments,
-                'issue_comments': issue_comments
-            }
+
+            return {"reviews": reviews, "review_comments": comments, "issue_comments": issue_comments}
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviews for PR {pr_number} in {repo}: {str(e)}")
-            return {'reviews': [], 'review_comments': [], 'issue_comments': []}
+            return {"reviews": [], "review_comments": [], "issue_comments": []}
+
 
 class MetricsWriter(ABC):
     """Abstract base class for metrics writers"""
+
     @abstractmethod
     def write(self, data: dict) -> None:
         pass
 
+
 class PRMetricsWriter(MetricsWriter):
     """Handles writing PR metrics to CSV"""
+
     def __init__(self, output_file: str):
         self.output_file = output_file
         self.headers = [
-            "Date", "Author", "Repository", "PR Number",
-            "Lines added", "Lines removed", "Files Changed",
-            "Hours to Merge"
+            "Date",
+            "Author",
+            "Repository",
+            "PR Number",
+            "Lines added",
+            "Lines removed",
+            "Files Changed",
+            "Hours to Merge",
         ]
 
-    def write(self, pr_data: List[PRData], monthly_metrics: dict) -> None:
-        with open(self.output_file, mode='w', newline='', encoding='utf-8') as csv_file:
+    def _write_metric_section(
+        self, writer: csv.writer, title: str, months: List[str], authors: List[str], get_value: callable
+    ) -> None:
+        """Helper method to write a metric section with consistent formatting"""
+        writer.writerow([title])
+        writer.writerow(["Month"] + authors)
+        for month in months:
+            row = [month]
+            for author in authors:
+                row.append(get_value(month, author))
+            writer.writerow(row)
+        writer.writerow([])
+
+    def write(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
+        with open(self.output_file, mode="w", newline="", encoding="utf-8") as csv_file:
             writer = csv.writer(csv_file)
-            
+
             # Get unique months and authors
             months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
             authors = sorted(set(pr.author for pr in pr_data))
-            
-            # PR Count
-            writer.writerow(['PR Count'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    count = sum(1 for pr in pr_data 
-                              if pr.date.strftime("%Y-%m") == month and pr.author == author)
-                    row.append(count)
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Median Hours to Merge
-            writer.writerow(['Median Hours to Merge'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    prs = [pr for pr in pr_data 
-                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    median_time = median(pr.hours_to_merge for pr in prs) if prs else 0
-                    row.append(round(median_time, 2))
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Median Lines Added
-            writer.writerow(['Median Lines Added'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    prs = [pr for pr in pr_data 
-                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    median_lines = median(pr.additions for pr in prs) if prs else 0
-                    row.append(median_lines)
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Median Lines Removed
-            writer.writerow(['Median Lines Removed'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    prs = [pr for pr in pr_data 
-                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    median_lines = median(pr.deletions for pr in prs) if prs else 0
-                    row.append(median_lines)
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Median Files Changed
-            writer.writerow(['Median Files Changed'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    prs = [pr for pr in pr_data 
-                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    median_files = median(pr.changed_files for pr in prs) if prs else 0
-                    row.append(median_files)
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Average Hours to Merge
-            writer.writerow(['Average Hours to Merge'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    prs = [pr for pr in pr_data 
-                          if pr.date.strftime("%Y-%m") == month and pr.author == author]
-                    avg_time = sum(pr.hours_to_merge for pr in prs) / len(prs) if prs else 0
-                    row.append(round(avg_time, 2))
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Average Review Response Time
-            writer.writerow(['Average Review Response Time (hours)'])
-            writer.writerow(['Month'] + authors)
-            for month in months:
-                row = [month]
-                for author in authors:
-                    metrics = monthly_metrics.get((month, author), {})
-                    response_times = metrics.get('review_response_times', [])
-                    avg_time = sum(response_times) / len(response_times) if response_times else 0
-                    row.append(round(avg_time, 2))
-                writer.writerow(row)
-            
+
+            # Write all metric sections
+            self._write_metric_section(
+                writer,
+                "PR Count",
+                months,
+                authors,
+                lambda m, a: sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Reviews Participated",
+                months,
+                authors,
+                lambda m, a: getattr(review_metrics.get((m, a)), "reviews_participated", 0),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Reviews Approved",
+                months,
+                authors,
+                lambda m, a: getattr(review_metrics.get((m, a)), "reviews_approved", 0),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Comments Made",
+                months,
+                authors,
+                lambda m, a: getattr(review_metrics.get((m, a)), "comments_made", 0),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Hours to Merge",
+                months,
+                authors,
+                lambda m, a: (
+                    round(
+                        median(
+                            pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a
+                        ),
+                        2,
+                    )
+                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Lines Added",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.additions for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
+                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Lines Removed",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.deletions for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
+                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Files Changed",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.changed_files for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
+                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Average Hours to Merge",
+                months,
+                authors,
+                lambda m, a: (
+                    round(
+                        sum(pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
+                        / sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a),
+                        2,
+                    )
+                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Average Review Response Time (hours)",
+                months,
+                authors,
+                lambda m, a: (
+                    round(
+                        sum(getattr(review_metrics.get((m, a)), "review_response_times", []))
+                        / len(getattr(review_metrics.get((m, a)), "review_response_times", [])),
+                        2,
+                    )
+                    if getattr(review_metrics.get((m, a)), "review_response_times", [])
+                    else 0
+                ),
+            )
+
             # Add blank lines before detailed data
             writer.writerow([])
             writer.writerow([])
-            
+
             # Detailed PR Data
-            writer.writerow(['DETAILED PR DATA'])
+            writer.writerow(["DETAILED PR DATA"])
             writer.writerow(self.headers)
-            
+
             # Sort PRs by date (earliest first)
             sorted_prs = sorted(pr_data, key=lambda x: x.date)
             for pr in sorted_prs:
-                writer.writerow([
-                    pr.date.date(),
-                    pr.author,
-                    pr.repo,
-                    pr.number,
-                    pr.additions,
-                    pr.deletions,
-                    pr.changed_files,
-                    pr.hours_to_merge
-                ])
+                writer.writerow(
+                    [
+                        pr.date.date(),
+                        pr.author,
+                        pr.repo,
+                        pr.number,
+                        pr.additions,
+                        pr.deletions,
+                        pr.changed_files,
+                        pr.hours_to_merge,
+                    ]
+                )
 
-class MonthlyMetricsWriter(MetricsWriter):
-    """Handles writing monthly metrics to CSV with individual author insights"""
-    def write(self, monthly_metrics: dict) -> None:
-        with open("pr_monthly_metrics.csv", mode='w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            
-            # Write headers for individual author metrics
-            writer.writerow([
-                "Month",
-                "Author",
-                "PR Count",
-                "Median Hours to Merge",
-                "Median Lines Added",
-                "Median Lines Removed",
-                "Median Total Changes",
-                "Review Participation Rate",  # New metric
-                "Average Review Response Time"  # New metric
-            ])
-            
-            # Process metrics by author and month
-            for (month, author) in sorted(monthly_metrics.keys()):
-                metrics = monthly_metrics[(month, author)]
-                pr_count = len(metrics['hours_to_merge'])
-                
-                # Calculate review participation rate
-                total_prs_in_month = sum(len(m['hours_to_merge']) 
-                                       for m in monthly_metrics.values() 
-                                       if m.get('month') == month)
-                review_participation = (metrics.get('reviews_participated', 0) / total_prs_in_month 
-                                     if total_prs_in_month > 0 else 0)
-                
-                # Calculate average review response time
-                avg_review_time = (sum(metrics.get('review_response_times', [])) / 
-                                 len(metrics.get('review_response_times', [])) 
-                                 if metrics.get('review_response_times') else 0)
-                
-                writer.writerow([
-                    month,
-                    author,
-                    pr_count,
-                    round(median(metrics['hours_to_merge']), 2),
-                    round(median(metrics['lines_added']), 2),
-                    round(median(metrics['lines_removed']), 2),
-                    round(median(metrics['total_changes']), 2),
-                    f"{review_participation:.2%}",
-                    f"{avg_review_time:.2f} hours"
-                ])
-
-class ReviewMetricsWriter(MetricsWriter):
-    """Handles writing review metrics to CSV"""
-    def __init__(self, users: List[str]):
-        self.users = [u.lower() for u in users]  # Store normalized usernames
-
-    def write(self, review_metrics: dict, pr_data: List[PRData]) -> None:
-        with open("pr_review_monthly_metrics.csv", mode='w', newline='', encoding='utf-8') as csv_file:
-            writer = csv.writer(csv_file)
-            
-            # Filter metrics to only include specified users
-            filtered_metrics = {
-                (month, reviewer): metrics
-                for (month, reviewer), metrics in review_metrics.items()
-                if reviewer.lower() in self.users
-            }
-            
-            # Get unique months and reviewers
-            months = sorted(set(month for month, _ in filtered_metrics.keys()))
-            reviewers = sorted(set(reviewer for _, reviewer in filtered_metrics.keys()))
-            
-            # PRs Authored
-            writer.writerow(['PRs Authored'])
-            writer.writerow(['Month'] + reviewers)
-            for month in months:
-                row = [month]
-                for reviewer in reviewers:
-                    # Count PRs authored by this reviewer in this month
-                    pr_count = sum(1 for pr in pr_data 
-                                 if pr.date.strftime("%Y-%m") == month 
-                                 and pr.author.lower() == reviewer.lower())
-                    row.append(pr_count)
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Reviews Participated
-            writer.writerow(['Reviews Participated'])
-            writer.writerow(['Month'] + reviewers)
-            for month in months:
-                row = [month]
-                for reviewer in reviewers:
-                    metrics = filtered_metrics.get((month, reviewer), {})
-                    row.append(metrics.get('reviews_participated', 0))
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Reviews Approved
-            writer.writerow(['Reviews Approved'])
-            writer.writerow(['Month'] + reviewers)
-            for month in months:
-                row = [month]
-                for reviewer in reviewers:
-                    metrics = filtered_metrics.get((month, reviewer), {})
-                    row.append(metrics.get('reviews_approved', 0))
-                writer.writerow(row)
-            
-            writer.writerow([])
-            
-            # Comments Made
-            writer.writerow(['Comments Made'])
-            writer.writerow(['Month'] + reviewers)
-            for month in months:
-                row = [month]
-                for reviewer in reviewers:
-                    metrics = filtered_metrics.get((month, reviewer), {})
-                    row.append(metrics.get('comments_made', 0))
-                writer.writerow(row)
 
 class PRMetricsCollector:
     """Main class for collecting and processing PR metrics"""
+
     def __init__(self, token: str, users: List[str]):
         self.api = GitHubAPI(token)
         self.users = users
-        self.metrics_writers = {
-            'pr': PRMetricsWriter("pr_metrics.csv"),
-            'review': ReviewMetricsWriter(users)
-        }
+        self.metrics_writers = {"pr": PRMetricsWriter("pr_metrics.csv")}
         # Cache for PR creation times
         self.pr_creation_times = {}
 
@@ -419,212 +375,210 @@ class PRMetricsCollector:
         cache_key = f"{repo}/{pr_number}"
         if cache_key not in self.pr_creation_times:
             pr_details = self.api.get_pr_details(repo, pr_number)
-            if pr_details and pr_details.get('created_at'):
+            if pr_details and pr_details.get("created_at"):
                 self.pr_creation_times[cache_key] = datetime.fromisoformat(
-                    pr_details['created_at'].replace("Z", "+00:00")
+                    pr_details["created_at"].replace("Z", "+00:00")
                 )
             else:
                 return None
         return self.pr_creation_times[cache_key]
 
-    def collect_pr_data(self, repos: List[str], users: List[str],
-                       start_date: str, end_date: str) -> List[PRData]:
+    def collect_pr_data(self, repos: List[str], users: List[str], start_date: str, end_date: str) -> List[PRData]:
         """Collect PR data for all repos and users"""
+        logger.info(f"Starting PR data collection for {len(repos)} repos and {len(users)} users")
         pr_data = []
+        total_prs = 0
+
         for repo in repos:
             for user in users:
                 prs = self.api.get_prs(repo, user, start_date, end_date)
+                total_prs += len(prs)
+                logger.info(f"Processing {len(prs)} PRs for {user} in {repo}")
+
                 for pr in prs:
-                    details = self.api.get_pr_details(repo, pr['number'])
+                    details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
                         merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
                         hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
-                        
-                        pr_data.append(PRData(
-                            date=merged_at,
-                            author=details["user"]["login"],
-                            repo=repo,
-                            number=details["number"],
-                            additions=details["additions"],
-                            deletions=details["deletions"],
-                            changed_files=details["changed_files"],
-                            hours_to_merge=hours_to_merge
-                        ))
+
+                        pr_data.append(
+                            PRData(
+                                date=merged_at,
+                                author=details["user"]["login"],
+                                repo=repo,
+                                number=details["number"],
+                                additions=details["additions"],
+                                deletions=details["deletions"],
+                                changed_files=details["changed_files"],
+                                hours_to_merge=hours_to_merge,
+                            )
+                        )
+
+        logger.info(f"Completed PR data collection. Total PRs processed: {total_prs}")
         return pr_data
 
     def process_metrics(self, pr_data: List[PRData]) -> Tuple[dict, dict]:
         """Process PR data into monthly and review metrics"""
+        logger.info("Starting metrics processing")
         monthly_metrics = {}
         review_metrics = {}
-        
+
         for pr in pr_data:
             month = pr.date.strftime("%Y-%m")
             key = (month, pr.author)
-            
+
             # Initialize metrics for this month/author if not exists
             if key not in monthly_metrics:
-                monthly_metrics[key] = {
-                    'month': month,
-                    'hours_to_merge': [],
-                    'lines_added': [],
-                    'lines_removed': [],
-                    'total_changes': [],
-                    'reviews_participated': 0,
-                    'review_response_times': []
-                }
-            
+                monthly_metrics[key] = MonthlyMetrics(
+                    month=month, hours_to_merge=[], lines_added=[], lines_removed=[], total_changes=[]
+                )
+
             # Update metrics
-            monthly_metrics[key]['hours_to_merge'].append(pr.hours_to_merge)
-            monthly_metrics[key]['lines_added'].append(pr.additions)
-            monthly_metrics[key]['lines_removed'].append(pr.deletions)
-            monthly_metrics[key]['total_changes'].append(pr.additions + pr.deletions)
-            
+            monthly_metrics[key].hours_to_merge.append(pr.hours_to_merge)
+            monthly_metrics[key].lines_added.append(pr.additions)
+            monthly_metrics[key].lines_removed.append(pr.deletions)
+            monthly_metrics[key].total_changes.append(pr.additions + pr.deletions)
+
             # Process review data
+            logger.debug(f"Processing reviews for PR #{pr.number} in {pr.repo}")
             review_data = self.api.get_pr_reviews(pr.repo, pr.number)
             self._process_review_data(review_data, month, review_metrics, monthly_metrics[key])
-        
+
+        logger.info("Completed metrics processing")
         return monthly_metrics, review_metrics
 
-    def _process_review_data(self, review_data: dict, month: str,
-                           review_metrics: dict, author_metrics: dict) -> None:
+    def _process_review_data(
+        self, review_data: dict, month: str, review_metrics: dict, author_metrics: MonthlyMetrics
+    ) -> None:
         """Process review data and update metrics"""
         # Process formal reviews
-        for review in review_data['reviews']:
-            reviewer = review['user']['login']
+        for review in review_data["reviews"]:
+            reviewer = review["user"]["login"]
             # Only process reviews from specified users
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-                
+
             key = (month, reviewer)
-            
+
             if key not in review_metrics:
-                review_metrics[key] = {
-                    'reviews_participated': 0,
-                    'reviews_approved': 0,
-                    'comments_made': 0
-                }
-            
+                review_metrics[key] = ReviewMetrics()
+
             # Count the review participation
-            review_metrics[key]['reviews_participated'] += 1
-            
+            review_metrics[key].reviews_participated += 1
+
             # Count approvals
-            if review['state'] == 'APPROVED':
-                review_metrics[key]['reviews_approved'] += 1
-            
+            if review["state"] == "APPROVED":
+                review_metrics[key].reviews_approved += 1
+
             # Count review body comments
-            if review.get('body'):
-                review_metrics[key]['comments_made'] += 1
-            
+            if review.get("body"):
+                review_metrics[key].comments_made += 1
+
             # Update author metrics
-            author_metrics['reviews_participated'] += 1
-            
+            author_metrics.reviews_participated += 1
+
             # Calculate review response time
-            if review.get('submitted_at'):
-                review_time = datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00"))
+            if review.get("submitted_at"):
+                review_time = datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
                 # Extract repo and PR number from the URL
-                pr_url = review['pull_request_url']
-                repo = '/'.join(pr_url.split('/')[-4:-2])  # Get org/repo from URL
-                pr_number = int(pr_url.split('/')[-1])
-                
+                pr_url = review["pull_request_url"]
+                repo = "/".join(pr_url.split("/")[-4:-2])  # Get org/repo from URL
+                pr_number = int(pr_url.split("/")[-1])
+
                 pr_created = self._get_pr_creation_time(repo, pr_number)
                 if pr_created:
                     response_time = (review_time - pr_created).total_seconds() / 3600
-                    author_metrics['review_response_times'].append(response_time)
+                    review_metrics[key].review_response_times.append(response_time)
 
         # Process review comments (inline comments)
-        for comment in review_data['review_comments']:
-            reviewer = comment['user']['login']
+        for comment in review_data["review_comments"]:
+            reviewer = comment["user"]["login"]
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-                
+
             key = (month, reviewer)
             if key not in review_metrics:
-                review_metrics[key] = {
-                    'reviews_participated': 0,
-                    'reviews_approved': 0,
-                    'comments_made': 0
-                }
-            
+                review_metrics[key] = ReviewMetrics()
+
             # Count the comment
-            review_metrics[key]['comments_made'] += 1
+            review_metrics[key].comments_made += 1
             # Also count as review participation
-            review_metrics[key]['reviews_participated'] += 1
+            review_metrics[key].reviews_participated += 1
 
         # Process issue comments
-        for comment in review_data['issue_comments']:
-            reviewer = comment['user']['login']
+        for comment in review_data["issue_comments"]:
+            reviewer = comment["user"]["login"]
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-                
+
             key = (month, reviewer)
             if key not in review_metrics:
-                review_metrics[key] = {
-                    'reviews_participated': 0,
-                    'reviews_approved': 0,
-                    'comments_made': 0
-                }
-            
-            # Count the comment
-            review_metrics[key]['comments_made'] += 1
-            # Also count as review participation
-            review_metrics[key]['reviews_participated'] += 1
+                review_metrics[key] = ReviewMetrics()
 
-    def generate_reports(self, pr_data: List[PRData],
-                        monthly_metrics: dict,
-                        review_metrics: dict) -> None:
+            # Count the comment
+            review_metrics[key].comments_made += 1
+            # Also count as review participation
+            review_metrics[key].reviews_participated += 1
+
+    def generate_reports(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
         """Generate all metric reports"""
-        self.metrics_writers['pr'].write(pr_data, monthly_metrics)
-        self.metrics_writers['review'].write(review_metrics, pr_data)
+        self.metrics_writers["pr"].write(pr_data, monthly_metrics, review_metrics)
+
 
 def main():
     # Load environment variables
     load_dotenv()
-    
+
     # Parse arguments
     parser = argparse.ArgumentParser(description="Fetch PR metrics from GitHub.")
-    parser.add_argument("--repos", required=True,
-                       help="Comma-separated list of GitHub repos")
-    parser.add_argument("--users", required=True,
-                       help="Comma-separated list of GitHub usernames")
-    parser.add_argument("--date_start", required=True,
-                       help="Start date in YYYY-MM-DD format")
-    parser.add_argument("--date_end", required=True,
-                       help="End date in YYYY-MM-DD format")
-    parser.add_argument("--output", default="pr_metrics.csv",
-                       help="Output CSV file name")
-    
+    parser.add_argument("--repos", required=True, help="Comma-separated list of GitHub repos")
+    parser.add_argument("--users", required=True, help="Comma-separated list of GitHub usernames")
+    parser.add_argument("--date_start", required=True, help="Start date in YYYY-MM-DD format")
+    parser.add_argument("--date_end", required=True, help="End date in YYYY-MM-DD format")
+    parser.add_argument("--output", default="pr_metrics.csv", help="Output CSV file name")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+
     args = parser.parse_args()
+
+    # Set logging level based on debug flag
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+
     users = [u.strip() for u in args.users.split(",")]
-    
+
     # Get GitHub token
     token = os.getenv("GITHUB_TOKEN_READONLY_WEB")
     if not token:
         raise EnvironmentError("GITHUB_TOKEN_READONLY_WEB environment variable is not set.")
-    
+
+    logger.info("Starting PR metrics collection")
+    logger.info(f"Repos: {args.repos}")
+    logger.info(f"Users: {args.users}")
+    logger.info(f"Date range: {args.date_start} to {args.date_end}")
+
     # Initialize collector and process data
     collector = PRMetricsCollector(token, users)
-    
+
     # Collect PR data
     pr_data = collector.collect_pr_data(
-        [r.strip() for r in args.repos.split(",")],
-        users,
-        args.date_start,
-        args.date_end
+        [r.strip() for r in args.repos.split(",")], users, args.date_start, args.date_end
     )
-    
+
     # Process metrics
     monthly_metrics, review_metrics = collector.process_metrics(pr_data)
-    
+
     # Generate reports
+    logger.info("Generating reports")
     collector.generate_reports(pr_data, monthly_metrics, review_metrics)
-    
+
     # Log summary
     logger.info("\nSummary:")
     logger.info(f"✓ Total PRs processed: {len(pr_data)}")
     logger.info(f"✓ Date range: {args.date_start} to {args.date_end}")
     logger.info(f"✓ Repositories processed: {len(args.repos.split(','))}")
     logger.info(f"✓ Users analyzed: {len(users)}")
+
 
 if __name__ == "__main__":
     main()
