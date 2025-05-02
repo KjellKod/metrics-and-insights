@@ -245,9 +245,20 @@ class PRMetricsWriter(MetricsWriter):
         with open(self.output_file, mode="w", newline="", encoding="utf-8") as csv_file:
             writer = csv.writer(csv_file)
 
-            # Get unique months and authors (only from specified users)
+            # Get unique months
             months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
-            authors = sorted(set(pr.author for pr in pr_data if pr.author.lower() in [u.lower() for u in self.users]))
+            
+            # Get authors from both PR data and review metrics, but only include specified users
+            pr_authors = set(pr.author for pr in pr_data if pr.author.lower() in [u.lower() for u in self.users])
+            review_authors = set(author for (_, author) in review_metrics.keys() if author.lower() in [u.lower() for u in self.users])
+            authors = sorted([u for u in self.users if u.lower() in [a.lower() for a in pr_authors.union(review_authors)]])
+
+            # Debug output for authors
+            logger.debug(f"\nAuthors found:")
+            logger.debug(f"  From PRs: {pr_authors}")
+            logger.debug(f"  From reviews: {review_authors}")
+            logger.debug(f"  Specified users: {self.users}")
+            logger.debug(f"  Final authors list: {authors}")
 
             # Write all metric sections
             self._write_metric_section(
@@ -255,12 +266,12 @@ class PRMetricsWriter(MetricsWriter):
                 "PR Count",
                 months,
                 authors,
-                lambda m, a: sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a),
+                lambda m, a: sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author.lower() == a.lower()),
             )
 
             self._write_metric_section(
                 writer,
-                "Reviews Participated",
+                "Reviews Participated (as Reviewer)",
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_participated", 0),
@@ -268,7 +279,7 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "Reviews Approved",
+                "PRs Approved (as Reviewer)",
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_approved", 0),
@@ -276,11 +287,23 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "Comments Made",
+                "Comments Made (as Reviewer)",
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "comments_made", 0),
             )
+
+            # Debug output for review metrics
+            logger.debug("\nReview Metrics Summary:")
+            for month in months:
+                for author in authors:
+                    key = (month, author)
+                    if key in review_metrics:
+                        metrics = review_metrics[key]
+                        logger.debug(f"  {month} - {author}:")
+                        logger.debug(f"    Reviews participated: {metrics.reviews_participated}")
+                        logger.debug(f"    Reviews approved: {metrics.reviews_approved}")
+                        logger.debug(f"    Comments made: {metrics.comments_made}")
 
             self._write_metric_section(
                 writer,
@@ -560,6 +583,16 @@ class PRMetricsCollector:
                 review_metrics[key].comments_made += 1
                 reviewer_commented_prs.add((reviewer, comment['issue_url']))
                 logger.debug(f"Issue comment counted for {reviewer} on PR {comment['issue_url']}")
+
+        # Debug output for the current PR
+        for reviewer in [u.lower() for u in self.users]:
+            key = (month, reviewer)
+            if key in review_metrics:
+                metrics = review_metrics[key]
+                logger.debug(f"Metrics for {reviewer} in {month}:")
+                logger.debug(f"  Reviews participated: {metrics.reviews_participated}")
+                logger.debug(f"  Reviews approved: {metrics.reviews_approved}")
+                logger.debug(f"  Comments made: {metrics.comments_made}")
 
     def generate_reports(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
         """Generate all metric reports"""
