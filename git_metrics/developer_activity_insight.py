@@ -121,26 +121,43 @@ class ReviewMetrics:
 class GitHubAPI:
     """Handles all GitHub API interactions"""
 
-    def __init__(self, token: str):
+    def __init__(self, token: str, users: List[str]):
         self.base_url = "https://api.github.com"
         self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+        self.users = users
 
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
         """Fetch PRs for a given repo and author"""
         logger.info(f"Fetching PRs for {author} in {repo}")
         search_url = f"{self.base_url}/search/issues"
-        query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
-        params = {"q": query, "per_page": 100, "page": 1}
-
+        all_prs = []
+        
+        # Search for PRs authored by the user
+        author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
         try:
-            response = requests.get(search_url, headers=self.headers, params=params)
+            response = requests.get(search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1})
             response.raise_for_status()
-            prs = response.json().get("items", [])
-            logger.info(f"Found {len(prs)} PRs for {author} in {repo}")
-            return prs
+            author_prs = response.json().get("items", [])
+            logger.info(f"Found {len(author_prs)} PRs authored by {author} in {repo}")
+            all_prs.extend(author_prs)
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching PRs for {author} in {repo}: {str(e)}")
-            return []
+            logger.error(f"Error fetching authored PRs for {author} in {repo}: {str(e)}")
+        
+        # Search for PRs reviewed by the user
+        reviewer_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
+        try:
+            response = requests.get(search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1})
+            response.raise_for_status()
+            reviewer_prs = response.json().get("items", [])
+            logger.info(f"Found {len(reviewer_prs)} PRs reviewed by {author} in {repo}")
+            all_prs.extend(reviewer_prs)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching reviewed PRs for {author} in {repo}: {str(e)}")
+        
+        # Remove duplicates (in case a PR was both authored and reviewed by the same person)
+        unique_prs = {pr['number']: pr for pr in all_prs}.values()
+        logger.info(f"Total unique PRs found for {author} in {repo}: {len(unique_prs)}")
+        return list(unique_prs)
 
     def get_pr_details(self, repo: str, pr_number: int) -> Optional[dict]:
         """Fetch detailed PR information"""
@@ -158,18 +175,32 @@ class GitHubAPI:
         """Fetch all review-related data for a PR"""
         logger.debug(f"Fetching reviews for PR #{pr_number} in {repo}")
         base_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
+        reviews = []
+        comments = []
+        issue_comments = []
 
         try:
-            reviews = requests.get(f"{base_url}/reviews", headers=self.headers).json()
-            comments = requests.get(f"{base_url}/comments", headers=self.headers).json()
-            issue_comments = requests.get(
+            # Fetch all reviews and comments
+            all_reviews = requests.get(f"{base_url}/reviews", headers=self.headers).json()
+            all_comments = requests.get(f"{base_url}/comments", headers=self.headers).json()
+            all_issue_comments = requests.get(
                 f"{base_url.replace('/pulls/', '/issues/')}/comments", headers=self.headers
             ).json()
 
-            return {"reviews": reviews, "review_comments": comments, "issue_comments": issue_comments}
+            # Filter to only include reviews and comments from specified users
+            reviews = [r for r in all_reviews if r['user']['login'].lower() in [u.lower() for u in self.users]]
+            comments = [c for c in all_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
+            issue_comments = [c for c in all_issue_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
+
+            logger.debug(f"Found {len(reviews)} reviews, {len(comments)} review comments, and {len(issue_comments)} issue comments from specified users for PR #{pr_number} in {repo}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviews for PR {pr_number} in {repo}: {str(e)}")
-            return {"reviews": [], "review_comments": [], "issue_comments": []}
+
+        return {
+            'reviews': reviews,
+            'review_comments': comments,
+            'issue_comments': issue_comments
+        }
 
 
 class MetricsWriter(ABC):
@@ -183,8 +214,9 @@ class MetricsWriter(ABC):
 class PRMetricsWriter(MetricsWriter):
     """Handles writing PR metrics to CSV"""
 
-    def __init__(self, output_file: str):
+    def __init__(self, output_file: str, users: List[str]):
         self.output_file = output_file
+        self.users = users
         self.headers = [
             "Date",
             "Author",
@@ -213,9 +245,9 @@ class PRMetricsWriter(MetricsWriter):
         with open(self.output_file, mode="w", newline="", encoding="utf-8") as csv_file:
             writer = csv.writer(csv_file)
 
-            # Get unique months and authors
+            # Get unique months and authors (only from specified users)
             months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
-            authors = sorted(set(pr.author for pr in pr_data))
+            authors = sorted(set(pr.author for pr in pr_data if pr.author.lower() in [u.lower() for u in self.users]))
 
             # Write all metric sections
             self._write_metric_section(
@@ -364,9 +396,9 @@ class PRMetricsCollector:
     """Main class for collecting and processing PR metrics"""
 
     def __init__(self, token: str, users: List[str]):
-        self.api = GitHubAPI(token)
+        self.api = GitHubAPI(token, users)
         self.users = users
-        self.metrics_writers = {"pr": PRMetricsWriter("pr_metrics.csv")}
+        self.metrics_writers = {"pr": PRMetricsWriter("pr_metrics.csv", users)}
         # Cache for PR creation times
         self.pr_creation_times = {}
 
@@ -452,74 +484,82 @@ class PRMetricsCollector:
         self, review_data: dict, month: str, review_metrics: dict, author_metrics: MonthlyMetrics
     ) -> None:
         """Process review data and update metrics"""
+        # Track which PRs each reviewer has commented on
+        reviewer_commented_prs = set()
+        
         # Process formal reviews
-        for review in review_data["reviews"]:
-            reviewer = review["user"]["login"]
+        for review in review_data['reviews']:
+            reviewer = review['user']['login']
             # Only process reviews from specified users
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-
+            
             key = (month, reviewer)
-
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
-
-            # Count the review participation
+            
+            # Count the review participation (only for formal reviews)
             review_metrics[key].reviews_participated += 1
-
+            logger.debug(f"Review participation counted for {reviewer} - Review state: {review['state']}")
+            
             # Count approvals
-            if review["state"] == "APPROVED":
+            if review['state'] == 'APPROVED':
                 review_metrics[key].reviews_approved += 1
-
-            # Count review body comments
-            if review.get("body"):
+                logger.debug(f"Review approval counted for {reviewer}")
+            
+            # Count review body comments (only once per PR)
+            if review.get('body') and (reviewer, review['pull_request_url']) not in reviewer_commented_prs:
                 review_metrics[key].comments_made += 1
-
+                reviewer_commented_prs.add((reviewer, review['pull_request_url']))
+                logger.debug(f"Review body comment counted for {reviewer} on PR {review['pull_request_url']}")
+            
             # Update author metrics
             author_metrics.reviews_participated += 1
-
+            
             # Calculate review response time
-            if review.get("submitted_at"):
-                review_time = datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
+            if review.get('submitted_at'):
+                review_time = datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00"))
                 # Extract repo and PR number from the URL
-                pr_url = review["pull_request_url"]
-                repo = "/".join(pr_url.split("/")[-4:-2])  # Get org/repo from URL
-                pr_number = int(pr_url.split("/")[-1])
-
+                pr_url = review['pull_request_url']
+                repo = '/'.join(pr_url.split('/')[-4:-2])  # Get org/repo from URL
+                pr_number = int(pr_url.split('/')[-1])
+                
                 pr_created = self._get_pr_creation_time(repo, pr_number)
                 if pr_created:
                     response_time = (review_time - pr_created).total_seconds() / 3600
                     review_metrics[key].review_response_times.append(response_time)
 
         # Process review comments (inline comments)
-        for comment in review_data["review_comments"]:
-            reviewer = comment["user"]["login"]
+        for comment in review_data['review_comments']:
+            reviewer = comment['user']['login']
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-
+            
             key = (month, reviewer)
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
-
-            # Count the comment
-            review_metrics[key].comments_made += 1
-            # Also count as review participation
-            review_metrics[key].reviews_participated += 1
+            
+            # Count the comment (only once per PR)
+            if (reviewer, comment['pull_request_url']) not in reviewer_commented_prs:
+                review_metrics[key].comments_made += 1
+                reviewer_commented_prs.add((reviewer, comment['pull_request_url']))
+                logger.debug(f"Review comment counted for {reviewer} on PR {comment['pull_request_url']}")
 
         # Process issue comments
-        for comment in review_data["issue_comments"]:
-            reviewer = comment["user"]["login"]
+        for comment in review_data['issue_comments']:
+            reviewer = comment['user']['login']
             if reviewer.lower() not in [u.lower() for u in self.users]:
                 continue
-
+            
             key = (month, reviewer)
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
-
-            # Count the comment
-            review_metrics[key].comments_made += 1
-            # Also count as review participation
-            review_metrics[key].reviews_participated += 1
+            
+            # Count the comment (only once per PR)
+            if (reviewer, comment['issue_url']) not in reviewer_commented_prs:
+                review_metrics[key].comments_made += 1
+                reviewer_commented_prs.add((reviewer, comment['issue_url']))
+                logger.debug(f"Issue comment counted for {reviewer} on PR {comment['issue_url']}")
 
     def generate_reports(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
         """Generate all metric reports"""
