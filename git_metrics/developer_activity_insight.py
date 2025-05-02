@@ -67,7 +67,7 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from typing import Dict, List, Set, Tuple, Optional
@@ -75,6 +75,7 @@ from typing import Dict, List, Set, Tuple, Optional
 # Third-party imports
 import requests
 from dotenv import load_dotenv
+import pytz
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -116,6 +117,7 @@ class ReviewMetrics:
     reviews_approved: int = 0
     comments_made: int = 0
     review_response_times: List[float] = field(default_factory=list)
+    author_wait_times: List[float] = field(default_factory=list)  # Time authors wait for reviews
 
 
 class GitHubAPI:
@@ -191,27 +193,36 @@ class GitHubAPI:
             # Fetch review request events
             events_url = f"{base_url.replace('/pulls/', '/issues/')}/events"
             all_events = requests.get(events_url, headers=self.headers).json()
-            review_requests = [
+            all_review_requests = [
                 event for event in all_events 
-                if event.get('event') == 'review_requested' 
-                and event.get('requested_reviewer', {}).get('login', '').lower() in [u.lower() for u in self.users]
+                if event.get('event') == 'review_requested'
             ]
 
-            # Filter to only include reviews and comments from specified users
-            reviews = [r for r in all_reviews if r['user']['login'].lower() in [u.lower() for u in self.users]]
-            comments = [c for c in all_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
-            issue_comments = [c for c in all_issue_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
+            # Log all reviews and requests for debugging
+            logger.debug(f"All reviews found for PR #{pr_number}:")
+            for review in all_reviews:
+                logger.debug(f"  Review by {review['user']['login']} at {review.get('submitted_at')} - State: {review['state']}")
+            
+            logger.debug(f"All review requests found for PR #{pr_number}:")
+            for req in all_review_requests:
+                reviewer = req.get('requested_reviewer', {}).get('login', 'unknown')
+                logger.debug(f"  Review requested for {reviewer} at {req.get('created_at')} by {req.get('actor', {}).get('login')}")
 
-            logger.debug(f"Found {len(reviews)} reviews, {len(comments)} review comments, {len(issue_comments)} issue comments, and {len(review_requests)} review requests from specified users for PR #{pr_number} in {repo}")
+            # Return all reviews and requests for author wait time calculation
+            return {
+                'reviews': all_reviews,
+                'review_comments': all_comments,
+                'issue_comments': all_issue_comments,
+                'review_requests': all_review_requests
+            }
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviews for PR {pr_number} in {repo}: {str(e)}")
-
-        return {
-            'reviews': reviews,
-            'review_comments': comments,
-            'issue_comments': issue_comments,
-            'review_requests': review_requests
-        }
+            return {
+                'reviews': [],
+                'review_comments': [],
+                'issue_comments': [],
+                'review_requests': []
+            }
 
 
 class MetricsWriter(ABC):
@@ -401,6 +412,22 @@ class PRMetricsWriter(MetricsWriter):
                 ),
             )
 
+            self._write_metric_section(
+                writer,
+                "Average Review Response Time (h) (for the author, until response by reviewer)",
+                months,
+                authors,
+                lambda m, a: (
+                    round(
+                        sum(getattr(review_metrics.get((m, a)), "author_wait_times", []))
+                        / len(getattr(review_metrics.get((m, a)), "author_wait_times", [])),
+                        2,
+                    )
+                    if getattr(review_metrics.get((m, a)), "author_wait_times", [])
+                    else 0
+                ),
+            )
+
             # Add blank lines before detailed data
             writer.writerow([])
             writer.writerow([])
@@ -514,6 +541,13 @@ class PRMetricsCollector:
         logger.info("Completed metrics processing")
         return monthly_metrics, review_metrics
 
+    def _convert_to_mst(self, dt: datetime) -> datetime:
+        """Convert a datetime to Mountain Standard Time"""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        mst = pytz.timezone('America/Denver')
+        return dt.astimezone(mst)
+
     def _process_review_data(
         self, review_data: dict, month: str, review_metrics: dict, author_metrics: MonthlyMetrics
     ) -> None:
@@ -521,8 +555,49 @@ class PRMetricsCollector:
         # Track which PRs each reviewer has commented on
         reviewer_commented_prs = set()
         
-        # Process formal reviews
-        for review in review_data['reviews']:
+        # Get PR creation time for author wait time calculation
+        reviews = review_data.get('reviews', [])
+        if not reviews:
+            logger.debug("No reviews found for this PR")
+            return
+            
+        pr_url = reviews[0].get('pull_request_url', '')
+        if pr_url:
+            repo = '/'.join(pr_url.split('/')[-4:-2])  # Get org/repo from URL
+            pr_number = int(pr_url.split('/')[-1])
+            pr_created = self._get_pr_creation_time(repo, pr_number)
+            if pr_created:
+                pr_created = self._convert_to_mst(pr_created)
+        else:
+            pr_created = None
+        
+        # First, process all reviews to track author wait times
+        all_reviews = self.api.get_pr_reviews(repo, pr_number)['reviews']
+        for review in all_reviews:
+            if review.get('submitted_at'):
+                review_time = self._convert_to_mst(datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00")))
+                # Find the review request for this reviewer
+                review_request = next(
+                    (req for req in review_data['review_requests'] 
+                     if req.get('requested_reviewer', {}).get('login', '').lower() == review['user']['login'].lower()),
+                    None
+                )
+                
+                if review_request and review_request.get('created_at'):
+                    request_time = self._convert_to_mst(datetime.fromisoformat(review_request['created_at'].replace("Z", "+00:00")))
+                    # Track the wait time from the author's perspective
+                    author_key = (month, review_request.get('actor', {}).get('login'))
+                    if author_key not in review_metrics:
+                        review_metrics[author_key] = ReviewMetrics()
+                    author_wait_time = (review_time - request_time).total_seconds() / 3600
+                    review_metrics[author_key].author_wait_times.append(author_wait_time)
+                    logger.debug(f"Author wait time calculation for {author_key[1]}:")
+                    logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    logger.debug(f"  Wait time: {author_wait_time:.2f} hours")
+        
+        # Then process only reviews from specified users for their metrics
+        for review in reviews:
             reviewer = review['user']['login']
             # Only process reviews from specified users
             if reviewer.lower() not in [u.lower() for u in self.users]:
@@ -552,7 +627,7 @@ class PRMetricsCollector:
             
             # Calculate review response time from review request to review submission, for the requested reviewer
             if review.get('submitted_at'):
-                review_time = datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00"))
+                review_time = self._convert_to_mst(datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00")))
                 # Find the review request for this reviewer
                 review_request = next(
                     (req for req in review_data['review_requests'] 
@@ -561,10 +636,13 @@ class PRMetricsCollector:
                 )
                 
                 if review_request and review_request.get('created_at'):
-                    request_time = datetime.fromisoformat(review_request['created_at'].replace("Z", "+00:00"))
+                    request_time = self._convert_to_mst(datetime.fromisoformat(review_request['created_at'].replace("Z", "+00:00")))
                     response_time = (review_time - request_time).total_seconds() / 3600
                     review_metrics[key].review_response_times.append(response_time)
-                    logger.debug(f"Review response time calculated for {reviewer}: {response_time:.2f} hours from request to review")
+                    logger.debug(f"Review response time calculation for {reviewer}:")
+                    logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                    logger.debug(f"  Response time: {response_time:.2f} hours")
 
         # Process review comments (inline comments)
         for comment in review_data['review_comments']:
