@@ -178,6 +178,7 @@ class GitHubAPI:
         reviews = []
         comments = []
         issue_comments = []
+        review_requests = []
 
         try:
             # Fetch all reviews and comments
@@ -186,20 +187,30 @@ class GitHubAPI:
             all_issue_comments = requests.get(
                 f"{base_url.replace('/pulls/', '/issues/')}/comments", headers=self.headers
             ).json()
+            
+            # Fetch review request events
+            events_url = f"{base_url.replace('/pulls/', '/issues/')}/events"
+            all_events = requests.get(events_url, headers=self.headers).json()
+            review_requests = [
+                event for event in all_events 
+                if event.get('event') == 'review_requested' 
+                and event.get('requested_reviewer', {}).get('login', '').lower() in [u.lower() for u in self.users]
+            ]
 
             # Filter to only include reviews and comments from specified users
             reviews = [r for r in all_reviews if r['user']['login'].lower() in [u.lower() for u in self.users]]
             comments = [c for c in all_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
             issue_comments = [c for c in all_issue_comments if c['user']['login'].lower() in [u.lower() for u in self.users]]
 
-            logger.debug(f"Found {len(reviews)} reviews, {len(comments)} review comments, and {len(issue_comments)} issue comments from specified users for PR #{pr_number} in {repo}")
+            logger.debug(f"Found {len(reviews)} reviews, {len(comments)} review comments, {len(issue_comments)} issue comments, and {len(review_requests)} review requests from specified users for PR #{pr_number} in {repo}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviews for PR {pr_number} in {repo}: {str(e)}")
 
         return {
             'reviews': reviews,
             'review_comments': comments,
-            'issue_comments': issue_comments
+            'issue_comments': issue_comments,
+            'review_requests': review_requests
         }
 
 
@@ -376,7 +387,7 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "Average Review Response Time (hours)",
+                "Average Review Response Time (h) (as requested reviewer)",
                 months,
                 authors,
                 lambda m, a: (
@@ -539,18 +550,21 @@ class PRMetricsCollector:
             # Update author metrics
             author_metrics.reviews_participated += 1
             
-            # Calculate review response time
+            # Calculate review response time from review request to review submission, for the requested reviewer
             if review.get('submitted_at'):
                 review_time = datetime.fromisoformat(review['submitted_at'].replace("Z", "+00:00"))
-                # Extract repo and PR number from the URL
-                pr_url = review['pull_request_url']
-                repo = '/'.join(pr_url.split('/')[-4:-2])  # Get org/repo from URL
-                pr_number = int(pr_url.split('/')[-1])
+                # Find the review request for this reviewer
+                review_request = next(
+                    (req for req in review_data['review_requests'] 
+                     if req.get('requested_reviewer', {}).get('login', '').lower() == reviewer.lower()),
+                    None
+                )
                 
-                pr_created = self._get_pr_creation_time(repo, pr_number)
-                if pr_created:
-                    response_time = (review_time - pr_created).total_seconds() / 3600
+                if review_request and review_request.get('created_at'):
+                    request_time = datetime.fromisoformat(review_request['created_at'].replace("Z", "+00:00"))
+                    response_time = (review_time - request_time).total_seconds() / 3600
                     review_metrics[key].review_response_times.append(response_time)
+                    logger.debug(f"Review response time calculated for {reviewer}: {response_time:.2f} hours from request to review")
 
         # Process review comments (inline comments)
         for comment in review_data['review_comments']:
