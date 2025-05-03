@@ -514,6 +514,7 @@ class PRMetricsCollector:
         # Cache for PR creation times
         self.pr_creation_times = {}
 
+    # Currently not used but is likely used in the future. 
     def _get_pr_creation_time(self, repo: str, pr_number: int) -> Optional[datetime]:
         """Get PR creation time from cache or API"""
         cache_key = f"{repo}/{pr_number}"
@@ -611,16 +612,6 @@ class PRMetricsCollector:
         if not reviews:
             logger.debug("No reviews found for this PR")
             return
-
-        pr_url = reviews[0].get("pull_request_url", "")
-        if pr_url:
-            repo = "/".join(pr_url.split("/")[-4:-2])  # Get org/repo from URL
-            pr_number = int(pr_url.split("/")[-1])
-            pr_created = self._get_pr_creation_time(repo, pr_number)
-            if pr_created:
-                pr_created = self._convert_to_mst(pr_created)
-        else:
-            pr_created = None
 
         # First, process all reviews to track author wait times
         all_reviews = review_data["reviews"]
