@@ -82,6 +82,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class Utils:
+    """Utility functions shared across classes"""
+
+    @staticmethod
+    def normalize_username(username: str) -> str:
+        """Normalize username to lowercase for consistent comparison"""
+        return username.lower() if username else ""
+
+
 @dataclass
 class PRData:
     """Data class to hold PR information"""
@@ -128,6 +137,10 @@ class GitHubAPI:
         self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
         self.users = users
 
+    def normalize_username(self, username: str) -> str:
+        """Normalize username to lowercase for consistent comparison"""
+        return Utils.normalize_username(username)
+
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
         """Fetch PRs for a given repo and author"""
         logger.info(f"Fetching PRs for {author} in {repo}")
@@ -148,7 +161,7 @@ class GitHubAPI:
             logger.error(f"Error fetching authored PRs for {author} in {repo}: {str(e)}")
 
         # Search for PRs reviewed by the user
-        reviewer_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
+        reviewer_query = f"repo:{repo} is:pr is:merged review-requested:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
                 search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1}
@@ -159,6 +172,19 @@ class GitHubAPI:
             all_prs.extend(reviewer_prs)
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviewed PRs for {author} in {repo}: {str(e)}")
+
+        # Search for PRs where user commented
+        commenter_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
+        try:
+            response = requests.get(
+                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1}
+            )
+            response.raise_for_status()
+            commenter_prs = response.json().get("items", [])
+            logger.info(f"Found {len(commenter_prs)} PRs commented on by {author} in {repo}")
+            all_prs.extend(commenter_prs)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching commented PRs for {author} in {repo}: {str(e)}")
 
         # Remove duplicates (in case a PR was both authored and reviewed by the same person)
         unique_prs = {pr["number"]: pr for pr in all_prs}.values()
@@ -250,6 +276,10 @@ class PRMetricsWriter(MetricsWriter):
             "Hours to Merge",
         ]
 
+    def normalize_username(self, username: str) -> str:
+        """Normalize username to lowercase for consistent comparison"""
+        return Utils.normalize_username(username)
+
     def _write_metric_section(
         self, writer: csv.writer, title: str, months: List[str], authors: List[str], get_value: callable
     ) -> None:
@@ -271,19 +301,31 @@ class PRMetricsWriter(MetricsWriter):
             months = sorted(set(pr.date.strftime("%Y-%m") for pr in pr_data))
 
             # Get authors from both PR data and review metrics, but only include specified users
-            pr_authors = set(pr.author for pr in pr_data if pr.author.lower() in [u.lower() for u in self.users])
-            review_authors = set(
-                author for (_, author) in review_metrics.keys() if author.lower() in [u.lower() for u in self.users]
-            )
-            authors = sorted(
-                [u for u in self.users if u.lower() in [a.lower() for a in pr_authors.union(review_authors)]]
-            )
-
+            normalized_users = [self.normalize_username(u) for u in self.users]
+            pr_authors = set(self.normalize_username(pr.author) for pr in pr_data)
+            review_authors = set(self.normalize_username(author) for (_, author) in review_metrics.keys())
+            
             # Debug output for authors
             logger.debug(f"\nAuthors found:")
             logger.debug(f"  From PRs: {pr_authors}")
             logger.debug(f"  From reviews: {review_authors}")
-            logger.debug(f"  Specified users: {self.users}")
+            logger.debug(f"  Specified users: {normalized_users}")
+            
+            # Get the original case version of usernames that have activity
+            active_authors = []
+            for user in self.users:
+                normalized = self.normalize_username(user)
+                if normalized in pr_authors or normalized in review_authors:
+                    # Find the original case version from the PR data
+                    for pr in pr_data:
+                        if self.normalize_username(pr.author) == normalized:
+                            active_authors.append(pr.author)
+                            break
+                    else:
+                        # If not found in PR data, use the original case from users list
+                        active_authors.append(user)
+            
+            authors = sorted(active_authors)
             logger.debug(f"  Final authors list: {authors}")
 
             # Write all metric sections
@@ -293,13 +335,13 @@ class PRMetricsWriter(MetricsWriter):
                 months,
                 authors,
                 lambda m, a: sum(
-                    1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author.lower() == a.lower()
+                    1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)
                 ),
             )
 
             self._write_metric_section(
                 writer,
-                "Reviews Participated (as Reviewer)",
+                "Reviews Participated (as Reviewer)", # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username>
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_participated", 0),
@@ -307,15 +349,15 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "PRs Approved (as Reviewer)",
-                months,
+                "PRs Approved (as Reviewer)", # # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD reviewed-by:<username>
+                months, 
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_approved", 0),
             )
 
             self._write_metric_section(
                 writer,
-                "Comments Made (as Reviewer)",
+                "Comments Made (as Reviewer)", #  # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username> ... then count comments in each place
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "comments_made", 0),
@@ -341,11 +383,11 @@ class PRMetricsWriter(MetricsWriter):
                 lambda m, a: (
                     round(
                         median(
-                            pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a
+                            pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)
                         ),
                         2,
                     )
-                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -356,8 +398,8 @@ class PRMetricsWriter(MetricsWriter):
                 months,
                 authors,
                 lambda m, a: (
-                    median(pr.additions for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
-                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    median(pr.additions for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
+                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -368,8 +410,8 @@ class PRMetricsWriter(MetricsWriter):
                 months,
                 authors,
                 lambda m, a: (
-                    median(pr.deletions for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
-                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    median(pr.deletions for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
+                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -380,8 +422,8 @@ class PRMetricsWriter(MetricsWriter):
                 months,
                 authors,
                 lambda m, a: (
-                    median(pr.changed_files for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
-                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    median(pr.changed_files for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
+                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -393,11 +435,11 @@ class PRMetricsWriter(MetricsWriter):
                 authors,
                 lambda m, a: (
                     round(
-                        sum(pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a)
-                        / sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and pr.author == a),
+                        sum(pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
+                        / sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)),
                         2,
                     )
-                    if any(pr.date.strftime("%Y-%m") == m and pr.author == a for pr in pr_data)
+                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -525,7 +567,7 @@ class PRMetricsCollector:
 
         for pr in pr_data:
             month = pr.date.strftime("%Y-%m")
-            key = (month, pr.author)
+            key = (month, self.api.normalize_username(pr.author))
 
             # Initialize metrics for this month/author if not exists
             if key not in monthly_metrics:
@@ -578,7 +620,7 @@ class PRMetricsCollector:
             pr_created = None
 
         # First, process all reviews to track author wait times
-        all_reviews = self.api.get_pr_reviews(repo, pr_number)["reviews"]
+        all_reviews = review_data["reviews"]
         for review in all_reviews:
             if review.get("submitted_at"):
                 review_time = self._convert_to_mst(
@@ -589,7 +631,7 @@ class PRMetricsCollector:
                     (
                         req
                         for req in review_data["review_requests"]
-                        if req.get("requested_reviewer", {}).get("login", "").lower() == review["user"]["login"].lower()
+                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", "")) == self.api.normalize_username(review["user"]["login"])
                     ),
                     None,
                 )
@@ -609,13 +651,9 @@ class PRMetricsCollector:
                     logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                     logger.debug(f"  Wait time: {author_wait_time:.2f} hours")
 
-        # Then process only reviews from specified users for their metrics
+        # Process all reviews and comments, then filter for specified users
         for review in reviews:
             reviewer = review["user"]["login"]
-            # Only process reviews from specified users
-            if reviewer.lower() not in [u.lower() for u in self.users]:
-                continue
-
             key = (month, reviewer)
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
@@ -648,7 +686,7 @@ class PRMetricsCollector:
                     (
                         req
                         for req in review_data["review_requests"]
-                        if req.get("requested_reviewer", {}).get("login", "").lower() == reviewer.lower()
+                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", "")) == self.api.normalize_username(reviewer)
                     ),
                     None,
                 )
@@ -667,9 +705,6 @@ class PRMetricsCollector:
         # Process review comments (inline comments)
         for comment in review_data["review_comments"]:
             reviewer = comment["user"]["login"]
-            if reviewer.lower() not in [u.lower() for u in self.users]:
-                continue
-
             key = (month, reviewer)
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
@@ -683,9 +718,6 @@ class PRMetricsCollector:
         # Process issue comments
         for comment in review_data["issue_comments"]:
             reviewer = comment["user"]["login"]
-            if reviewer.lower() not in [u.lower() for u in self.users]:
-                continue
-
             key = (month, reviewer)
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
@@ -697,7 +729,7 @@ class PRMetricsCollector:
                 logger.debug(f"Issue comment counted for {reviewer} on PR {comment['issue_url']}")
 
         # Debug output for the current PR
-        for reviewer in [u.lower() for u in self.users]:
+        for reviewer in [self.api.normalize_username(u) for u in self.users]:
             key = (month, reviewer)
             if key in review_metrics:
                 metrics = review_metrics[key]
