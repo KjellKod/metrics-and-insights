@@ -280,6 +280,10 @@ class PRMetricsWriter(MetricsWriter):
         """Normalize username to lowercase for consistent comparison"""
         return Utils.normalize_username(username)
 
+    def _matches_month_and_author(self, pr: PRData, month: str, author: str) -> bool:
+        """Check if a PR matches both the given month and author"""
+        return pr.date.strftime("%Y-%m") == month and self.normalize_username(pr.author) == self.normalize_username(author)
+
     def _write_metric_section(
         self, writer: csv.writer, title: str, months: List[str], authors: List[str], get_value: callable
     ) -> None:
@@ -334,9 +338,7 @@ class PRMetricsWriter(MetricsWriter):
                 "PR Count",
                 months,
                 authors,
-                lambda m, a: sum(
-                    1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)
-                ),
+                lambda m, a: sum(1 for pr in pr_data if self._matches_month_and_author(pr, m, a)),
             )
 
             self._write_metric_section(
@@ -383,47 +385,11 @@ class PRMetricsWriter(MetricsWriter):
                 lambda m, a: (
                     round(
                         median(
-                            pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)
+                            pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a)
                         ),
                         2,
                     )
-                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
-                    else 0
-                ),
-            )
-
-            self._write_metric_section(
-                writer,
-                "Median Lines Added",
-                months,
-                authors,
-                lambda m, a: (
-                    median(pr.additions for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
-                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
-                    else 0
-                ),
-            )
-
-            self._write_metric_section(
-                writer,
-                "Median Lines Removed",
-                months,
-                authors,
-                lambda m, a: (
-                    median(pr.deletions for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
-                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
-                    else 0
-                ),
-            )
-
-            self._write_metric_section(
-                writer,
-                "Median Files Changed",
-                months,
-                authors,
-                lambda m, a: (
-                    median(pr.changed_files for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
-                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
+                    if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
                     else 0
                 ),
             )
@@ -435,14 +401,51 @@ class PRMetricsWriter(MetricsWriter):
                 authors,
                 lambda m, a: (
                     round(
-                        sum(pr.hours_to_merge for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a))
-                        / sum(1 for pr in pr_data if pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a)),
+                        sum(pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                        / sum(1 for pr in pr_data if self._matches_month_and_author(pr, m, a)),
                         2,
                     )
-                    if any(pr.date.strftime("%Y-%m") == m and self.normalize_username(pr.author) == self.normalize_username(a) for pr in pr_data)
+                    if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
                     else 0
                 ),
             )
+
+            self._write_metric_section(
+                writer,
+                "Median Lines Added",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.additions for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                    if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Lines Removed",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.deletions for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                    if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
+                    else 0
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Median Files Changed",
+                months,
+                authors,
+                lambda m, a: (
+                    median(pr.changed_files for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                    if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
+                    else 0
+                ),
+            )
+
 
             self._write_metric_section(
                 writer,
