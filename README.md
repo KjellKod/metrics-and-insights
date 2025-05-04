@@ -81,7 +81,8 @@ pip3 freeze > requirements.txt
 ## Key Components
 
 ### Git Metrics
-Scripts for analyzing GitHub repository metrics and developer activity:
+Scripts for analyzing GitHub repository metrics and developer activity. For detailed documentation of each script and its usage, see [git_metrics/README.md](git_metrics/README.md).
+
 - `developer_activity_insight.py`: Comprehensive PR metrics including monthly aggregations, review metrics, and volume metrics per author
 - `releases.py`: Analyze release patterns and frequencies
 - `lines_changed.py`: Track code volume changes between dates
