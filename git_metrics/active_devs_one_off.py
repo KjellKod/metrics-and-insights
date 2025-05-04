@@ -77,7 +77,7 @@ def fetch_active_repositories(api_config, org_name, since_date):
 
     try:
         response = requests.post(
-            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
+            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}, timeout=120
         )
         response.raise_for_status()
         data = response.json()
