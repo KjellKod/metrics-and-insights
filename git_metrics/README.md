@@ -14,7 +14,14 @@ Metrics collected:
 - Review Metrics: reviews participated, reviews approved, comments made
 
 ```bash
-python3 developer_activity_insight.py --repos <org/repo1,org2/repo2> --users <user1,user2> --date_start <YYYY-MM-DD> --date_end <YYYY-MM-DD> [--output pr_metrics.csv] [--debug]
+python3 developer_activity_insight.py [options]
+Options:
+  --repos REPOS         Comma-separated list of GitHub repos (e.g., 'org1/repo1,org2/repo2')
+  --users USERS         Comma-separated list of GitHub usernames
+  --date_start DATE     Start date in YYYY-MM-DD format
+  --date_end DATE       End date in YYYY-MM-DD format
+  --output FILE         Output CSV file name (default: pr_metrics.csv)
+  --debug               Enable debug logging
 ```
 
 ### releases.py
