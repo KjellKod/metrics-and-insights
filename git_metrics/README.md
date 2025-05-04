@@ -45,15 +45,19 @@ Generates a detailed commit report for multiple repositories within a specified 
 ./repo_commit_report.sh --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --repos <owner1/repo1,owner2/repo2>
 ```
 
-### code_review_metrics.py
-Analyzes code review patterns and timing, including time to first review, approval times, and merge times.
+### code_review_metrics.py [graphQL proof-of-concept]
+Generates metrics about PR review times and approvals.
 
 ```bash
-python3 code_review_metrics.py [-o OUTPUT_FILE] [-l LIMIT]
-Options:
-  -o, --output    Output CSV filename (default: pr_review_metrics.csv)
-  -l, --limit     Limit the number of PRs to process
+python code_review_metrics.py -r owner/repo [options]
 ```
+
+Options:
+- `-r, --repo`     GitHub repository in format 'owner/repo' (required)
+- `-o, --output`   Output CSV filename (default: pr_review_metrics.csv)
+- `-l, --limit`    Limit the number of PRs to process
+
+Note: This script is deprecated. Please use `developer_activity_insight.py` instead, which provides the same functionality plus additional metrics.
 
 ### ci_pr_performance_metrics.py
 Tracks CI performance metrics for PRs, including build times, success rates, and their relationship to PR merge times.
