@@ -38,6 +38,7 @@ Example workflow:
 
 ```
 ├── git_metrics/                        # Scripts for analyzing GitHub repository metrics
+│   ├── README.md                      # Documentation for git metrics scripts
 │   ├── releases.py                     # Analyze release patterns
 │   ├── lines_changed.py                # Track code volume changes
 |   |── repo_commit_report.sh
