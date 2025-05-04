@@ -33,186 +33,123 @@ Example workflow:
 4. Create visualizations
 5. Discuss trends with team
 
-
-## Repository Structure ##
+## Repository Structure
 
 ```
 ├── git_metrics/                        # Scripts for analyzing GitHub repository metrics
+│   ├── README.md                      # Documentation for git metrics scripts
+│   ├── developer_activity_insight.py   # Comprehensive PR metrics and developer activity analysis
 │   ├── releases.py                     # Analyze release patterns
 │   ├── lines_changed.py                # Track code volume changes
-|   |── repo_commit_report.sh
-|   |── code_review_metrics.py
+│   ├── repo_commit_report.sh           # Generate commit reports for multiple repos
+│   ├── code_review_metrics.py          # Analyze code review patterns and timing
 │   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
-|   ├── active_devs_one_off.py          # Track active developers
-|   ├── active_repos_one_off.py         # Identify active repositories
+│   ├── active_devs_one_off.py          # Track active developers
+│   ├── active_repos_one_off.py         # Identify active repositories
 │
+├── jira_metrics/                       # Scripts for extracting metrics from Jira
+│   ├── engineering_excellence.py       # Track engineering excellence vs product work
+│   ├── cycle_time.py                   # Analyze time from code review to release
+│   ├── release_failure.py              # Analyze release failures and impact
+│   ├── individual.py                   # Individual contributor metrics analysis
+│   ├── released_tickets.py             # Track monthly released ticket counts
+│   ├── jira_utils.py                   # Helper utility 
 │
-├── jira_metrics/                   # Scripts for extracting metrics from Jira
-│   ├── engineering_excellence.py   # Track engineering excellence vs product wor
-│   ├── cycle_time.py               # Analyze time from code review to release
-│   ├── release_failure.py          # Analyze release failures and impact
-│   ├── individual.py               # Individual contributor metrics analysis
-│   ├── released_tickets.p          # Track monthly released ticket counts
-│   ├── jira_utils.py               # helper utility 
-│
-├── tests/                # Test suite
+├── tests/                              # Test suite
 │   ├── __init__.py       
 │   ├── test_engineering_excellence.py
-| 
-├── .gitignore            # to ignore
-├── requirements.txt      # dependencies
-└── README.md             # overview
+│ 
+├── .gitignore                          # Git ignore file
+├── requirements.txt                    # Python dependencies
+└── README.md                           # This file
 ```
 
-
-## Important Note on Metrics
-These metrics should be used as conversation starters and indicators, not as absolute measures of performance. They are most valuable when:
-- Used to identify trends over time
-- Combined with qualitative feedback
-- Discussed openly with teams
-- Used to find areas needing support or improvement
-
-
-### Data Export
-Most scripts support data export for further analysis:
-
-
-### Data Export
-Many scripts support CSV export via the `-csv` flag for further analysis or dashboard creation. Example usage:
-
-
-## Requirements ##
+## Requirements
 
 Install the necessary python frameworks with: 
-```
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip3 install --upgrade -r requirements.txt
 ```
 
-If you do python dependency changes, please add them later in your virtual environment with 
-`pip3 freeze requirements.txt`
-
-## Key Components ##
-*github/*
-Scripts for extracting metrics from GitHub based on the release tags 
-- releases.py: Script to retrieve and categorize GitHub releases by year and month.
-- pr_metrics.py: Script to analyze Pull Request (PR) metrics, including merge times and GitHub Actions check durations.
-- lines_changed.py: Script to see line changes between two dates. This is just a for-fun insight that can show how much / little changes over time in repositories. It does not take into account the importance of the changes. `GITHUB_METRIC_OWNER_OR_ORGANIZATION=<organization>` and `GITHUB_METRIC_REPO=<repo-name>` needs to be defined in environment variables. 
-- repo_commit_report.sh: Bash script to generate repository commit information for a time range for one or multiple repositories
-
-*jira/* 
-Scripts for extracting metrics from Jira.
-
-- engineering_excellence.py: Script to extract engineering excellence metrics from Jira. It shows for each team and month the product focus, engineering excellence focus (debt reductino, critical work) and the annual average SO FAR of ee
-- cycle_time.py: Script to calculate cycle time metrics from Jira, based on when coding is finished until it's marked as released. 
-- release_failure.py: Script extract all `Release` tickets, the linked tickets part of that release and whether or not the release was a failure. 
-- released_tickets.py: Retrieve calculate amount of released tickets month-by-month.
-- jira_utils.py: Helper utility module containing common functions and utilities used across other Jira scripts
-
-## PR Metrics Analysis
-To analyze PR metrics, use the following command:
-
+If you make python dependency changes, please update requirements.txt with:
 ```bash
-python3 github/pr_metrics.py [options]
-
-Options:
-
--v, --verbose: Enable verbose output
--csv: Export the release data to a CSV file
--load-from-file FILENAME: Load data from a specified file instead of querying GitHub
--save-to-file FILENAME: Save retrieved data to a specified file
-This script calculates and displays metrics for merged Pull Requests, including:
-
-Total number of PRs per month
-Median merge time (in hours) per month
-Median and average check time (in minutes) per month
-Ratio of check time to merge time (as a percentage)
-The script retrieves data for PRs that have been merged since January 1, 2024, by default.
+pip3 freeze > requirements.txt
 ```
 
-- Setup and Usage
+## Key Components
 
-## Environmental Variables## 
-Some scripts require environmental variables to be set. Create an .env file in the root of the directory and set these values. 
-As an alternative, you can set these in your .zshrc or .bashrc file:
+### Git Metrics
+Scripts for analyzing GitHub repository metrics and developer activity. For detailed documentation of each script and its usage, see [git_metrics/README.md](git_metrics/README.md).
 
-### .env format
-```
-USER_EMAIL="your_email@example.com"
-JIRA_API_KEY="your_jira_api_key"
-```
+- `developer_activity_insight.py`: Comprehensive PR metrics including monthly aggregations, review metrics, and volume metrics per author
+- `releases.py`: Analyze release patterns and frequencies
+- `lines_changed.py`: Track code volume changes between dates
+- `repo_commit_report.sh`: Generate detailed commit reports for multiple repositories
+- `code_review_metrics.py`: Analyze code review patterns and timing
+- `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
+- `active_devs_one_off.py`: Identify and analyze active developers
+- `active_repos_one_off.py`: Identify and analyze active repositories
 
-### All variables needed and described in .env format (root of repo)
+### Jira Metrics
+Scripts for extracting and analyzing Jira metrics:
+- `engineering_excellence.py`: Track engineering excellence vs product work
+- `cycle_time.py`: Calculate cycle time metrics
+- `release_failure.py`: Analyze release failures and impact
+- `individual.py`: Individual contributor metrics analysis
+- `released_tickets.py`: Track monthly released ticket counts
+- `jira_utils.py`: Helper utility module
+
+## Environment Variables
+
+Create an `.env` file in the root directory with the following variables:
+
 ```
+# GitHub Configuration
+GITHUB_TOKEN_READONLY_WEB="your_github_token"
+GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_org"
+GITHUB_REPO_FOR_RELEASE_TRACKING="your_repo_name"
+GITHUB_REPO_FOR_PR_TRACKING="your_repo_name"
+
+# Jira Configuration
 USER_EMAIL="your_email@example.com"
 JIRA_API_KEY="your_jira_api_key"
 JIRA_LINK="https://your_jira_instance.atlassian.net"
-JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/api/graphql"
-GITHUB_TOKEN_READONLY_WEB="your_github_token"
-GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner_or_organization"
-GITHUB_REPO_FOR_RELEASE_TRACKING="your_github_repo_name"
-GITHUB_REPO_FOR_PR_TRACKING="your_github_repo_name"
-JIRA_PROJECTS="MYPROJECT, ENG, ETC"
-TEAM_<NAME>="a team name, for issues when they can't be parsed or doesn't exist in team-only project the <NAME> should correspond to the PROJECT" 
+JIRA_GRAPHQL_URL="https://your_jira_instance.atlassian.net/gateway/api/graphql"
+JIRA_PROJECTS="PROJECT1,PROJECT2,PROJECT3"
 
-# NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
-# Settings --> Issues --> CustomFields: search for your definition of these variables
+# Team Configuration
+TEAM_<NAME>="team_name"  # Used when team field isn't available in project
+
+# Jira Custom Fields (example values - replace with your actual field IDs)
 CUSTOM_FIELD_STORYPOINTS=10025
 CUSTOM_FIELD_TEAM=10075
 CUSTOM_FIELD_WORK_TYPE=10079
-CUSTOM_FIELD_STORYPOINTS=10025
 ```
 
-### All variables needed and described in zshrc format
-```
-export USER_EMAIL="your_email@example.com"
-export JIRA_API_KEY="your_jira_api_key"
-export JIRA_LINK="https://your_jira_instance.atlassian.net"
-export JIRA_GRAPHQL_URL = "https://<your_jira_instance>.atlassian.net/gateway/api/graphql"
-export GITHUB_TOKEN_READONLY_WEB="your_github_token"
-export GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_repo_owner"
-export GITHUB_METRIC_REPO="your_github_repo_name"
-export GITHUB_REPO_FOR_PR_TRACKING=="your_github_repo_name"
-export JIRA_PROJECTS="MYPROJECT, ENG, ETC"
-export RELEASE_INSIGHT_PROJECT="MY_PROJECT_TRACKING_RELEASES"
-export TEAM_ONE="first_team" 
+Note: The custom field IDs are examples. You'll need to find your actual field IDs in Jira under Settings → Issues → Custom Fields.
 
-# NOTE the customfield enumerations here are examples, your jira project WILL BE DIFFERENT
-# Settings --> Issues --> CustomFields: search for your definition of these variables
-export CUSTOM_FIELD_STORYPOINTS=10025
-export CUSTOM_FIELD_TEAM=10075
-export CUSTOM_FIELD_WORK_TYPE=10079
-export CUSTOM_FIELD_STORYPOINTS=10025
+## Example Usage
 
-# TEAM_<ONE> etc is used for when the team field isn't used in for a project but might make sense see 
-# example export TEAM_SWE="scandinavian_group"
+### GitHub Metrics
+To analyze developer activity and PR metrics:
+```bash
+python3 git_metrics/developer_activity_insight.py --repos 'org/repo1,org2/repo2' --users 'user1,user2' --date_start '2024-01-01' --date_end '2024-03-31'
 ```
 
+To analyze release patterns:
+```bash
+python3 git_metrics/releases.py
+```
 
-## Example Usage ##
-Extracting GitHub Releases
-To retrieve and categorize GitHub releases, ensure your environmental variables are set and run:
+### Jira Metrics
+To analyze engineering excellence:
+```bash
+python3 jira_metrics/engineering_excellence.py
+```
 
-`python3 github/releases.py`
-
-
-## Team and Individual Metrics. 
-A word of caution. These metrics are by itself not very valuable, they can however more easily help you see where a team and an individual are struggling or needs support.
-The metrics should be seen as a clue as to where it's needed to dig in more, to ask questions and understand the situation that is driving the metric up/down. 
-
-
-## Tests ## 
-`pytest -v` 
-
-alternatively: 
-In each functionality directory, if it has a test directory you can run all of the tests like this 
-
-`python3 -m unittest discover -s tests -p "*.py"`
-
-Or more verbose with `-v` flag. You can also specify the individual file. 
-
-`python3 -m unittest discover -v -s tests -p test_engineering_excellence.py`
-
-## Branches
-[Trick to update your branch to latest on main, in the github UI](https://github.com/USERNAME/REPOSITORY_NAME/compare/feature-branch...main)
+To analyze cycle times:
+```bash
+python3 jira_metrics/cycle_time.py
+```

@@ -1,19 +1,15 @@
 # pylint: disable=missing-timeout
-import requests
+import argparse
 import csv
 import os
-import argparse
 from datetime import datetime
-from collections import defaultdict
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ========== CONFIGURATION ========== #
 GITHUB_API_URL = "https://api.github.com"
-OWNER = os.environ.get("GITHUB_METRIC_OWNER_OR_ORGANIZATION")
-REPO_NAME = os.environ.get("GITHUB_REPO_FOR_PR_TRACKING")
-REPO = f"{OWNER}/{REPO_NAME}" if OWNER and REPO_NAME else os.environ.get("REPO")
 TOKEN = os.environ.get("GITHUB_TOKEN_READONLY_WEB", os.environ.get("GITHUB_TOKEN"))
 
 HEADERS = {
@@ -34,13 +30,13 @@ def iso_to_datetime(iso_str):
 
 
 # ========== FETCH PULL REQUESTS ========== #
-def fetch_pull_requests(state="closed", per_page=100):
+def fetch_pull_requests(repo, state="closed", per_page=100):
     """Fetch all pull requests with pagination."""
     all_prs = []
     page = 1
 
     while True:
-        url = f"{GITHUB_API_URL}/repos/{REPO}/pulls"
+        url = f"{GITHUB_API_URL}/repos/{repo}/pulls"
         params = {"state": state, "per_page": per_page, "page": page}
 
         print(f"Fetching page {page} of pull requests...")
@@ -71,9 +67,9 @@ def fetch_pull_requests(state="closed", per_page=100):
 
 
 # ========== FETCH PR REVIEWS ========== #
-def fetch_reviews(pr_number):
+def fetch_reviews(repo, pr_number):
     """Fetch all reviews for a pull request."""
-    url = f"{GITHUB_API_URL}/repos/{REPO}/pulls/{pr_number}/reviews"
+    url = f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}/reviews"
     all_reviews = []
     page = 1
 
@@ -103,9 +99,9 @@ def fetch_reviews(pr_number):
 
 
 # ========== FETCH PR TIMELINE EVENTS ========== #
-def fetch_timeline(pr_number):
+def fetch_timeline(repo, pr_number):
     """Fetch timeline events for a pull request."""
-    url = f"{GITHUB_API_URL}/repos/{REPO}/issues/{pr_number}/timeline"
+    url = f"{GITHUB_API_URL}/repos/{repo}/issues/{pr_number}/timeline"
     all_events = []
     page = 1
 
@@ -139,7 +135,7 @@ def fetch_timeline(pr_number):
 
 
 # ========== PROCESS PR DATA ========== #
-def process_pr(pr):
+def process_pr(repo, pr):
     """Process a pull request and calculate review metrics."""
     try:
         pr_number = pr.get("number")
@@ -163,10 +159,10 @@ def process_pr(pr):
             ]
 
         # Fetch reviews (more reliable for approval status)
-        reviews = fetch_reviews(pr_number)
+        reviews = fetch_reviews(repo, pr_number)
 
         # Get timeline events for review requests
-        timeline = fetch_timeline(pr_number)
+        timeline = fetch_timeline(repo, pr_number)
 
         # Track review request times
         review_requested_times = {}
@@ -232,68 +228,29 @@ def process_pr(pr):
             time_from_approval_to_merge,
         ]
     except Exception as e:
-        print(f"Error processing PR #{pr.get('number', 'Unknown')}: {str(e)}")
-        return [
-            pr.get("number", "Unknown"),
-            pr.get("created_at", "Unknown"),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ]
+        print(f"Error processing PR #{pr_number}: {e}")
+        return None
 
 
-# ========== WRITE CSV ========== #
 def write_to_csv(data, filename="pr_review_metrics.csv"):
-    """Write PR metrics to a CSV file."""
+    """Write the processed data to a CSV file."""
     headers = [
         "PR Number",
         "Created At",
         "Merged At",
-        "Time to Merge (h)",
-        "First Review Start",
-        "Time to First Review (h)",
-        "Time to First Approval (h)",
-        "Time from Approval to Merge (h)",
+        "Time to Merge (hours)",
+        "First Review Time",
+        "Time to First Review (hours)",
+        "Time to First Approval (hours)",
+        "Time from Approval to Merge (hours)",
     ]
 
-    # Make a copy of the data to format dates for CSV display
-    formatted_data = []
-    for row in data:
-        formatted_row = row.copy() if isinstance(row, list) else row[:]
-
-        # Format dates in positions 1, 2, and 4 (Created At, Merged At, First Review Start)
-        for i in [1, 2, 4]:
-            if i < len(formatted_row) and formatted_row[i]:
-                # If it's already a date string, try to simplify it
-                if isinstance(formatted_row[i], str) and "T" in formatted_row[i]:
-                    try:
-                        dt = datetime.strptime(formatted_row[i], "%Y-%m-%dT%H:%M:%SZ")
-                        formatted_row[i] = dt.strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
-                # If it's a date with time, simplify to just date
-                elif isinstance(formatted_row[i], str) and " " in formatted_row[i]:
-                    try:
-                        dt = datetime.strptime(formatted_row[i], "%Y-%m-%d %H:%M:%S")
-                        formatted_row[i] = dt.strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
-
-        formatted_data.append(formatted_row)
-
-    try:
-        with open(filename, mode="w", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
-            writer.writerow(headers)
-            writer.writerows(formatted_data)
-    except IOError as e:
-        print(f"Error writing to CSV file: {e}")
+    with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)
+        writer.writerows(data)
 
 
-# ========== MAIN PIPELINE ========== #
 def main():
     """Main function to run the PR metrics collection."""
     parser = argparse.ArgumentParser(description="Generate PR review metrics.")
@@ -301,18 +258,19 @@ def main():
         "-o", "--output", default="pr_review_metrics.csv", help="Output CSV filename (default: pr_review_metrics.csv)"
     )
     parser.add_argument("-l", "--limit", type=int, help="Limit the number of PRs to process")
+    parser.add_argument(
+        "-r", "--repo", required=True, help="GitHub repository in format 'owner/repo' (e.g., 'octocat/Hello-World')"
+    )
     args = parser.parse_args()
 
-    if not REPO or not TOKEN:
-        print("Error: Repository and GitHub token must be set in environment variables.")
-        print("Please set GITHUB_METRIC_OWNER_OR_ORGANIZATION and GITHUB_REPO_FOR_PR_TRACKING")
-        print("or alternatively set REPO as 'owner/repo'")
-        print("And set GITHUB_TOKEN_READONLY_WEB or GITHUB_TOKEN for authentication.")
+    if not TOKEN:
+        print("Error: GitHub token must be set in environment variables.")
+        print("Please set GITHUB_TOKEN_READONLY_WEB or GITHUB_TOKEN")
         return
 
-    print(f"Fetching PR data for repository: {REPO}")
+    print(f"Fetching PR data for repository: {args.repo}")
 
-    prs = fetch_pull_requests()
+    prs = fetch_pull_requests(args.repo)
 
     if args.limit and args.limit > 0:
         prs = prs[: args.limit]
@@ -322,8 +280,9 @@ def main():
 
     results = []
     for i, pr in enumerate(prs):
-        result = process_pr(pr)
-        results.append(result)
+        result = process_pr(args.repo, pr)
+        if result:
+            results.append(result)
         if (i + 1) % 10 == 0 or i == len(prs) - 1:
             print(f"Processed {i + 1}/{len(prs)} PRs")
 
@@ -331,7 +290,7 @@ def main():
     print(f"Saved metrics for {len(results)} PRs to {args.output}")
 
     # Print quick summary
-    merged_prs = [r for r in results if r[2] is not None]  # Has merge time
+    merged_prs = [r for r in results if r[2] is not None]
     if merged_prs:
         merge_times = [r[3] for r in merged_prs if r[3] is not None]
         review_times = [r[5] for r in merged_prs if r[5] is not None]

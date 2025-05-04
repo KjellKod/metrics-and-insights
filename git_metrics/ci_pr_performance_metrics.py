@@ -314,7 +314,7 @@ def get_pull_requests(start_date):
     # Load cache if exists
     cache_file = "pr_cache.json"
     if os.path.exists(cache_file):
-        with open(cache_file, "r") as f:
+        with open(cache_file, "r", encoding="utf-8") as f:
             cache_data = json.load(f)
             prs = cache_data.get("prs", [])
             cursor = cache_data.get("cursor", None)
@@ -356,7 +356,7 @@ def get_pull_requests(start_date):
                     break
 
             # Save progress to cache
-            with open(cache_file, "w") as f:
+            with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump({"prs": prs, "cursor": cursor}, f)
 
             if found_old_pr or not data["pageInfo"].get("hasNextPage"):

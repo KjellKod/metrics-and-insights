@@ -42,9 +42,9 @@ def build_jql_queries(year, projects):
     project_clause = f"project in ({', '.join(quoted_projects)})"
     return {
         "created": f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
-        "closed": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution != 'Won\\'t Do'",
+        "closed": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution != \"Won't Do\"",
         "open_eoy": f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' AND status not in (Done, Closed, Released)",
-        "wont_do": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution = 'Won\\'t Do'",
+        "wont_do": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution = \"Won't Do\"",
     }
 
 
