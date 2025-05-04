@@ -5,26 +5,42 @@ This directory contains scripts for analyzing GitHub repository metrics.
 ## Scripts
 
 ### developer_activity_insight.py
+Generates comprehensive PR metrics reports including monthly aggregations, review metrics, and volume metrics per author.
+
+Metrics collected:
+- PR Details: date, author, repository, PR number, lines changed, time to merge
+- Monthly Aggregations: PR counts, median hours to merge, lines added/removed, total changes
+- Author-specific Metrics: PR count per author, median hours to merge, lines added/removed
+- Review Metrics: reviews participated, reviews approved, comments made
+
 ```bash
 python3 developer_activity_insight.py --repos <org/repo1,org2/repo2> --users <user1,user2> --date_start <YYYY-MM-DD> --date_end <YYYY-MM-DD> [--output pr_metrics.csv] [--debug]
 ```
 
 ### releases.py
+Tracks and analyzes GitHub releases, providing monthly release counts and detailed release information.
+
 ```bash
 python3 releases.py
 ```
 
 ### lines_changed.py
+Analyzes code changes by tracking additions and deletions across commits within a specified date range.
+
 ```bash
 python3 lines_changed.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>
 ```
 
 ### repo_commit_report.sh
+Generates a detailed commit report for multiple repositories within a specified date range, useful for audits and oversight activities.
+
 ```bash
 ./repo_commit_report.sh --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --repos <owner1/repo1,owner2/repo2>
 ```
 
 ### code_review_metrics.py
+Analyzes code review patterns and timing, including time to first review, approval times, and merge times.
+
 ```bash
 python3 code_review_metrics.py [-o OUTPUT_FILE] [-l LIMIT]
 Options:
@@ -33,6 +49,8 @@ Options:
 ```
 
 ### ci_pr_performance_metrics.py
+Tracks CI performance metrics for PRs, including build times, success rates, and their relationship to PR merge times.
+
 ```bash
 python3 ci_pr_performance_metrics.py [options]
 Options:
@@ -44,11 +62,15 @@ Options:
 ```
 
 ### active_devs_one_off.py
+One-time script to identify and analyze active developers in the repository.
+
 ```bash
 python3 active_devs_one_off.py
 ```
 
 ### active_repos_one_off.py
+One-time script to identify and analyze active repositories in the organization.
+
 ```bash
 python3 active_repos_one_off.py
 ```
