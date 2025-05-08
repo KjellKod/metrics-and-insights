@@ -40,9 +40,12 @@ jobs:
         
     - name: Test with pytest
       run: |
-        pytest -v --junitxml=unittests.xml --cov=jira_metrics --cov-report=xml --cov-branch --cov-fail-under=50
-
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
+        pytest --cov --junitxml=junit.xml -o junit_family=legacy --cov-branch --cov-fail-under=50
+    
+    - name: Upload test results to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+        verbose: true

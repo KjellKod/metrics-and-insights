@@ -55,11 +55,16 @@ def process_issues(issues, start_date_str, end_date_str):
 def analyze_release_tickets(jql_month_data):
     # Output the data in comma-separated format
     print("\nJQL Query Results:")
+    total_released_tickets = 0  # Initialize a counter for the total released tickets
     for month, data in jql_month_data.items():
         print(f"\nMonth: {month}")
         print(f"Released Tickets Count: {data['released_tickets_count']}")
         print(f"Total Points: {data['total_points']}")  # points IS sketcy, but we can use it with other metrics
         verbose_print(f"Released Tickets: {', '.join(data['released_tickets'])}")
+        total_released_tickets += data['released_tickets_count']  # Accumulate the count
+
+    # Print the total number of released tickets for the year
+    print(f"\nTotal Released Tickets for the Year: {total_released_tickets}")
 
 
 def show_result(jql_month_data, args):

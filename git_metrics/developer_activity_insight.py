@@ -151,7 +151,8 @@ class GitHubAPI:
         author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1}
+                search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1},
+                timeout=30
             )
             response.raise_for_status()
             author_prs = response.json().get("items", [])
@@ -164,7 +165,8 @@ class GitHubAPI:
         reviewer_query = f"repo:{repo} is:pr is:merged review-requested:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1}
+                search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1},
+                timeout=30
             )
             response.raise_for_status()
             reviewer_prs = response.json().get("items", [])
@@ -177,7 +179,8 @@ class GitHubAPI:
         commenter_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1}
+                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1},
+                timeout=30
             )
             response.raise_for_status()
             commenter_prs = response.json().get("items", [])
@@ -196,7 +199,7 @@ class GitHubAPI:
         logger.debug(f"Fetching details for PR #{pr_number} in {repo}")
         pr_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         try:
-            response = requests.get(pr_url, headers=self.headers)
+            response = requests.get(pr_url, headers=self.headers,timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -630,7 +633,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at"):
+                if review_request and review_request.get("created_at", timeout = 30):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
@@ -685,7 +688,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at"):
+                if review_request and review_request.get("created_at", timeout = 30):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
