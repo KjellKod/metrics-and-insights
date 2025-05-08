@@ -633,7 +633,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at"):
+                if review_request and review_request.get("created_at", timeout = 30):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
@@ -688,7 +688,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at"):
+                if review_request and review_request.get("created_at", timeout = 30):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
