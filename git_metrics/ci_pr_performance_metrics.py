@@ -645,7 +645,7 @@ def main():
         print("Retrieving yearly stats for approved and merged PRs...")
         print("Retrieving yearly stats for merged PRs...")
         start_year = 2024
-        end_year = 2024
+        end_year = 2025
         yearly_counts = get_merged_prs_for_years(start_year, end_year)
         for year, count in yearly_counts.items():
             print(f"Total merged PRs for {year}: {count}")
@@ -653,7 +653,7 @@ def main():
         print("\nProceeding with regular PR metrics...")
 
         args = parse_common_arguments()
-        start_date = "2024-01-01T00:00:00Z"  # Updated to match your previous output
+        start_date = f"{start_year}-01-01T00:00:00Z"  # Updated to match your previous output
 
         if args.load_from_file:
             prs = load_from_file(args.load_from_file)
