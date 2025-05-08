@@ -194,7 +194,7 @@ def setup_github_api():
 
 def get_single_pull_request(pr_number):
     url = f"{base_url}/pulls/{pr_number}"
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=30)
     return [response.json()] if response.status_code == 200 else []
 
 
