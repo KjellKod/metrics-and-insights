@@ -633,7 +633,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at", timeout = 30):
+                if review_request and review_request.get("created_at"):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
@@ -688,7 +688,7 @@ class PRMetricsCollector:
                     None,
                 )
 
-                if review_request and review_request.get("created_at", timeout = 30):
+                if review_request and review_request.get("created_at"):
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
@@ -701,29 +701,53 @@ class PRMetricsCollector:
 
         # Process review comments (inline comments)
         for comment in review_data["review_comments"]:
-            reviewer = comment["user"]["login"]
-            key = (month, reviewer)
-            if key not in review_metrics:
-                review_metrics[key] = ReviewMetrics()
+            try:
+                if not isinstance(comment, dict):
+                    logger.warning("Skipping invalid review comment format: %s", type(comment))
+                    continue
+                    
+                reviewer = comment.get("user", {}).get("login")
+                if not reviewer:
+                    logger.warning("Skipping review comment with no user login")
+                    continue
+                    
+                key = (month, reviewer)
+                if key not in review_metrics:
+                    review_metrics[key] = ReviewMetrics()
 
-            # Count the comment (only once per PR)
-            if (reviewer, comment["pull_request_url"]) not in reviewer_commented_prs:
-                review_metrics[key].comments_made += 1
-                reviewer_commented_prs.add((reviewer, comment["pull_request_url"]))
-                logger.debug(f"Review comment counted for {reviewer} on PR {comment['pull_request_url']}")
+                # Count the comment (only once per PR)
+                if (reviewer, comment["pull_request_url"]) not in reviewer_commented_prs:
+                    review_metrics[key].comments_made += 1
+                    reviewer_commented_prs.add((reviewer, comment["pull_request_url"]))
+                    logger.debug("Review comment counted for %s on PR %s", reviewer, comment['pull_request_url'])
+            except Exception as e:
+                logger.warning("Error processing review comment: %s", str(e))
+                continue
 
         # Process issue comments
         for comment in review_data["issue_comments"]:
-            reviewer = comment["user"]["login"]
-            key = (month, reviewer)
-            if key not in review_metrics:
-                review_metrics[key] = ReviewMetrics()
+            try:
+                if not isinstance(comment, dict):
+                    logger.warning("Skipping invalid issue comment format: %s", type(comment))
+                    continue
+                    
+                reviewer = comment.get("user", {}).get("login")
+                if not reviewer:
+                    logger.warning("Skipping issue comment with no user login")
+                    continue
+                    
+                key = (month, reviewer)
+                if key not in review_metrics:
+                    review_metrics[key] = ReviewMetrics()
 
-            # Count the comment (only once per PR)
-            if (reviewer, comment["issue_url"]) not in reviewer_commented_prs:
-                review_metrics[key].comments_made += 1
-                reviewer_commented_prs.add((reviewer, comment["issue_url"]))
-                logger.debug(f"Issue comment counted for {reviewer} on PR {comment['issue_url']}")
+                # Count the comment (only once per PR)
+                if (reviewer, comment["issue_url"]) not in reviewer_commented_prs:
+                    review_metrics[key].comments_made += 1
+                    reviewer_commented_prs.add((reviewer, comment["issue_url"]))
+                    logger.debug("Issue comment counted for %s on PR %s", reviewer, comment['issue_url'])
+            except Exception as e:
+                logger.warning("Error processing issue comment: %s", str(e))
+                continue
 
         # Debug output for the current PR
         for reviewer in [self.api.normalize_username(u) for u in self.users]:
@@ -735,10 +759,69 @@ class PRMetricsCollector:
                 logger.debug(f"  Reviews approved: {metrics.reviews_approved}")
                 logger.debug(f"  Comments made: {metrics.comments_made}")
 
-    def generate_reports(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
-        """Generate all metric reports"""
-        self.metrics_writers["pr"].write(pr_data, monthly_metrics, review_metrics)
 
+def validate_github_token(token: str) -> bool:
+    """
+    Validate GitHub token by making a test API call.
+    Returns True if token is valid and has necessary permissions, False otherwise.
+    """
+    logger.info("Validating GitHub token...")
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+    
+    try:
+        # First check rate limits
+        response = requests.get("https://api.github.com/rate_limit", headers=headers, timeout=30)
+        if response.status_code == 200:
+            rate_limit = response.json()
+            core_limit = rate_limit['resources']['core']
+            remaining = core_limit['remaining']
+            reset_time = datetime.fromtimestamp(core_limit['reset'])
+            
+            if remaining == 0:
+                logger.error("GitHub API rate limit exceeded. Rate limit resets at %s", 
+                           reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
+                return False
+            else:
+                logger.info("GitHub API rate limit: %d requests remaining, resets at %s", 
+                          remaining, reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
+        elif response.status_code == 403:
+            # Try to parse rate limit info from the error response
+            try:
+                error_data = response.json()
+                if "message" in error_data and "rate limit" in error_data["message"].lower():
+                    logger.error("GitHub API rate limit exceeded: %s", error_data["message"])
+                    if "documentation_url" in error_data:
+                        logger.error("For more information, see: %s", error_data["documentation_url"])
+                else:
+                    logger.error("GitHub token validation failed: %s", response.text)
+            except ValueError:
+                logger.error("GitHub token validation failed: %s", response.text)
+            return False
+        else:
+            logger.error("GitHub token validation failed: %s", response.text)
+            return False
+        
+        # Then check if we can authenticate
+        response = requests.get("https://api.github.com/user", headers=headers, timeout=30)
+        if response.status_code != 200:
+            logger.error("GitHub token validation failed: %s", response.text)
+            return False
+            
+        # Then check if we have repo access by trying to access a public repo
+        response = requests.get("https://api.github.com/repos/onfleet/web", headers=headers, timeout=30)
+        if response.status_code == 403:
+            logger.error("GitHub token lacks repository access. Please ensure the token has 'repo' scope.")
+            return False
+        elif response.status_code != 200:
+            logger.error("GitHub token validation failed: %s", response.text)
+            return False
+            
+        logger.info("GitHub token validation successful")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        logger.error("Error validating GitHub token: %s", str(e))
+        return False
 
 def main():
     # Load environment variables
@@ -765,6 +848,11 @@ def main():
     token = os.getenv("GITHUB_TOKEN_READONLY_WEB")
     if not token:
         raise EnvironmentError("GITHUB_TOKEN_READONLY_WEB environment variable is not set.")
+
+    # Validate GitHub token before proceeding
+    if not validate_github_token(token):
+        logger.error("GitHub token validation failed. Please check your token permissions and try again.")
+        sys.exit(1)
 
     logger.info("Starting PR metrics collection")
     logger.info(f"Repos: {args.repos}")
