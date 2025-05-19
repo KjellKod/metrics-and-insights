@@ -894,6 +894,7 @@ def main():
     logger.info(f"✓ Date range: {args.date_start} to {args.date_end}")
     logger.info(f"✓ Repositories processed: {len(repos)}")
     logger.info(f"✓ Users analyzed: {len(users)}")
+    logger.info(f"✓ Output file: {args.output}")
 
 
 if __name__ == "__main__":
