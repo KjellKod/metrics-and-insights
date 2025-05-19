@@ -61,7 +61,7 @@ def analyze_release_tickets(jql_month_data):
         print(f"Released Tickets Count: {data['released_tickets_count']}")
         print(f"Total Points: {data['total_points']}")  # points IS sketcy, but we can use it with other metrics
         verbose_print(f"Released Tickets: {', '.join(data['released_tickets'])}")
-        total_released_tickets += data['released_tickets_count']  # Accumulate the count
+        total_released_tickets += data["released_tickets_count"]  # Accumulate the count
 
     # Print the total number of released tickets for the year
     print(f"\nTotal Released Tickets for the Year: {total_released_tickets}")

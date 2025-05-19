@@ -151,8 +151,7 @@ class GitHubAPI:
         author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1},
-                timeout=30
+                search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1}, timeout=30
             )
             response.raise_for_status()
             author_prs = response.json().get("items", [])
@@ -165,8 +164,7 @@ class GitHubAPI:
         reviewer_query = f"repo:{repo} is:pr is:merged review-requested:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1},
-                timeout=30
+                search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1}, timeout=30
             )
             response.raise_for_status()
             reviewer_prs = response.json().get("items", [])
@@ -179,8 +177,7 @@ class GitHubAPI:
         commenter_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
         try:
             response = requests.get(
-                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1},
-                timeout=30
+                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1}, timeout=30
             )
             response.raise_for_status()
             commenter_prs = response.json().get("items", [])
@@ -199,7 +196,7 @@ class GitHubAPI:
         logger.debug(f"Fetching details for PR #{pr_number} in {repo}")
         pr_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         try:
-            response = requests.get(pr_url, headers=self.headers,timeout=30)
+            response = requests.get(pr_url, headers=self.headers, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -285,7 +282,9 @@ class PRMetricsWriter(MetricsWriter):
 
     def _matches_month_and_author(self, pr: PRData, month: str, author: str) -> bool:
         """Check if a PR matches both the given month and author"""
-        return pr.date.strftime("%Y-%m") == month and self.normalize_username(pr.author) == self.normalize_username(author)
+        return pr.date.strftime("%Y-%m") == month and self.normalize_username(pr.author) == self.normalize_username(
+            author
+        )
 
     def _write_metric_section(
         self, writer: csv.writer, title: str, months: List[str], authors: List[str], get_value: callable
@@ -311,13 +310,13 @@ class PRMetricsWriter(MetricsWriter):
             normalized_users = [self.normalize_username(u) for u in self.users]
             pr_authors = set(self.normalize_username(pr.author) for pr in pr_data)
             review_authors = set(self.normalize_username(author) for (_, author) in review_metrics.keys())
-            
+
             # Debug output for authors
             logger.debug(f"\nAuthors found:")
             logger.debug(f"  From PRs: {pr_authors}")
             logger.debug(f"  From reviews: {review_authors}")
             logger.debug(f"  Specified users: {normalized_users}")
-            
+
             # Get the original case version of usernames that have activity
             active_authors = []
             for user in self.users:
@@ -331,7 +330,7 @@ class PRMetricsWriter(MetricsWriter):
                     else:
                         # If not found in PR data, use the original case from users list
                         active_authors.append(user)
-            
+
             authors = sorted(active_authors)
             logger.debug(f"  Final authors list: {authors}")
 
@@ -346,7 +345,7 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "Reviews Participated (as Reviewer)", # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username>
+                "Reviews Participated (as Reviewer)",  # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username>
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_participated", 0),
@@ -354,15 +353,15 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
-                "PRs Approved (as Reviewer)", # # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD reviewed-by:<username>
-                months, 
+                "PRs Approved (as Reviewer)",  # # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD reviewed-by:<username>
+                months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "reviews_approved", 0),
             )
 
             self._write_metric_section(
                 writer,
-                "Comments Made (as Reviewer)", #  # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username> ... then count comments in each place
+                "Comments Made (as Reviewer)",  #  # is:pr is:merged merged:YYYY-MM-DD..YYYY-MM-DD commenter:<username> ... then count comments in each place
                 months,
                 authors,
                 lambda m, a: getattr(review_metrics.get((m, a)), "comments_made", 0),
@@ -387,9 +386,7 @@ class PRMetricsWriter(MetricsWriter):
                 authors,
                 lambda m, a: (
                     round(
-                        median(
-                            pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a)
-                        ),
+                        median(pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a)),
                         2,
                     )
                     if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
@@ -448,7 +445,6 @@ class PRMetricsWriter(MetricsWriter):
                     else 0
                 ),
             )
-
 
             self._write_metric_section(
                 writer,
@@ -524,7 +520,7 @@ class PRMetricsCollector:
             writer.write(pr_data, monthly_metrics, review_metrics)
         logger.info("Reports generated successfully")
 
-    # Currently not used but is likely used in the future. 
+    # Currently not used but is likely used in the future.
     def _get_pr_creation_time(self, repo: str, pr_number: int) -> Optional[datetime]:
         """Get PR creation time from cache or API"""
         cache_key = f"{repo}/{pr_number}"
@@ -635,7 +631,8 @@ class PRMetricsCollector:
                     (
                         req
                         for req in review_data["review_requests"]
-                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", "")) == self.api.normalize_username(review["user"]["login"])
+                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", ""))
+                        == self.api.normalize_username(review["user"]["login"])
                     ),
                     None,
                 )
@@ -690,7 +687,8 @@ class PRMetricsCollector:
                     (
                         req
                         for req in review_data["review_requests"]
-                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", "")) == self.api.normalize_username(reviewer)
+                        if self.api.normalize_username(req.get("requested_reviewer", {}).get("login", ""))
+                        == self.api.normalize_username(reviewer)
                     ),
                     None,
                 )
@@ -712,12 +710,12 @@ class PRMetricsCollector:
                 if not isinstance(comment, dict):
                     logger.warning("Skipping invalid review comment format: %s", type(comment))
                     continue
-                    
+
                 reviewer = comment.get("user", {}).get("login")
                 if not reviewer:
                     logger.warning("Skipping review comment with no user login")
                     continue
-                    
+
                 key = (month, reviewer)
                 if key not in review_metrics:
                     review_metrics[key] = ReviewMetrics()
@@ -726,7 +724,7 @@ class PRMetricsCollector:
                 if (reviewer, comment["pull_request_url"]) not in reviewer_commented_prs:
                     review_metrics[key].comments_made += 1
                     reviewer_commented_prs.add((reviewer, comment["pull_request_url"]))
-                    logger.debug("Review comment counted for %s on PR %s", reviewer, comment['pull_request_url'])
+                    logger.debug("Review comment counted for %s on PR %s", reviewer, comment["pull_request_url"])
             except Exception as e:
                 logger.warning("Error processing review comment: %s", str(e))
                 continue
@@ -737,12 +735,12 @@ class PRMetricsCollector:
                 if not isinstance(comment, dict):
                     logger.warning("Skipping invalid issue comment format: %s", type(comment))
                     continue
-                    
+
                 reviewer = comment.get("user", {}).get("login")
                 if not reviewer:
                     logger.warning("Skipping issue comment with no user login")
                     continue
-                    
+
                 key = (month, reviewer)
                 if key not in review_metrics:
                     review_metrics[key] = ReviewMetrics()
@@ -751,7 +749,7 @@ class PRMetricsCollector:
                 if (reviewer, comment["issue_url"]) not in reviewer_commented_prs:
                     review_metrics[key].comments_made += 1
                     reviewer_commented_prs.add((reviewer, comment["issue_url"]))
-                    logger.debug("Issue comment counted for %s on PR %s", reviewer, comment['issue_url'])
+                    logger.debug("Issue comment counted for %s on PR %s", reviewer, comment["issue_url"])
             except Exception as e:
                 logger.warning("Error processing issue comment: %s", str(e))
                 continue
@@ -771,30 +769,35 @@ def validate_github_token(token: str, test_repo: str) -> bool:
     """
     Validate GitHub token by making a test API call.
     Returns True if token is valid and has necessary permissions, False otherwise.
-    
+
     Args:
         token: GitHub API token
         test_repo: Repository to test access against (format: 'owner/repo')
     """
     logger.info("Validating GitHub token...")
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-    
+
     try:
         # First check rate limits
         response = requests.get("https://api.github.com/rate_limit", headers=headers, timeout=30)
         if response.status_code == 200:
             rate_limit = response.json()
-            core_limit = rate_limit['resources']['core']
-            remaining = core_limit['remaining']
-            reset_time = datetime.fromtimestamp(core_limit['reset'])
-            
+            core_limit = rate_limit["resources"]["core"]
+            remaining = core_limit["remaining"]
+            reset_time = datetime.fromtimestamp(core_limit["reset"])
+
             if remaining == 0:
-                logger.error("GitHub API rate limit exceeded. Rate limit resets at %s", 
-                           reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
+                logger.error(
+                    "GitHub API rate limit exceeded. Rate limit resets at %s",
+                    reset_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                )
                 return False
             else:
-                logger.info("GitHub API rate limit: %d requests remaining, resets at %s", 
-                          remaining, reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
+                logger.info(
+                    "GitHub API rate limit: %d requests remaining, resets at %s",
+                    remaining,
+                    reset_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                )
         elif response.status_code == 403:
             # Try to parse rate limit info from the error response
             try:
@@ -811,13 +814,13 @@ def validate_github_token(token: str, test_repo: str) -> bool:
         else:
             logger.error("GitHub token validation failed: %s", response.text)
             return False
-        
+
         # Then check if we can authenticate
         response = requests.get("https://api.github.com/user", headers=headers, timeout=30)
         if response.status_code != 200:
             logger.error("GitHub token validation failed: %s", response.text)
             return False
-            
+
         # Then check if we have repo access by trying to access the first repo from the list
         response = requests.get(f"https://api.github.com/repos/{test_repo}", headers=headers, timeout=30)
         if response.status_code == 403:
@@ -826,13 +829,14 @@ def validate_github_token(token: str, test_repo: str) -> bool:
         elif response.status_code != 200:
             logger.error("GitHub token validation failed: %s", response.text)
             return False
-            
+
         logger.info("GitHub token validation successful")
         return True
-        
+
     except requests.exceptions.RequestException as e:
         logger.error("Error validating GitHub token: %s", str(e))
         return False
+
 
 def main():
     # Load environment variables
