@@ -517,6 +517,13 @@ class PRMetricsCollector:
         # Cache for PR creation times
         self.pr_creation_times = {}
 
+    def generate_reports(self, pr_data: List[PRData], monthly_metrics: dict, review_metrics: dict) -> None:
+        """Generate all reports using the configured writers"""
+        logger.info("Generating reports...")
+        for writer in self.metrics_writers.values():
+            writer.write(pr_data, monthly_metrics, review_metrics)
+        logger.info("Reports generated successfully")
+
     # Currently not used but is likely used in the future. 
     def _get_pr_creation_time(self, repo: str, pr_number: int) -> Optional[datetime]:
         """Get PR creation time from cache or API"""
@@ -760,10 +767,14 @@ class PRMetricsCollector:
                 logger.debug(f"  Comments made: {metrics.comments_made}")
 
 
-def validate_github_token(token: str) -> bool:
+def validate_github_token(token: str, test_repo: str) -> bool:
     """
     Validate GitHub token by making a test API call.
     Returns True if token is valid and has necessary permissions, False otherwise.
+    
+    Args:
+        token: GitHub API token
+        test_repo: Repository to test access against (format: 'owner/repo')
     """
     logger.info("Validating GitHub token...")
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
@@ -807,8 +818,8 @@ def validate_github_token(token: str) -> bool:
             logger.error("GitHub token validation failed: %s", response.text)
             return False
             
-        # Then check if we have repo access by trying to access a public repo
-        response = requests.get("https://api.github.com/repos/onfleet/web", headers=headers, timeout=30)
+        # Then check if we have repo access by trying to access the first repo from the list
+        response = requests.get(f"https://api.github.com/repos/{test_repo}", headers=headers, timeout=30)
         if response.status_code == 403:
             logger.error("GitHub token lacks repository access. Please ensure the token has 'repo' scope.")
             return False
@@ -843,6 +854,7 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     users = [u.strip() for u in args.users.split(",")]
+    repos = [r.strip() for r in args.repos.split(",")]
 
     # Get GitHub token
     token = os.getenv("GITHUB_TOKEN_READONLY_WEB")
@@ -850,7 +862,7 @@ def main():
         raise EnvironmentError("GITHUB_TOKEN_READONLY_WEB environment variable is not set.")
 
     # Validate GitHub token before proceeding
-    if not validate_github_token(token):
+    if not validate_github_token(token, repos[0]):
         logger.error("GitHub token validation failed. Please check your token permissions and try again.")
         sys.exit(1)
 
@@ -863,9 +875,7 @@ def main():
     collector = PRMetricsCollector(token, users)
 
     # Collect PR data
-    pr_data = collector.collect_pr_data(
-        [r.strip() for r in args.repos.split(",")], users, args.date_start, args.date_end
-    )
+    pr_data = collector.collect_pr_data(repos, users, args.date_start, args.date_end)
 
     # Process metrics
     monthly_metrics, review_metrics = collector.process_metrics(pr_data)
@@ -878,7 +888,7 @@ def main():
     logger.info("\nSummary:")
     logger.info(f"✓ Total PRs processed: {len(pr_data)}")
     logger.info(f"✓ Date range: {args.date_start} to {args.date_end}")
-    logger.info(f"✓ Repositories processed: {len(args.repos.split(','))}")
+    logger.info(f"✓ Repositories processed: {len(repos)}")
     logger.info(f"✓ Users analyzed: {len(users)}")
 
 
