@@ -420,7 +420,7 @@ class PRMetricsWriter(MetricsWriter):
             logger.debug("\nAverage Hours to Merge Calculation:")
             for month in months:
                 for author in authors:
-                    key = (month, author)
+                    key = (month, self.normalize_username(author))
                     if key in monthly_metrics:
                         metrics = monthly_metrics[key]
                         total_hours = sum(metrics.hours_to_merge)
