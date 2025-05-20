@@ -145,7 +145,7 @@ class GitHubAPI:
         """Fetch PRs for a given repo and author"""
         logger.info(f"Fetching PRs for {author} in {repo}")
         search_url = f"{self.base_url}/search/issues"
-        all_prs = []
+        unique_prs = {}  # Use a dict to track unique PRs by number
 
         # Search for PRs authored by the user
         author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
@@ -156,7 +156,8 @@ class GitHubAPI:
             response.raise_for_status()
             author_prs = response.json().get("items", [])
             logger.info(f"Found {len(author_prs)} PRs authored by {author} in {repo}")
-            all_prs.extend(author_prs)
+            for pr in author_prs:
+                unique_prs[pr["number"]] = pr  # Store PR by number
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching authored PRs for {author} in {repo}: {str(e)}")
 
@@ -169,7 +170,8 @@ class GitHubAPI:
             response.raise_for_status()
             reviewer_prs = response.json().get("items", [])
             logger.info(f"Found {len(reviewer_prs)} PRs reviewed by {author} in {repo}")
-            all_prs.extend(reviewer_prs)
+            for pr in reviewer_prs:
+                unique_prs[pr["number"]] = pr
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviewed PRs for {author} in {repo}: {str(e)}")
 
@@ -182,14 +184,15 @@ class GitHubAPI:
             response.raise_for_status()
             commenter_prs = response.json().get("items", [])
             logger.info(f"Found {len(commenter_prs)} PRs commented on by {author} in {repo}")
-            all_prs.extend(commenter_prs)
+            for pr in commenter_prs:
+                unique_prs[pr["number"]] = pr
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching commented PRs for {author} in {repo}: {str(e)}")
 
-        # Remove duplicates (in case a PR was both authored and reviewed by the same person)
-        unique_prs = {pr["number"]: pr for pr in all_prs}.values()
-        logger.info(f"Total unique PRs found for {author} in {repo}: {len(unique_prs)}")
-        return list(unique_prs)
+        # Convert dict values to list
+        pr_list = list(unique_prs.values())
+        logger.info(f"Total unique PRs found for {author} in {repo}: {len(pr_list)}")
+        return pr_list
 
     def get_pr_details(self, repo: str, pr_number: int) -> Optional[dict]:
         """Fetch detailed PR information"""
@@ -239,7 +242,6 @@ class GitHubAPI:
                     f"  Review requested for {reviewer} at {req.get('created_at')} by {req.get('actor', {}).get('login')}"
                 )
 
-            # Return all reviews and requests for author wait time calculation
             return {
                 "reviews": all_reviews,
                 "review_comments": all_comments,
@@ -402,13 +404,28 @@ class PRMetricsWriter(MetricsWriter):
                 lambda m, a: (
                     round(
                         sum(pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a))
-                        / sum(1 for pr in pr_data if self._matches_month_and_author(pr, m, a)),
+                        / len([pr for pr in pr_data if self._matches_month_and_author(pr, m, a)]),
                         2,
                     )
                     if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
                     else 0
                 ),
             )
+
+            # Add debug logging for average hours calculation
+            logger.debug("\nAverage Hours to Merge Calculation:")
+            for month in months:
+                for author in authors:
+                    matching_prs = [pr for pr in pr_data if self._matches_month_and_author(pr, month, author)]
+                    if matching_prs:
+                        total_hours = sum(pr.hours_to_merge for pr in matching_prs)
+                        count = len(matching_prs)
+                        average = round(total_hours / count, 2)
+                        logger.debug(f"  {month} - {author}:")
+                        logger.debug(f"    Total hours: {total_hours}")
+                        logger.debug(f"    PR count: {count}")
+                        logger.debug(f"    Average: {average}")
+                        logger.debug(f"    Individual PR hours: {[pr.hours_to_merge for pr in matching_prs]}")
 
             self._write_metric_section(
                 writer,
@@ -520,7 +537,6 @@ class PRMetricsCollector:
             writer.write(pr_data, monthly_metrics, review_metrics)
         logger.info("Reports generated successfully")
 
-    # Currently not used but is likely used in the future.
     def _get_pr_creation_time(self, repo: str, pr_number: int) -> Optional[datetime]:
         """Get PR creation time from cache or API"""
         cache_key = f"{repo}/{pr_number}"
@@ -537,7 +553,7 @@ class PRMetricsCollector:
     def collect_pr_data(self, repos: List[str], users: List[str], start_date: str, end_date: str) -> List[PRData]:
         """Collect PR data for all repos and users"""
         logger.info(f"Starting PR data collection for {len(repos)} repos and {len(users)} users")
-        pr_data = []
+        pr_data = {}  # Use dict to track unique PRs by (repo, number)
         total_prs = 0
 
         for repo in repos:
@@ -547,27 +563,30 @@ class PRMetricsCollector:
                 logger.info(f"Processing {len(prs)} PRs for {user} in {repo}")
 
                 for pr in prs:
+                    # Skip if we've already processed this PR
+                    pr_key = (repo, pr["number"])
+                    if pr_key in pr_data:
+                        continue
+
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
                         merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
                         hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
 
-                        pr_data.append(
-                            PRData(
-                                date=merged_at,
-                                author=details["user"]["login"],
-                                repo=repo,
-                                number=details["number"],
-                                additions=details["additions"],
-                                deletions=details["deletions"],
-                                changed_files=details["changed_files"],
-                                hours_to_merge=hours_to_merge,
-                            )
+                        pr_data[pr_key] = PRData(
+                            date=merged_at,
+                            author=details["user"]["login"],
+                            repo=repo,
+                            number=details["number"],
+                            additions=details["additions"],
+                            deletions=details["deletions"],
+                            changed_files=details["changed_files"],
+                            hours_to_merge=hours_to_merge,
                         )
 
-        logger.info(f"Completed PR data collection. Total PRs processed: {total_prs}")
-        return pr_data
+        logger.info(f"Completed PR data collection. Total unique PRs processed: {len(pr_data)}")
+        return list(pr_data.values())
 
     def process_metrics(self, pr_data: List[PRData]) -> Tuple[dict, dict]:
         """Process PR data into monthly and review metrics"""
@@ -626,6 +645,8 @@ class PRMetricsCollector:
                 review_time = self._convert_to_mst(
                     datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
                 )
+                review_month = review_time.strftime("%Y-%m")
+
                 # Find the review request for this reviewer
                 review_request = next(
                     (
@@ -641,8 +662,10 @@ class PRMetricsCollector:
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
+                    request_month = request_time.strftime("%Y-%m")
+
                     # Track the wait time from the author's perspective
-                    author_key = (month, review_request.get("actor", {}).get("login"))
+                    author_key = (request_month, review_request.get("actor", {}).get("login"))
                     if author_key not in review_metrics:
                         review_metrics[author_key] = ReviewMetrics()
                     author_wait_time = (review_time - request_time).total_seconds() / 3600
@@ -655,7 +678,15 @@ class PRMetricsCollector:
         # Process all reviews and comments, then filter for specified users
         for review in reviews:
             reviewer = review["user"]["login"]
-            key = (month, reviewer)
+            if review.get("submitted_at"):
+                review_time = self._convert_to_mst(
+                    datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
+                )
+                review_month = review_time.strftime("%Y-%m")
+                key = (review_month, reviewer)
+            else:
+                key = (month, reviewer)  # Fallback to PR month if no review time
+
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
 
@@ -677,7 +708,7 @@ class PRMetricsCollector:
             # Update author metrics
             author_metrics.reviews_participated += 1
 
-            # Calculate review response time from review request to review submission, for the requested reviewer
+            # Calculate review response time from review request to review submission
             if review.get("submitted_at"):
                 review_time = self._convert_to_mst(
                     datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
@@ -698,11 +729,16 @@ class PRMetricsCollector:
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
                     response_time = (review_time - request_time).total_seconds() / 3600
-                    review_metrics[key].review_response_times.append(response_time)
-                    logger.debug(f"Review response time calculation for {reviewer}:")
-                    logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.debug(f"  Response time: {response_time:.2f} hours")
+                    if response_time >= 0:  # Only count positive response times
+                        review_metrics[key].review_response_times.append(response_time)
+                        logger.debug(f"Review response time calculation for {reviewer}:")
+                        logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.debug(f"  Response time: {response_time:.2f} hours")
+                    else:
+                        logger.warning(f"Negative response time detected for {reviewer}: {response_time:.2f} hours")
+                        logger.warning(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.warning(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
         # Process review comments (inline comments)
         for comment in review_data["review_comments"]:
@@ -839,6 +875,9 @@ def validate_github_token(token: str, test_repo: str) -> bool:
 
 
 def main():
+    # Start timing
+    start_time = datetime.now()
+    
     # Load environment variables
     load_dotenv()
 
@@ -879,14 +918,29 @@ def main():
     collector = PRMetricsCollector(token, users)
 
     # Collect PR data
+    pr_collection_start = datetime.now()
     pr_data = collector.collect_pr_data(repos, users, args.date_start, args.date_end)
+    pr_collection_time = datetime.now() - pr_collection_start
 
     # Process metrics
+    metrics_start = datetime.now()
     monthly_metrics, review_metrics = collector.process_metrics(pr_data)
+    metrics_time = datetime.now() - metrics_start
 
     # Generate reports
+    report_start = datetime.now()
     logger.info("Generating reports")
     collector.generate_reports(pr_data, monthly_metrics, review_metrics)
+    report_time = datetime.now() - report_start
+
+    # Calculate execution time
+    end_time = datetime.now()
+    execution_time = end_time - start_time
+
+    def format_time(delta):
+        hours, remainder = divmod(delta.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
     # Log summary
     logger.info("\nSummary:")
@@ -895,6 +949,11 @@ def main():
     logger.info(f"✓ Repositories processed: {len(repos)}")
     logger.info(f"✓ Users analyzed: {len(users)}")
     logger.info(f"✓ Output file: {args.output}")
+    logger.info("\nTiming Details:")
+    logger.info(f"✓ PR Collection: {format_time(pr_collection_time)}")
+    logger.info(f"✓ Metrics Processing: {format_time(metrics_time)}")
+    logger.info(f"✓ Report Generation: {format_time(report_time)}")
+    logger.info(f"✓ Total Execution Time: {format_time(execution_time)}")
 
 
 if __name__ == "__main__":
