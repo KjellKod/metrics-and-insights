@@ -145,7 +145,7 @@ class GitHubAPI:
         """Fetch PRs for a given repo and author"""
         logger.info(f"Fetching PRs for {author} in {repo}")
         search_url = f"{self.base_url}/search/issues"
-        all_prs = []
+        all_prs = set()  # Use a set to track unique PRs by number
 
         # Search for PRs authored by the user
         author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
@@ -156,7 +156,8 @@ class GitHubAPI:
             response.raise_for_status()
             author_prs = response.json().get("items", [])
             logger.info(f"Found {len(author_prs)} PRs authored by {author} in {repo}")
-            all_prs.extend(author_prs)
+            for pr in author_prs:
+                all_prs.add((pr["number"], pr))  # Use tuple of (number, pr) for uniqueness
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching authored PRs for {author} in {repo}: {str(e)}")
 
@@ -169,7 +170,8 @@ class GitHubAPI:
             response.raise_for_status()
             reviewer_prs = response.json().get("items", [])
             logger.info(f"Found {len(reviewer_prs)} PRs reviewed by {author} in {repo}")
-            all_prs.extend(reviewer_prs)
+            for pr in reviewer_prs:
+                all_prs.add((pr["number"], pr))
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching reviewed PRs for {author} in {repo}: {str(e)}")
 
@@ -182,14 +184,15 @@ class GitHubAPI:
             response.raise_for_status()
             commenter_prs = response.json().get("items", [])
             logger.info(f"Found {len(commenter_prs)} PRs commented on by {author} in {repo}")
-            all_prs.extend(commenter_prs)
+            for pr in commenter_prs:
+                all_prs.add((pr["number"], pr))
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching commented PRs for {author} in {repo}: {str(e)}")
 
-        # Remove duplicates (in case a PR was both authored and reviewed by the same person)
-        unique_prs = {pr["number"]: pr for pr in all_prs}.values()
+        # Convert set back to list of PRs
+        unique_prs = [pr for _, pr in all_prs]
         logger.info(f"Total unique PRs found for {author} in {repo}: {len(unique_prs)}")
-        return list(unique_prs)
+        return unique_prs
 
     def get_pr_details(self, repo: str, pr_number: int) -> Optional[dict]:
         """Fetch detailed PR information"""
