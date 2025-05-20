@@ -553,7 +553,7 @@ class PRMetricsCollector:
     def collect_pr_data(self, repos: List[str], users: List[str], start_date: str, end_date: str) -> List[PRData]:
         """Collect PR data for all repos and users"""
         logger.info(f"Starting PR data collection for {len(repos)} repos and {len(users)} users")
-        pr_data = []
+        pr_data = {}  # Use dict to track unique PRs by (repo, number)
         total_prs = 0
 
         for repo in repos:
@@ -563,27 +563,30 @@ class PRMetricsCollector:
                 logger.info(f"Processing {len(prs)} PRs for {user} in {repo}")
 
                 for pr in prs:
+                    # Skip if we've already processed this PR
+                    pr_key = (repo, pr["number"])
+                    if pr_key in pr_data:
+                        continue
+
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
                         merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
                         hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
 
-                        pr_data.append(
-                            PRData(
-                                date=merged_at,
-                                author=details["user"]["login"],
-                                repo=repo,
-                                number=details["number"],
-                                additions=details["additions"],
-                                deletions=details["deletions"],
-                                changed_files=details["changed_files"],
-                                hours_to_merge=hours_to_merge,
-                            )
+                        pr_data[pr_key] = PRData(
+                            date=merged_at,
+                            author=details["user"]["login"],
+                            repo=repo,
+                            number=details["number"],
+                            additions=details["additions"],
+                            deletions=details["deletions"],
+                            changed_files=details["changed_files"],
+                            hours_to_merge=hours_to_merge,
                         )
 
-        logger.info(f"Completed PR data collection. Total PRs processed: {total_prs}")
-        return pr_data
+        logger.info(f"Completed PR data collection. Total unique PRs processed: {len(pr_data)}")
+        return list(pr_data.values())
 
     def process_metrics(self, pr_data: List[PRData]) -> Tuple[dict, dict]:
         """Process PR data into monthly and review metrics"""
@@ -872,6 +875,9 @@ def validate_github_token(token: str, test_repo: str) -> bool:
 
 
 def main():
+    # Start timing
+    start_time = datetime.now()
+    
     # Load environment variables
     load_dotenv()
 
@@ -912,14 +918,29 @@ def main():
     collector = PRMetricsCollector(token, users)
 
     # Collect PR data
+    pr_collection_start = datetime.now()
     pr_data = collector.collect_pr_data(repos, users, args.date_start, args.date_end)
+    pr_collection_time = datetime.now() - pr_collection_start
 
     # Process metrics
+    metrics_start = datetime.now()
     monthly_metrics, review_metrics = collector.process_metrics(pr_data)
+    metrics_time = datetime.now() - metrics_start
 
     # Generate reports
+    report_start = datetime.now()
     logger.info("Generating reports")
     collector.generate_reports(pr_data, monthly_metrics, review_metrics)
+    report_time = datetime.now() - report_start
+
+    # Calculate execution time
+    end_time = datetime.now()
+    execution_time = end_time - start_time
+
+    def format_time(delta):
+        hours, remainder = divmod(delta.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
     # Log summary
     logger.info("\nSummary:")
@@ -928,6 +949,11 @@ def main():
     logger.info(f"✓ Repositories processed: {len(repos)}")
     logger.info(f"✓ Users analyzed: {len(users)}")
     logger.info(f"✓ Output file: {args.output}")
+    logger.info("\nTiming Details:")
+    logger.info(f"✓ PR Collection: {format_time(pr_collection_time)}")
+    logger.info(f"✓ Metrics Processing: {format_time(metrics_time)}")
+    logger.info(f"✓ Report Generation: {format_time(report_time)}")
+    logger.info(f"✓ Total Execution Time: {format_time(execution_time)}")
 
 
 if __name__ == "__main__":
