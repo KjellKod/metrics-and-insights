@@ -116,6 +116,8 @@ class MonthlyMetrics:
     total_changes: List[int]
     reviews_participated: int = 0
     review_response_times: List[float] = field(default_factory=list)
+    # Add PR details for debugging
+    pr_details: List[Tuple[str, int, float]] = field(default_factory=list)  # (repo, number, hours)
 
 
 @dataclass
@@ -416,16 +418,19 @@ class PRMetricsWriter(MetricsWriter):
             logger.debug("\nAverage Hours to Merge Calculation:")
             for month in months:
                 for author in authors:
-                    matching_prs = [pr for pr in pr_data if self._matches_month_and_author(pr, month, author)]
-                    if matching_prs:
-                        total_hours = sum(pr.hours_to_merge for pr in matching_prs)
-                        count = len(matching_prs)
-                        average = round(total_hours / count, 2)
+                    key = (month, author)
+                    if key in monthly_metrics:
+                        metrics = monthly_metrics[key]
+                        total_hours = sum(metrics.hours_to_merge)
+                        count = len(metrics.hours_to_merge)
+                        average = round(total_hours / count, 2) if count > 0 else 0
                         logger.debug(f"  {month} - {author}:")
                         logger.debug(f"    Total hours: {total_hours}")
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
-                        logger.debug(f"    Individual PR hours: {[pr.hours_to_merge for pr in matching_prs]}")
+                        logger.debug(f"    Individual PRs:")
+                        for repo, number, hours in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
+                            logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
 
             self._write_metric_section(
                 writer,
@@ -609,6 +614,8 @@ class PRMetricsCollector:
             monthly_metrics[key].lines_added.append(pr.additions)
             monthly_metrics[key].lines_removed.append(pr.deletions)
             monthly_metrics[key].total_changes.append(pr.additions + pr.deletions)
+            # Store PR details for debugging
+            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge))
 
             # Process review data
             logger.debug(f"Processing reviews for PR #{pr.number} in {pr.repo}")
