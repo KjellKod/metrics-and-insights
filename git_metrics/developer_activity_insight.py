@@ -239,7 +239,6 @@ class GitHubAPI:
                     f"  Review requested for {reviewer} at {req.get('created_at')} by {req.get('actor', {}).get('login')}"
                 )
 
-            # Return all reviews and requests for author wait time calculation
             return {
                 "reviews": all_reviews,
                 "review_comments": all_comments,
@@ -402,13 +401,28 @@ class PRMetricsWriter(MetricsWriter):
                 lambda m, a: (
                     round(
                         sum(pr.hours_to_merge for pr in pr_data if self._matches_month_and_author(pr, m, a))
-                        / sum(1 for pr in pr_data if self._matches_month_and_author(pr, m, a)),
+                        / len([pr for pr in pr_data if self._matches_month_and_author(pr, m, a)]),
                         2,
                     )
                     if any(self._matches_month_and_author(pr, m, a) for pr in pr_data)
                     else 0
                 ),
             )
+
+            # Add debug logging for average hours calculation
+            logger.debug("\nAverage Hours to Merge Calculation:")
+            for month in months:
+                for author in authors:
+                    matching_prs = [pr for pr in pr_data if self._matches_month_and_author(pr, month, author)]
+                    if matching_prs:
+                        total_hours = sum(pr.hours_to_merge for pr in matching_prs)
+                        count = len(matching_prs)
+                        average = round(total_hours / count, 2)
+                        logger.debug(f"  {month} - {author}:")
+                        logger.debug(f"    Total hours: {total_hours}")
+                        logger.debug(f"    PR count: {count}")
+                        logger.debug(f"    Average: {average}")
+                        logger.debug(f"    Individual PR hours: {[pr.hours_to_merge for pr in matching_prs]}")
 
             self._write_metric_section(
                 writer,
@@ -520,7 +534,6 @@ class PRMetricsCollector:
             writer.write(pr_data, monthly_metrics, review_metrics)
         logger.info("Reports generated successfully")
 
-    # Currently not used but is likely used in the future.
     def _get_pr_creation_time(self, repo: str, pr_number: int) -> Optional[datetime]:
         """Get PR creation time from cache or API"""
         cache_key = f"{repo}/{pr_number}"
@@ -626,6 +639,8 @@ class PRMetricsCollector:
                 review_time = self._convert_to_mst(
                     datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
                 )
+                review_month = review_time.strftime("%Y-%m")
+
                 # Find the review request for this reviewer
                 review_request = next(
                     (
@@ -641,8 +656,10 @@ class PRMetricsCollector:
                     request_time = self._convert_to_mst(
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
+                    request_month = request_time.strftime("%Y-%m")
+
                     # Track the wait time from the author's perspective
-                    author_key = (month, review_request.get("actor", {}).get("login"))
+                    author_key = (request_month, review_request.get("actor", {}).get("login"))
                     if author_key not in review_metrics:
                         review_metrics[author_key] = ReviewMetrics()
                     author_wait_time = (review_time - request_time).total_seconds() / 3600
@@ -655,7 +672,15 @@ class PRMetricsCollector:
         # Process all reviews and comments, then filter for specified users
         for review in reviews:
             reviewer = review["user"]["login"]
-            key = (month, reviewer)
+            if review.get("submitted_at"):
+                review_time = self._convert_to_mst(
+                    datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
+                )
+                review_month = review_time.strftime("%Y-%m")
+                key = (review_month, reviewer)
+            else:
+                key = (month, reviewer)  # Fallback to PR month if no review time
+
             if key not in review_metrics:
                 review_metrics[key] = ReviewMetrics()
 
@@ -677,7 +702,7 @@ class PRMetricsCollector:
             # Update author metrics
             author_metrics.reviews_participated += 1
 
-            # Calculate review response time from review request to review submission, for the requested reviewer
+            # Calculate review response time from review request to review submission
             if review.get("submitted_at"):
                 review_time = self._convert_to_mst(
                     datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
@@ -698,11 +723,16 @@ class PRMetricsCollector:
                         datetime.fromisoformat(review_request["created_at"].replace("Z", "+00:00"))
                     )
                     response_time = (review_time - request_time).total_seconds() / 3600
-                    review_metrics[key].review_response_times.append(response_time)
-                    logger.debug(f"Review response time calculation for {reviewer}:")
-                    logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                    logger.debug(f"  Response time: {response_time:.2f} hours")
+                    if response_time >= 0:  # Only count positive response times
+                        review_metrics[key].review_response_times.append(response_time)
+                        logger.debug(f"Review response time calculation for {reviewer}:")
+                        logger.debug(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.debug(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.debug(f"  Response time: {response_time:.2f} hours")
+                    else:
+                        logger.warning(f"Negative response time detected for {reviewer}: {response_time:.2f} hours")
+                        logger.warning(f"  Review submitted at: {review_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                        logger.warning(f"  Review requested at: {request_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
         # Process review comments (inline comments)
         for comment in review_data["review_comments"]:
