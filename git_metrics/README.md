@@ -13,6 +13,9 @@ Metrics collected:
 - Author-specific Metrics: PR count per author, median hours to merge, lines added/removed
 - Review Metrics: reviews participated, reviews approved, comments made
 
+Required Environment Variables:
+- `GITHUB_TOKEN_READONLY_WEB`: GitHub Personal Access Token with repo read access
+
 ```bash
 python3 developer_activity_insight.py [options]
 Options:
