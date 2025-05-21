@@ -4,7 +4,7 @@ This directory contains scripts for analyzing GitHub repository metrics.
 
 ## Scripts
 
-### developer_activity_insight.py
+### `developer_activity_insight.py`
 Generates comprehensive PR metrics reports including monthly aggregations, review metrics, and volume metrics per author.
 
 Metrics collected:
