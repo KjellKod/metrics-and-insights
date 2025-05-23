@@ -104,6 +104,7 @@ class PRData:
     changed_files: int
     hours_to_merge: float
     created_at: datetime
+    ready_for_review_at: datetime
     merged_at: datetime
 
 
@@ -119,7 +120,7 @@ class MonthlyMetrics:
     reviews_participated: int = 0
     review_response_times: List[float] = field(default_factory=list)
     # Add PR details for debugging
-    pr_details: List[Tuple[str, int, float, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, merged_at)
+    pr_details: List[Tuple[str, int, float, datetime, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, ready_for_review_at, merged_at)
 
 
 @dataclass
@@ -431,9 +432,10 @@ class PRMetricsWriter(MetricsWriter):
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
                         logger.debug(f"    Individual PRs:")
-                        for repo, number, hours, created_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
+                        for repo, number, hours, created_at, ready_for_review_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
                             logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
                             logger.debug(f"        Created: {created_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                            logger.debug(f"        Ready for review: {ready_for_review_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                             logger.debug(f"        Merged:  {merged_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
             self._write_metric_section(
@@ -580,8 +582,19 @@ class PRMetricsCollector:
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
-                        merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
-                        hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
+                        ready_for_review_at = datetime.fromisoformat(details["ready_for_review_at"].replace("Z", "+00:00")) if details.get("ready_for_review_at") else created_at
+                        merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00")) if details.get("merged_at") else None
+
+                        if not merged_at:
+                            continue
+
+                        hours_to_merge = round((merged_at - ready_for_review_at).total_seconds() / 3600, 2)
+
+                        # Add debug logging for ready_for_review_at
+                        if not details.get("ready_for_review_at"):
+                            logger.warning(f"PR #{pr['number']} in {repo} has no ready_for_review_at, using created_at: {created_at}")
+                        else:
+                            logger.warning(f"PR #{pr['number']} in {repo} ready_for_review_at: {ready_for_review_at}")
 
                         pr_data[pr_key] = PRData(
                             date=merged_at,
@@ -593,6 +606,7 @@ class PRMetricsCollector:
                             changed_files=details["changed_files"],
                             hours_to_merge=hours_to_merge,
                             created_at=created_at,
+                            ready_for_review_at=ready_for_review_at,
                             merged_at=merged_at,
                         )
 
@@ -621,7 +635,7 @@ class PRMetricsCollector:
             monthly_metrics[key].lines_removed.append(pr.deletions)
             monthly_metrics[key].total_changes.append(pr.additions + pr.deletions)
             # Store PR details for debugging
-            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.merged_at))
+            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.ready_for_review_at, pr.merged_at))
 
             # Process review data
             logger.debug(f"Processing reviews for PR #{pr.number} in {pr.repo}")
