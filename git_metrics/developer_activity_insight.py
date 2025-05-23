@@ -71,6 +71,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from typing import Dict, List, Set, Tuple, Optional
+import time
+import urllib.parse
 
 # Third-party imports
 import requests
@@ -104,6 +106,7 @@ class PRData:
     changed_files: int
     hours_to_merge: float
     created_at: datetime
+    ready_for_review_at: datetime
     merged_at: datetime
 
 
@@ -119,7 +122,7 @@ class MonthlyMetrics:
     reviews_participated: int = 0
     review_response_times: List[float] = field(default_factory=list)
     # Add PR details for debugging
-    pr_details: List[Tuple[str, int, float, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, merged_at)
+    pr_details: List[Tuple[str, int, float, datetime, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, ready_for_review_at, merged_at)
 
 
 @dataclass
@@ -140,10 +143,80 @@ class GitHubAPI:
         self.base_url = "https://api.github.com"
         self.headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
         self.users = users
+        self.rate_limit_remaining = None
+        self.rate_limit_reset = None
+        self.cache = {}  # Simple cache for API responses
 
     def normalize_username(self, username: str) -> str:
         """Normalize username to lowercase for consistent comparison"""
         return Utils.normalize_username(username)
+
+    def _check_rate_limit(self) -> bool:
+        """Check if we have remaining API calls"""
+        try:
+            response = requests.get(f"{self.base_url}/rate_limit", headers=self.headers, timeout=30)
+            response.raise_for_status()
+            rate_limit = response.json()
+            search_limit = rate_limit["resources"]["search"]
+            self.rate_limit_remaining = search_limit["remaining"]
+            self.rate_limit_reset = datetime.fromtimestamp(search_limit["reset"])
+            
+            if self.rate_limit_remaining <= 0:
+                wait_time = (self.rate_limit_reset - datetime.now()).total_seconds()
+                if wait_time > 0:
+                    logger.warning(f"Rate limit exceeded. Waiting {wait_time:.0f} seconds until {self.rate_limit_reset}")
+                    time.sleep(wait_time)
+                    return self._check_rate_limit()  # Check again after waiting
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"Error checking rate limit: {str(e)}")
+            return False
+
+    def _make_request(self, url: str, params: dict = None, max_retries: int = 3) -> Optional[dict]:
+        """Make an API request with exponential backoff"""
+        if not self._check_rate_limit():
+            logger.error("Rate limit check failed")
+            return None
+
+        # Check cache first
+        cache_key = f"{url}?{urllib.parse.urlencode(params) if params else ''}"
+        if cache_key in self.cache:
+            logger.debug(f"Using cached response for {cache_key}")
+            return self.cache[cache_key]
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, headers=self.headers, params=params, timeout=30)
+                
+                if response.status_code == 403 and "rate limit" in response.text.lower():
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                # Cache successful response
+                self.cache[cache_key] = data
+                return data
+                
+            except requests.exceptions.RequestException as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"Request failed after {max_retries} attempts: {str(e)}")
+                    if hasattr(e, 'response') and e.response is not None:
+                        try:
+                            error_data = e.response.json()
+                            logger.error(f"GitHub API Error Details: {error_data}")
+                        except:
+                            logger.error(f"Raw response: {e.response.text}")
+                    return None
+                wait_time = 2 ** attempt
+                logger.warning(f"Request failed, retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+        
+        return None
 
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
         """Fetch PRs for a given repo and author"""
@@ -153,45 +226,33 @@ class GitHubAPI:
 
         # Search for PRs authored by the user
         author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
-        try:
-            response = requests.get(
-                search_url, headers=self.headers, params={"q": author_query, "per_page": 100, "page": 1}, timeout=30
-            )
-            response.raise_for_status()
-            author_prs = response.json().get("items", [])
+        logger.debug(f"Author query: {author_query}")
+        data = self._make_request(search_url, params={"q": author_query, "per_page": 100, "page": 1})
+        if data:
+            author_prs = data.get("items", [])
             logger.info(f"Found {len(author_prs)} PRs authored by {author} in {repo}")
             for pr in author_prs:
-                unique_prs[pr["number"]] = pr  # Store PR by number
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching authored PRs for {author} in {repo}: {str(e)}")
+                unique_prs[pr["number"]] = pr
 
         # Search for PRs reviewed by the user
         reviewer_query = f"repo:{repo} is:pr is:merged review-requested:{author} merged:{start_date}..{end_date}"
-        try:
-            response = requests.get(
-                search_url, headers=self.headers, params={"q": reviewer_query, "per_page": 100, "page": 1}, timeout=30
-            )
-            response.raise_for_status()
-            reviewer_prs = response.json().get("items", [])
+        logger.debug(f"Reviewer query: {reviewer_query}")
+        data = self._make_request(search_url, params={"q": reviewer_query, "per_page": 100, "page": 1})
+        if data:
+            reviewer_prs = data.get("items", [])
             logger.info(f"Found {len(reviewer_prs)} PRs reviewed by {author} in {repo}")
             for pr in reviewer_prs:
                 unique_prs[pr["number"]] = pr
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching reviewed PRs for {author} in {repo}: {str(e)}")
 
         # Search for PRs where user commented
         commenter_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
-        try:
-            response = requests.get(
-                search_url, headers=self.headers, params={"q": commenter_query, "per_page": 100, "page": 1}, timeout=30
-            )
-            response.raise_for_status()
-            commenter_prs = response.json().get("items", [])
+        logger.debug(f"Commenter query: {commenter_query}")
+        data = self._make_request(search_url, params={"q": commenter_query, "per_page": 100, "page": 1})
+        if data:
+            commenter_prs = data.get("items", [])
             logger.info(f"Found {len(commenter_prs)} PRs commented on by {author} in {repo}")
             for pr in commenter_prs:
                 unique_prs[pr["number"]] = pr
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching commented PRs for {author} in {repo}: {str(e)}")
 
         # Convert dict values to list
         pr_list = list(unique_prs.values())
@@ -431,9 +492,10 @@ class PRMetricsWriter(MetricsWriter):
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
                         logger.debug(f"    Individual PRs:")
-                        for repo, number, hours, created_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
+                        for repo, number, hours, created_at, ready_for_review_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
                             logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
                             logger.debug(f"        Created: {created_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                            logger.debug(f"        Ready for review: {ready_for_review_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                             logger.debug(f"        Merged:  {merged_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
             self._write_metric_section(
@@ -580,8 +642,19 @@ class PRMetricsCollector:
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
-                        merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
-                        hours_to_merge = round((merged_at - created_at).total_seconds() / 3600, 2)
+                        ready_for_review_at = datetime.fromisoformat(details["ready_for_review_at"].replace("Z", "+00:00")) if details.get("ready_for_review_at") else created_at
+                        merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00")) if details.get("merged_at") else None
+
+                        if not merged_at:
+                            continue
+
+                        hours_to_merge = round((merged_at - ready_for_review_at).total_seconds() / 3600, 2)
+
+                        # Add debug logging for ready_for_review_at
+                        if not details.get("ready_for_review_at"):
+                            logger.warning(f"PR #{pr['number']} in {repo} has no ready_for_review_at, using created_at: {created_at}")
+                        else:
+                            logger.warning(f"PR #{pr['number']} in {repo} ready_for_review_at: {ready_for_review_at}")
 
                         pr_data[pr_key] = PRData(
                             date=merged_at,
@@ -593,6 +666,7 @@ class PRMetricsCollector:
                             changed_files=details["changed_files"],
                             hours_to_merge=hours_to_merge,
                             created_at=created_at,
+                            ready_for_review_at=ready_for_review_at,
                             merged_at=merged_at,
                         )
 
@@ -621,7 +695,7 @@ class PRMetricsCollector:
             monthly_metrics[key].lines_removed.append(pr.deletions)
             monthly_metrics[key].total_changes.append(pr.additions + pr.deletions)
             # Store PR details for debugging
-            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.merged_at))
+            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.ready_for_review_at, pr.merged_at))
 
             # Process review data
             logger.debug(f"Processing reviews for PR #{pr.number} in {pr.repo}")
