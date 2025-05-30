@@ -54,7 +54,7 @@ def parse_arguments():
     group.add_argument("-project", help="Process metrics for specified project")
     
     # Add verbose as an alias for v
-    parser.add_argument("-verbose", action="store_true", help="Show detailed processing information (alias for -v)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed processing information")
 
     try:
         args = parser.parse_args()
