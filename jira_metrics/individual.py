@@ -52,11 +52,14 @@ def parse_arguments():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-team", help="Process metrics for specified team")
     group.add_argument("-project", help="Process metrics for specified project")
+    
+    # Add verbose as an alias for v
+    parser.add_argument("-verbose", action="store_true", help="Show detailed processing information (alias for -v)")
 
     try:
         args = parser.parse_args()
         global VERBOSE
-        VERBOSE = args.verbose
+        VERBOSE = args.verbose or args.v  # Set VERBOSE if either flag is used
         return args
     except Exception as e:
         print(f"\nError: {str(e)}")
@@ -90,14 +93,18 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
     for _, issue in enumerate(tickets):
         history = extract_status_timestamps(issue)
         statuses = interpret_status_timestamps(history)
-        released_timestamp = statuses.get(JiraStatus.RELEASED.value)
-        if not released_timestamp:
-            released_timestamp = statuses.get(JiraStatus.DONE.value)
-            verbose_print(
-                f"Warning: Issue {issue.key} does not have a released timestamp. Using Done timestamp instead."
-            )
-        if not released_timestamp:
-            sys.exit("Fatal error: Released ticket, missing released timestamp and done timestamp.")
+        
+        # Get the most recent completion status (Released, Done)
+        completion_timestamp = None
+        for status in [JiraStatus.RELEASED.value, JiraStatus.DONE.value]:
+            if status in statuses and statuses[status] is not None:
+                timestamp = statuses[status]
+                if completion_timestamp is None or timestamp > completion_timestamp:
+                    completion_timestamp = timestamp
+
+        if not completion_timestamp:
+            verbose_print(f"Warning: Issue {issue.key} does not have a completion timestamp (Released, Done).")
+            continue
 
         # Handle team identification based on whether we're using team or project
         if team_name:
@@ -111,7 +118,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
 
         assignee_raw = issue.fields.assignee
         assignee = assignee_raw.displayName if assignee_raw else "Unassigned"
-        month_key = released_timestamp.strftime("%Y-%m")
+        month_key = completion_timestamp.strftime("%Y-%m")
         points = get_ticket_points(issue)
 
         metrics_per_month[month_key][team]["points"] += points
@@ -119,7 +126,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
         assignee_metrics[month_key][team][assignee]["points"] += points
         assignee_metrics[month_key][team][assignee]["tickets"] += 1
 
-        verbose_print(f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key}")
+        verbose_print(f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key} (Status: {issue.fields.status.name})")
 
     return metrics_per_month, assignee_metrics
 
@@ -236,7 +243,7 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 
 # pylint: disable=too-many-locals
 def construct_jql(team_name=None, project_key=None, start_date=None, end_date=None):
-    base_jql = f'status in (Released) AND status changed to Released during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike)'
+    base_jql = f'status in (Released, Done) AND status changed to (Released, Done) during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike)'
 
     if project_key:
         return f"project = {project_key} AND {base_jql} ORDER BY updated ASC"
