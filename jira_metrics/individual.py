@@ -52,14 +52,11 @@ def parse_arguments():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-team", help="Process metrics for specified team")
     group.add_argument("-project", help="Process metrics for specified project")
-    
-    # Add verbose as an alias for v
-    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed processing information")
 
     try:
         args = parser.parse_args()
         global VERBOSE
-        VERBOSE = args.verbose or args.v  # Set VERBOSE if either flag is used
+        VERBOSE = args.verbose
         return args
     except Exception as e:
         print(f"\nError: {str(e)}")
