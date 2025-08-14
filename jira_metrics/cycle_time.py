@@ -77,19 +77,45 @@ def process_changelog(issue):
 
 
 def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
+    """
+    Calculate the cycle time in seconds for a Jira issue from code review to release.
+    
+    Args:
+        start_date_str (str): Start date in YYYY-MM-DD format for filtering
+        end_date_str (str): End date in YYYY-MM-DD format for filtering
+        issue (Issue): Jira issue object to process
+    
+    Returns:
+        tuple: A 3-tuple containing:
+            - business_seconds (float|None): Cycle time in business seconds, or None if calculation failed
+            - month_key (str|None): Month in YYYY-MM format when issue was released, or None if no release
+            - reason (str|None): Reason for failure if cycle time couldn't be calculated, or None if successful
+    
+    Possible failure reasons:
+        - "invalid issue": Issue object failed validation
+        - "missing release timestamp": Issue has no release timestamp
+        - "released outside date range": Issue was released outside the specified date range
+        - "missing review start": Issue has no code review timestamp
+        - "unknown error": Unexpected error condition
+    """
     if not validate_issue(issue):
-        return None, None
+        return None, None, "invalid issue"
 
     start_date = localize_date(start_date_str)
     end_date = localize_date(end_date_str)
     verbose_print(f"Processing {issue.key}")
     code_review_timestamp, released_timestamp = process_changelog(issue)
 
-    if released_timestamp is None or released_timestamp < start_date or released_timestamp > end_date:
-        return (
-            None,
-            None,
-        )  # Skip if the ticket was not released during the period, possibly due to a re-release or "bulk move" issues.
+    if released_timestamp is None:
+        return None, None, "missing release timestamp"
+    
+    month_key = released_timestamp.strftime("%Y-%m")
+    
+    if released_timestamp < start_date or released_timestamp > end_date:
+        return None, month_key, "released outside date range"
+
+    if not code_review_timestamp:
+        return None, month_key, "missing review start"
 
     if released_timestamp and code_review_timestamp:
         business_seconds, business_days = calculate_business_time(code_review_timestamp, released_timestamp)
@@ -99,10 +125,10 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
             f"Cycle time in hours: {business_seconds / 3600:.2f} --> days: {business_seconds / (3600 * 8):.2f}\n"
         )
         verbose_print(f"{log_string}")
-        month_key = released_timestamp.strftime("%Y-%m")
         verbose_print(f"SUMMARY: \n{log_string}")
-        return business_seconds, month_key
-    return None, None
+        return business_seconds, month_key, None
+    
+    return None, None, "unknown error"
 
 
 def calculate_monthly_cycle_time(projects, start_date, end_date):
@@ -112,13 +138,15 @@ def calculate_monthly_cycle_time(projects, start_date, end_date):
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
-        cycle_time, month_key = calculate_cycle_time_seconds(start_date, end_date, issue)
+        cycle_time, month_key, reason = calculate_cycle_time_seconds(start_date, end_date, issue)
         issue_id = issue.key
+        team = get_team(issue)
         if cycle_time:
-            team = get_team(issue)
             cycle_times_per_month[team][month_key].append((cycle_time, issue_id))
             cycle_times_per_month["all"][month_key].append((cycle_time, issue_id))
-
+        else:
+            month_display = month_key if month_key else "unknown"
+            print(f"[SKIP] {issue_id} — Team: {team}, Month: {month_display} — No cycle time ({reason})")
     return cycle_times_per_month
 
 
