@@ -1,23 +1,26 @@
 import os
 import sys
 import logging
-from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-from .lines_changed import setup_logging
 import requests
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-# pylint: disable=pointless-string-statement
 """
-Active Repositories Report Generator
+Active Developers Report Generator
 ================================
 
-This script generates a report of repositories with recent pull request activity
+This script generates a report of active developers across GitHub repositories
 within your organization over the last 60 days. It uses GitHub's GraphQL API
-to efficiently fetch repository and pull request data.
+to efficiently fetch commit data and identify unique contributors.
+
+I needed something like this to fetch which developers are most active, as we have some that are more administrative than active. 
+For the active ones we wanted to pay for some tool usage and finding out how many "seats" we needed and to whom was important. 
+(I could not at the time find an easy way to extract this from Github)
 
 Features:
-- Fetches repository and pull request activity
-- Identifies repositories with recent PRs
+- Fetches commit activity across multiple repositories
+- Identifies unique contributors from commit history
+- Supports both organization-wide scanning and specific repository lists
 - Uses GraphQL for efficient API calls
 - Includes proper error handling and logging
 
@@ -27,27 +30,97 @@ Setup Requirements:
 
     GITHUB_TOKEN_READONLY_WEB=your_github_personal_access_token
     GITHUB_METRIC_OWNER_OR_ORGANIZATION=your_organization_name
+    
+    # Optional: Specific repositories to scan (comma-separated)
+    # If not provided, will fetch all repositories from the organization
+    GITHUB_METRIC_REPOS=awesome-service-api,cool-frontend-app,internal-tools-repo,user-management-service
+
+2. Ensure you have required Python packages installed:
+    - requests
+    - python-dotenv
 
 Usage:
 ------
 Simply run the script:
-    python repo-activity-report.py
+    python active-devs-one-off.py
 
 Output:
 -------
 The script will output:
-- List of repositories with PR activity in the last 60 days
-- Details including last PR date, recent PR count, and total PR count
-- Summary statistics
+- List of repositories being processed
+- Active developers found in the last 60 days
+- Total count of active developers
+
+Example Output:
+-------------
+2024-01-20 10:30:15 - INFO - Using repositories from environment variable: 4 repos
+2024-01-20 10:30:16 - INFO - Processing repository: awesome-service-api
+2024-01-20 10:30:17 - INFO - Processing repository: cool-frontend-app
+...
+2024-01-20 10:30:20 - INFO - Active Developers in the last 2 months:
+2024-01-20 10:30:20 - INFO - - alice.developer
+2024-01-20 10:30:20 - INFO - - bob.coder
+2024-01-20 10:30:20 - INFO - - charlie.engineer
+2024-01-20 10:30:20 - INFO - Total active developers: 3
+
+Notes:
+-----
+- The script uses a 60-day lookback period by default
+- Only commits to the default branch are considered
+- The GitHub token needs 'repo' access to read private repositories
 """
 
 # Load environment variables
 load_dotenv()
 
 
-# pylint: disable=too-many-locals
-def fetch_active_repositories(api_config, org_name, since_date):
-    """Fetch repositories with PR activity since the given date"""
+def setup_logging():
+    """Configure logging settings."""
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    return logging.getLogger(__name__)
+
+
+def validate_env_variables():
+    """Validate required environment variables and return their values."""
+    logger = logging.getLogger(__name__)
+    required_vars = {
+        "GITHUB_TOKEN_READONLY_WEB": "GitHub access token",
+        "GITHUB_METRIC_OWNER_OR_ORGANIZATION": "GitHub organization name",
+        # New optional variable for repository list
+        "GITHUB_METRIC_REPOS": "Optional: Comma-separated list of repositories",
+    }
+
+    missing_vars = []
+    env_values = {}
+
+    for var, description in required_vars.items():
+        value = os.environ.get(var)
+        if not value and var != "GITHUB_METRIC_REPOS":  # GITHUB_METRIC_REPOS is optional
+            missing_vars.append(f"{var} ({description})")
+        env_values[var] = value
+
+    if missing_vars:
+        logger.error("Missing required environment variables:\n%s", "\n".join(f"- {var}" for var in missing_vars))
+        raise ValueError("Missing required environment variables")
+
+    return env_values
+
+
+def setup_github_api(access_token):
+    """Setup GitHub API configuration."""
+    return {
+        "url": "https://api.github.com/graphql",
+        "headers": {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github.v4+json",
+        },
+    }
+
+
+def fetch_repositories(api_config, org_name):
+    """Fetch all repositories in the organization using GraphQL"""
     logger = logging.getLogger(__name__)
     query = """
     query ($org: String!) {
@@ -55,125 +128,108 @@ def fetch_active_repositories(api_config, org_name, since_date):
             repositories(first: 100) {
                 nodes {
                     name
-                    pullRequests(states: [OPEN, CLOSED, MERGED], 
-                                first: 10,  # Increased to get more recent PRs
-                                orderBy: {field: UPDATED_AT, direction: DESC}) {
-                        nodes {
-                            updatedAt
-                            number
+                }
+            }
+        }
+    }
+    """
+    variables = {"org": org_name}
+
+    try:
+        response = requests.post(
+            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
+        )
+        response.raise_for_status()
+        data = response.json()
+        return [repo["name"] for repo in data["data"]["organization"]["repositories"]["nodes"]]
+    except Exception as e:
+        logger.error("Failed to fetch repositories: %s", str(e))
+        return None
+
+
+def fetch_commit_activity(api_config, org_name, repo_name, since_date):
+    """Fetch commit history for a given repository"""
+    logger = logging.getLogger(__name__)
+    query = """
+    query ($owner: String!, $repo: String!, $since: GitTimestamp!) {
+        repository(owner: $owner, name: $repo) {
+            defaultBranchRef {
+                target {
+                    ... on Commit {
+                        history(since: $since, first: 100) {
+                            nodes {
+                                author {
+                                    user {
+                                        login
+                                    }
+                                }
+                            }
                         }
-                        totalCount
-                    }
-                    defaultBranchRef {
-                        name
                     }
                 }
             }
         }
     }
     """
-
-    variables = {"org": org_name}
+    variables = {"owner": org_name, "repo": repo_name, "since": since_date.isoformat()}
 
     try:
         response = requests.post(
-            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}, timeout=120
+            api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}
         )
         response.raise_for_status()
         data = response.json()
 
-        if "errors" in data:
-            logger.error("GraphQL errors: %s", data["errors"])
-            return []
-
-        if "data" not in data or not data["data"]:
-            logger.error("No data in response: %s", data)
-            return []
-
-        active_repos = []
-        repositories = data["data"]["organization"]["repositories"]["nodes"]
-
-        for repo in repositories:
-            if not repo.get("defaultBranchRef"):
-                continue
-
-            prs = repo.get("pullRequests", {})
-            pr_nodes = prs.get("nodes", [])
-
-            # Filter PRs by date
-            recent_prs = []
-            for pr in pr_nodes:
-                pr_date = datetime.fromisoformat(pr["updatedAt"].replace("Z", "+00:00"))
-                if pr_date >= since_date:
-                    recent_prs.append(pr)
-
-            if recent_prs:  # Only include repos with recent PRs
-                last_pr_date = datetime.fromisoformat(recent_prs[0]["updatedAt"].replace("Z", "+00:00"))
-                active_repos.append(
-                    {
-                        "name": repo["name"],
-                        "default_branch": repo["defaultBranchRef"]["name"],
-                        "last_pr_date": last_pr_date,
-                        "recent_pr_count": len(recent_prs),
-                        "total_pr_count": prs.get("totalCount", 0),
-                    }
-                )
-
-        return active_repos
-
+        commit_authors = set()
+        history = (
+            data.get("data", {})
+            .get("repository", {})
+            .get("defaultBranchRef", {})
+            .get("target", {})
+            .get("history", {})
+            .get("nodes", [])
+        )
+        for commit in history:
+            author = commit.get("author", {}).get("user", {})
+            if author and author.get("login"):
+                commit_authors.add(author["login"])
+        return commit_authors
     except Exception as e:
-        logger.error("Failed to fetch repository activity: %s", str(e))
-        logger.debug("Full response: %s", response.text if "response" in locals() else "No response")
-        return []
+        logger.error("Failed to fetch commit activity for %s: %s", repo_name, str(e))
+        return set()
 
 
 def main():
-    """Main function to identify active repositories"""
+    """Main function to gather developer activity"""
     logger = setup_logging()
     try:
-        # Validate environment variables
-        token = os.getenv("GITHUB_TOKEN_READONLY_WEB")
-        org_name = os.getenv("GITHUB_METRIC_OWNER_OR_ORGANIZATION")
+        env_vars = validate_env_variables()
+        api_config = setup_github_api(env_vars["GITHUB_TOKEN_READONLY_WEB"])
+        org_name = env_vars["GITHUB_METRIC_OWNER_OR_ORGANIZATION"]
 
-        if not token or not org_name:
-            raise ValueError("Missing required environment variables")
+        # Calculate date range (last 2 months)
+        since_date = datetime.utcnow() - timedelta(days=60)
 
-        api_config = {
-            "url": "https://api.github.com/graphql",
-            "headers": {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github.v4+json",
-            },
-        }
+        # Get repositories
+        if env_vars.get("GITHUB_METRIC_REPOS"):
+            repositories = [repo.strip() for repo in env_vars["GITHUB_METRIC_REPOS"].split(",")]
+            logger.info("Using repositories from environment variable: %d repos", len(repositories))
+        else:
+            repositories = fetch_repositories(api_config, org_name)
+            if not repositories:
+                raise ValueError("No repositories found")
+            logger.info("Fetched repositories from GitHub API: %d repos", len(repositories))
 
-        since_date = datetime.now(timezone.utc) - timedelta(days=60)
+        active_developers = set()
+        for repo in repositories:
+            logger.info("Processing repository: %s", repo)
+            contributors = fetch_commit_activity(api_config, org_name, repo, since_date)
+            active_developers.update(contributors)
 
-        logger.info("Fetching repositories with PR activity since %s", since_date.date())
-
-        active_repos = fetch_active_repositories(api_config, org_name, since_date)
-
-        if not active_repos:
-            logger.info("No repositories found with PR activity in the last 60 days")
-            return
-
-        active_repos.sort(key=lambda x: x["last_pr_date"], reverse=True)
-
-        logger.info("\nRepositories with PR activity in the last 60 days:")
-        for repo in active_repos:
-            logger.info(
-                "- %s (last PR: %s, recent PRs: %d, total PRs: %d)",
-                repo["name"],
-                repo["last_pr_date"].strftime("%Y-%m-%d"),
-                repo["recent_pr_count"],
-                repo["total_pr_count"],
-            )
-
-        logger.info("\nSummary:")
-        logger.info("Total active repositories: %d", len(active_repos))
-        logger.info("Organization: %s", org_name)
-        logger.info(
-            "Time period: %s to %s", since_date.strftime("%Y-%m-%d"), datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        )
+        logger.info("\nActive Developers in the last 2 months:")
+        for dev in sorted(active_developers):
+            logger.info("- %s", dev)
+        logger.info("Total active developers: %d", len(active_developers))
 
     except Exception as e:
         logger.error("An error occurred: %s", str(e), exc_info=True)
