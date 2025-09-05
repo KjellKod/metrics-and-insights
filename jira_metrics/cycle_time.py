@@ -79,18 +79,18 @@ def process_changelog(issue):
 def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     """
     Calculate the cycle time in seconds for a Jira issue from code review to release.
-    
+
     Args:
         start_date_str (str): Start date in YYYY-MM-DD format for filtering
         end_date_str (str): End date in YYYY-MM-DD format for filtering
         issue (Issue): Jira issue object to process
-    
+
     Returns:
         tuple: A 3-tuple containing:
             - business_seconds (float|None): Cycle time in business seconds, or None if calculation failed
             - month_key (str|None): Month in YYYY-MM format when issue was released, or None if no release
             - reason (str|None): Reason for failure if cycle time couldn't be calculated, or None if successful
-    
+
     Possible failure reasons:
         - "invalid issue": Issue object failed validation
         - "missing release timestamp": Issue has no release timestamp
@@ -108,9 +108,9 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
 
     if released_timestamp is None:
         return None, None, "missing release timestamp"
-    
+
     month_key = released_timestamp.strftime("%Y-%m")
-    
+
     if released_timestamp < start_date or released_timestamp > end_date:
         return None, month_key, "released outside date range"
 
@@ -127,7 +127,7 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
         verbose_print(f"{log_string}")
         verbose_print(f"SUMMARY: \n{log_string}")
         return business_seconds, month_key, None
-    
+
     return None, None, "unknown error"
 
 

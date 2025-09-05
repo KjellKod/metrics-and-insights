@@ -56,8 +56,7 @@ def fetch_pull_requests(repo, state="closed", per_page=100):
             # Safer check for next page in Link header
             if "Link" in response.headers and 'rel="next"' in response.headers["Link"]:
                 continue
-            else:
-                break
+            break
         except requests.RequestException as e:
             print(f"Error fetching PRs: {e}")
             break
@@ -89,8 +88,7 @@ def fetch_reviews(repo, pr_number):
             # Safer check for next page
             if "Link" in response.headers and 'rel="next"' in response.headers["Link"]:
                 continue
-            else:
-                break
+            break
         except requests.RequestException as e:
             print(f"Error fetching reviews for PR #{pr_number}: {e}")
             break
@@ -125,8 +123,7 @@ def fetch_timeline(repo, pr_number):
             # Safer check for next page
             if "Link" in response.headers and 'rel="next"' in response.headers["Link"]:
                 continue
-            else:
-                break
+            break
         except requests.RequestException as e:
             print(f"Error fetching timeline for PR #{pr_number}: {e}")
             break

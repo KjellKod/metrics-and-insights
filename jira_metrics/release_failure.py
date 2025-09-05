@@ -45,8 +45,8 @@ def count_failed_releases(issue):
 
     # Check for exceptions
     if exceptions_check(issue.key):
-        for i in range(len(release_events)):
-            release_events[i] = (release_events[i][0], False)
+        for i, (event, _) in enumerate(release_events):
+            release_events[i] = (event, False)
 
     fail_count = sum(1 for _, failed in release_events if failed)
     return fail_count, release_events
