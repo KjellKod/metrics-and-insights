@@ -45,7 +45,6 @@ Arguments
 # Standard library imports
 import argparse
 import csv
-import json
 import logging
 import os
 import random
@@ -74,12 +73,10 @@ logger = logging.getLogger(__name__)
 
 class ValidationError(Exception):
     """Custom exception for validation errors"""
-    pass
 
 
 class GitHubAPIError(Exception):
     """Custom exception for GitHub API errors"""
-    pass
 
 
 @dataclass
@@ -118,18 +115,18 @@ class UserInfo:
 def normalize_inputs(args) -> ValidatedInputs:
     """
     Normalize and validate all inputs with comprehensive error checking.
-    
+
     Args:
         args: Parsed command line arguments
-        
+
     Returns:
         ValidatedInputs object with normalized data
-        
+
     Raises:
         ValidationError: If any input is invalid
     """
     logger.info("Validating and normalizing inputs...")
-    
+
     # Validate owner
     if not hasattr(args, 'owner') or not args.owner:
         raise ValidationError("--owner is required")
@@ -138,15 +135,15 @@ def normalize_inputs(args) -> ValidatedInputs:
         raise ValidationError("Owner cannot be empty")
     if '/' in owner:
         raise ValidationError("Owner should not contain '/', use --repos for full repo names")
-    
+
     # Validate and normalize repos
     if not args.repos:
         raise ValidationError("--repos is required")
-    
+
     raw_repos = [r.strip() for r in args.repos.split(",") if r.strip()]
     if not raw_repos:
         raise ValidationError("At least one repository must be specified")
-    
+
     repos = []
     for repo in raw_repos:
         if not repo:
@@ -156,58 +153,58 @@ def normalize_inputs(args) -> ValidatedInputs:
         elif repo.count('/') != 1:
             raise ValidationError(f"Invalid repo format: {repo}. Expected 'owner/repo'")
         repos.append(repo)
-    
+
     if not repos:
         raise ValidationError("No valid repositories found after normalization")
-    
+
     # Validate and normalize users
     if not args.users:
         raise ValidationError("--users is required")
-    
+
     raw_users = [u.strip() for u in args.users.split(",") if u.strip()]
     if not raw_users:
         raise ValidationError("At least one user must be specified")
-    
+
     users = [u for u in raw_users if u]  # Original case preserved
     normalized_users = [u.lower() for u in users]  # For comparisons
-    
+
     if not users:
         raise ValidationError("No valid users found after normalization")
-    
+
     # Validate dates
     try:
         start_date = datetime.fromisoformat(args.date_start).replace(tzinfo=timezone.utc)
     except ValueError as e:
-        raise ValidationError(f"Invalid start date format: {args.date_start}. Expected YYYY-MM-DD. Error: {e}")
-    
+        raise ValidationError(f"Invalid start date format: {args.date_start}. Expected YYYY-MM-DD. Error: {e}") from e
+
     try:
         end_date = datetime.fromisoformat(args.date_end).replace(tzinfo=timezone.utc)
     except ValueError as e:
-        raise ValidationError(f"Invalid end date format: {args.date_end}. Expected YYYY-MM-DD. Error: {e}")
-    
+        raise ValidationError(f"Invalid end date format: {args.date_end}. Expected YYYY-MM-DD. Error: {e}") from e
+
     if start_date >= end_date:
         raise ValidationError("date_start must be before date_end")
-    
+
     # Validate date range isn't too large (prevent abuse)
     days_diff = (end_date - start_date).days
     if days_diff > 730:  # 2 years
         logger.warning(f"Large date range detected: {days_diff} days. This may take a long time.")
-    
+
     # Validate output file
     output_file = args.output.strip() if args.output else "pr_metrics.csv"
     if not output_file.endswith('.csv'):
         output_file += '.csv'
-    
+
     # Check if output directory exists and is writable
     output_path = Path(output_file)
     if output_path.parent != Path('.'):
         output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     logger.info(f"✓ Normalized {len(repos)} repositories")
     logger.info(f"✓ Normalized {len(users)} users")
     logger.info(f"✓ Date range: {start_date.date()} to {end_date.date()} ({days_diff} days)")
     logger.info(f"✓ Output file: {output_file}")
-    
+
     return ValidatedInputs(
         owner=owner,
         repos=repos,
@@ -276,27 +273,27 @@ class ReviewMetrics:
 def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> requests.Response:
     """
     Make a GitHub API request with comprehensive retry logic and rate limiting.
-    
+
     Args:
         session: Requests session with headers configured
         method: HTTP method
         url: Request URL
         **kwargs: Additional request parameters
-        
+
     Returns:
         Response object
-        
+
     Raises:
         GitHubAPIError: If request fails after all retries
     """
     max_tries = 6
     backoff = 1.0
-    
+
     for attempt in range(1, max_tries + 1):
         try:
             logger.debug(f"Making {method} request to {url} (attempt {attempt})")
             r = session.request(method, url, timeout=30, **kwargs)
-            
+
             # Handle rate limiting
             if r.status_code == 429:
                 retry_after = r.headers.get("Retry-After")
@@ -306,11 +303,11 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                 else:
                     sleep_time = backoff + random.uniform(0, 1)
                     logger.warning(f"Rate limited. Waiting {sleep_time:.1f} seconds (exponential backoff)")
-                
+
                 time.sleep(sleep_time)
                 backoff = min(backoff * 2, 60)
                 continue
-            
+
             # Handle server errors
             if r.status_code in (502, 503, 504):
                 retry_after = r.headers.get("Retry-After")
@@ -319,12 +316,12 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                 time.sleep(sleep_time)
                 backoff = min(backoff * 2, 60)
                 continue
-            
+
             # Handle 403 errors (rate limiting and abuse detection)
             if r.status_code == 403:
                 response_text = r.text.lower()
-                if ("abuse" in response_text or 
-                    "secondary rate limit" in response_text or 
+                if ("abuse" in response_text or
+                    "secondary rate limit" in response_text or
                     "rate limit" in response_text or
                     "api rate limit exceeded" in response_text):
                     retry_after = r.headers.get("Retry-After")
@@ -334,7 +331,7 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                     backoff = min(backoff * 2, 60)
                     continue
                 # If not rate limiting related, let it fall through to return the response
-            
+
             # Log rate limit status
             if 'X-RateLimit-Remaining' in r.headers:
                 remaining = r.headers.get('X-RateLimit-Remaining')
@@ -342,131 +339,131 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                 if reset_time:
                     reset_dt = datetime.fromtimestamp(int(reset_time))
                     logger.debug(f"Rate limit: {remaining} remaining, resets at {reset_dt}")
-            
+
             return r
-            
+
         except requests.exceptions.RequestException as e:
             if attempt == max_tries:
-                raise GitHubAPIError(f"Request failed after {max_tries} attempts: {e}")
-            
+                raise GitHubAPIError(f"Request failed after {max_tries} attempts: {e}") from e
+
             sleep_time = backoff + random.uniform(0, 1)
             logger.warning(f"Request exception: {e}. Retrying in {sleep_time:.1f} seconds")
             time.sleep(sleep_time)
             backoff = min(backoff * 2, 60)
-    
+
     raise GitHubAPIError(f"Request failed after {max_tries} attempts")
 
 
 def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str]]:
     """
     Validate GitHub token and extract OAuth scopes.
-    
+
     Args:
         token: GitHub API token
-        
+
     Returns:
         Tuple of (user_info, scopes_set)
-        
+
     Raises:
         GitHubAPIError: If authentication fails or token is invalid
     """
     logger.info("Validating GitHub authentication and scopes...")
-    
+
     session = requests.Session()
     session.headers.update({
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "PR-Metrics-Collector/1.0"
     })
-    
+
     try:
         # Check rate limits first
         logger.debug("Checking rate limits...")
         r = gh_request(session, "GET", "https://api.github.com/rate_limit")
         r.raise_for_status()
-        
+
         rate_data = r.json()
         core_limit = rate_data["resources"]["core"]
         search_limit = rate_data["resources"]["search"]
-        
+
         logger.info(f"✓ Core API: {core_limit['remaining']}/{core_limit['limit']} remaining")
         logger.info(f"✓ Search API: {search_limit['remaining']}/{search_limit['limit']} remaining")
-        
+
         if core_limit['remaining'] < 100:
             reset_time = datetime.fromtimestamp(core_limit['reset'])
             logger.warning(f"Low rate limit remaining. Resets at {reset_time}")
-        
+
         if search_limit['remaining'] < 10:
             reset_time = datetime.fromtimestamp(search_limit['reset'])
             raise GitHubAPIError(f"Insufficient search API quota. Resets at {reset_time}")
-        
+
         # Authenticate and get user info
         logger.debug("Authenticating user...")
         r = gh_request(session, "GET", "https://api.github.com/user")
         r.raise_for_status()
-        
+
         user_info = r.json()
         logger.info(f"✓ Authenticated as: {user_info['login']} (ID: {user_info['id']})")
-        
+
         # Extract OAuth scopes
         scopes_header = r.headers.get('X-OAuth-Scopes', '')
         scopes = {scope.strip() for scope in scopes_header.split(',') if scope.strip()}
-        
+
         logger.info(f"✓ OAuth scopes: {', '.join(sorted(scopes)) if scopes else 'none'}")
-        
+
         # Check for required scopes
         required_scopes = {'repo', 'read:org'}  # repo for private repos, read:org for org membership
         missing_scopes = required_scopes - scopes
-        
+
         if missing_scopes:
             logger.warning(f"Missing recommended scopes: {', '.join(missing_scopes)}")
             logger.warning("This may limit access to private repositories or org information")
         else:
             logger.info("✓ All recommended scopes present")
-        
+
         return user_info, scopes
-        
+
     except requests.exceptions.RequestException as e:
-        raise GitHubAPIError(f"Authentication failed: {e}")
+        raise GitHubAPIError(f"Authentication failed: {e}") from e
 
 
 def validate_repositories(session: requests.Session, repos: List[str]) -> Dict[str, RepoInfo]:
     """
     Validate access to all specified repositories.
-    
+
     Args:
         session: Authenticated requests session
         repos: List of repository names in owner/repo format
-        
+
     Returns:
         Dictionary mapping repo names to RepoInfo objects
-        
+
     Raises:
         GitHubAPIError: If any repository is inaccessible
     """
     logger.info(f"Validating access to {len(repos)} repositories...")
-    
+
     repo_info = {}
     inaccessible_repos = []
-    
+
     for repo in repos:
         logger.debug(f"Checking repository: {repo}")
-        
+
         try:
             r = gh_request(session, "GET", f"https://api.github.com/repos/{repo}")
-            
+
             if r.status_code == 404:
                 logger.error(f"✗ Repository not found: {repo}")
                 inaccessible_repos.append((repo, "Not found (404)"))
                 continue
-            elif r.status_code == 403:
+            if r.status_code == 403:
                 logger.error(f"✗ Access denied to repository: {repo}")
                 inaccessible_repos.append((repo, "Access denied (403)"))
                 continue
-            
+
             r.raise_for_status()
             data = r.json()
-            
+
             repo_info[repo] = RepoInfo(
                 name=repo,
                 default_branch=data.get('default_branch', 'main'),
@@ -474,19 +471,19 @@ def validate_repositories(session: requests.Session, repos: List[str]) -> Dict[s
                 permissions=data.get('permissions', {}),
                 accessible=True
             )
-            
+
             logger.info(f"✓ {repo} ({data.get('visibility', 'unknown')}, default: {data.get('default_branch', 'main')})")
-            
+
         except Exception as e:
             logger.error(f"✗ Error accessing {repo}: {e}")
             inaccessible_repos.append((repo, str(e)))
-    
+
     if inaccessible_repos:
         logger.error("\nRepository access issues found:")
         for repo, reason in inaccessible_repos:
             logger.error(f"  {repo}: {reason}")
         raise GitHubAPIError(f"Cannot access {len(inaccessible_repos)} repositories")
-    
+
     logger.info(f"✓ All {len(repos)} repositories accessible")
     return repo_info
 
@@ -494,53 +491,53 @@ def validate_repositories(session: requests.Session, repos: List[str]) -> Dict[s
 def validate_users(session: requests.Session, users: List[str]) -> Dict[str, UserInfo]:
     """
     Validate that all specified users exist on GitHub.
-    
+
     Args:
         session: Authenticated requests session
         users: List of GitHub usernames
-        
+
     Returns:
         Dictionary mapping usernames to UserInfo objects
-        
+
     Raises:
         GitHubAPIError: If any user doesn't exist
     """
     logger.info(f"Validating {len(users)} users...")
-    
+
     user_info = {}
     missing_users = []
-    
+
     for user in users:
         logger.debug(f"Checking user: {user}")
-        
+
         try:
             r = gh_request(session, "GET", f"https://api.github.com/users/{user}")
-            
+
             if r.status_code == 404:
                 logger.error(f"✗ User not found: {user}")
                 missing_users.append(user)
                 continue
-            
+
             r.raise_for_status()
             data = r.json()
-            
+
             user_info[user] = UserInfo(
                 login=data['login'],  # Use the canonical case from GitHub
                 id=data['id'],
                 type=data.get('type', 'User'),
                 exists=True
             )
-            
+
             logger.info(f"✓ {data['login']} (ID: {data['id']}, Type: {data.get('type', 'User')})")
-            
+
         except Exception as e:
             logger.error(f"✗ Error checking user {user}: {e}")
             missing_users.append(user)
-    
+
     if missing_users:
         logger.error(f"\nMissing users: {', '.join(missing_users)}")
         raise GitHubAPIError(f"Cannot find {len(missing_users)} users")
-    
+
     logger.info(f"✓ All {len(users)} users found")
     return user_info
 
@@ -550,18 +547,18 @@ def validate_users(session: requests.Session, users: List[str]) -> Dict[str, Use
 def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
     """
     Perform a comprehensive dry run validation without collecting data.
-    
+
     Args:
         inputs: Validated input parameters
         token: GitHub API token
-        
+
     Returns:
         True if all validations pass, False otherwise
     """
     logger.info("=" * 60)
     logger.info("STARTING DRY RUN VALIDATION")
     logger.info("=" * 60)
-    
+
     try:
         # Setup session
         session = requests.Session()
@@ -570,52 +567,52 @@ def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "PR-Metrics-Collector/1.0"
         })
-        
+
         # 1. Validate authentication and scopes
         logger.info("\n1. Validating GitHub authentication...")
         user_info, scopes = validate_github_auth_and_scopes(token)
-        
+
         # 2. Validate repositories
         logger.info("\n2. Validating repository access...")
         repo_info = validate_repositories(session, inputs.repos)
-        
+
         # 3. Validate users
         logger.info("\n3. Validating users...")
         user_info_dict = validate_users(session, inputs.users)
-        
+
         # 4. Test a small search query
         logger.info("\n4. Testing search API...")
         test_repo = inputs.repos[0]
         test_user = inputs.users[0]
-        
+
         # Test search with a very limited date range
         test_start = inputs.start_date.strftime('%Y-%m-%d')
         test_end = (inputs.start_date.replace(day=min(inputs.start_date.day + 1, 28))).strftime('%Y-%m-%d')
-        
+
         search_query = f"repo:{test_repo} is:pr author:{test_user} created:{test_start}..{test_end}"
         search_url = "https://api.github.com/search/issues"
-        
+
         logger.debug(f"Test search query: {search_query}")
         r = gh_request(session, "GET", search_url, params={"q": search_query, "per_page": 1})
         r.raise_for_status()
-        
+
         search_data = r.json()
         logger.info(f"✓ Search API working. Found {search_data.get('total_count', 0)} PRs in test range")
-        
+
         # Summary
-        logger.info("\n" + "=" * 60)
+        logger.info("\n%s", "=" * 60)
         logger.info("DRY RUN VALIDATION SUMMARY")
-        logger.info("=" * 60)
+        logger.info("%s", "=" * 60)
         logger.info(f"✓ Authentication: {user_info['login']}")
         logger.info(f"✓ OAuth scopes: {len(scopes)} scopes")
         logger.info(f"✓ Repositories: {len(repo_info)} accessible")
         logger.info(f"✓ Users: {len(user_info_dict)} found")
-        logger.info(f"✓ Search API: Working")
+        logger.info("✓ Search API: Working")
         logger.info(f"✓ Date range: {inputs.start_date.date()} to {inputs.end_date.date()}")
         logger.info("\n✅ All validations passed! Ready to collect data.")
-        
+
         return True
-        
+
     except Exception as e:
         logger.error(f"\n❌ Dry run validation failed: {e}")
         return False
@@ -628,7 +625,7 @@ class GitHubAPI:
         self.base_url = "https://api.github.com"
         self.users = users
         self.cache = {}  # Simple cache for API responses
-        
+
         # Setup session with robust headers
         self.session = requests.Session()
         self.session.headers.update({
@@ -651,19 +648,19 @@ class GitHubAPI:
 
         try:
             response = gh_request(self.session, "GET", url, params=params)
-            
+
             # gh_request already handled retries, so if we get a bad status code here,
             # it means all retries were exhausted
             if response.status_code >= 400:
                 logger.error(f"Request to {url} failed with status {response.status_code} after retries: {response.text[:200]}")
                 return None
-            
+
             data = response.json()
-            
+
             # Cache successful response
             self.cache[cache_key] = data
             return data
-            
+
         except GitHubAPIError as e:
             logger.error(f"GitHub API error for {url}: {e}")
             return None
@@ -822,7 +819,7 @@ class PRMetricsWriter(MetricsWriter):
             review_authors = set(self.normalize_username(author) for (_, author) in review_metrics.keys())
 
             # Debug output for authors
-            logger.debug(f"\nAuthors found:")
+            logger.debug("\nAuthors found:")
             logger.debug(f"  From PRs: {pr_authors}")
             logger.debug(f"  From reviews: {review_authors}")
             logger.debug(f"  Specified users: {normalized_users}")
@@ -934,7 +931,7 @@ class PRMetricsWriter(MetricsWriter):
                         logger.debug(f"    Total hours: {total_hours}")
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
-                        logger.debug(f"    Individual PRs:")
+                        logger.debug("    Individual PRs:")
                         for repo, number, hours, created_at, ready_for_review_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
                             logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
                             logger.debug(f"        Created: {created_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
@@ -1358,12 +1355,11 @@ def validate_github_token(token: str, test_repo: str) -> bool:
                     reset_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
                 )
                 return False
-            else:
-                logger.info(
-                    "GitHub API rate limit: %d requests remaining, resets at %s",
-                    remaining,
-                    reset_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
-                )
+            logger.info(
+                "GitHub API rate limit: %d requests remaining, resets at %s",
+                remaining,
+                reset_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            )
         elif response.status_code == 403:
             # Try to parse rate limit info from the error response
             try:
@@ -1392,7 +1388,7 @@ def validate_github_token(token: str, test_repo: str) -> bool:
         if response.status_code == 403:
             logger.error("GitHub token lacks repository access. Please ensure the token has 'repo' scope.")
             return False
-        elif response.status_code != 200:
+        if response.status_code != 200:
             logger.error("GitHub token validation failed: %s", response.text)
             return False
 
@@ -1407,10 +1403,10 @@ def validate_github_token(token: str, test_repo: str) -> bool:
 def main():
     """Enhanced main function with robust validation and error handling"""
     start_time = datetime.now()
-    
+
     # Load environment variables
     load_dotenv()
-    
+
     # Parse arguments
     parser = argparse.ArgumentParser(
         description="Fetch PR metrics from GitHub with robust validation and error handling.",
@@ -1419,77 +1415,77 @@ def main():
 Examples:
   # Basic usage
   python3 developer_activity_insight.py --owner myorg --repos "repo1,repo2" --users "user1,user2" --date_start "2024-01-01" --date_end "2024-12-31"
-  
+
   # With full repo names
   python3 developer_activity_insight.py --owner myorg --repos "myorg/repo1,otherorg/repo2" --users "user1,user2" --date_start "2024-01-01" --date_end "2024-12-31"
-  
+
   # Dry run validation only
   python3 developer_activity_insight.py --owner myorg --repos "repo1" --users "user1" --date_start "2024-01-01" --date_end "2024-12-31" --dry-run
         """
     )
-    
-    parser.add_argument("--owner", required=True, 
+
+    parser.add_argument("--owner", required=True,
                        help="GitHub organization or user that owns repositories")
-    parser.add_argument("--repos", required=True, 
+    parser.add_argument("--repos", required=True,
                        help="Comma-separated list of repositories (can be just names if same owner)")
-    parser.add_argument("--users", required=True, 
+    parser.add_argument("--users", required=True,
                        help="Comma-separated list of GitHub usernames to analyze")
-    parser.add_argument("--date_start", required=True, 
+    parser.add_argument("--date_start", required=True,
                        help="Start date in YYYY-MM-DD format")
-    parser.add_argument("--date_end", required=True, 
+    parser.add_argument("--date_end", required=True,
                        help="End date in YYYY-MM-DD format")
-    parser.add_argument("--output", default="pr_metrics.csv", 
+    parser.add_argument("--output", default="pr_metrics.csv",
                        help="Output CSV file name (default: pr_metrics.csv)")
-    parser.add_argument("--debug", action="store_true", 
+    parser.add_argument("--debug", action="store_true",
                        help="Enable debug logging")
-    parser.add_argument("--dry-run", action="store_true", 
+    parser.add_argument("--dry-run", action="store_true",
                        help="Validate inputs and setup without collecting data")
-    
+
     try:
         args = parser.parse_args()
-        
+
         # Set logging level
         if args.debug:
             logger.setLevel(logging.DEBUG)
             logging.getLogger('requests').setLevel(logging.DEBUG)
-        
+
         # Validate and normalize inputs
         try:
             inputs = normalize_inputs(args)
         except ValidationError as e:
             logger.error(f"Input validation failed: {e}")
             sys.exit(1)
-        
+
         # Get GitHub token
         token = os.getenv("GITHUB_TOKEN_READONLY_WEB")
         if not token:
             logger.error("GITHUB_TOKEN_READONLY_WEB environment variable is not set")
             logger.error("Please set your GitHub Personal Access Token in the environment")
             sys.exit(1)
-        
+
         # Perform dry run validation
         if inputs.dry_run:
             success = dry_run_validation(inputs, token)
             sys.exit(0 if success else 1)
-        
+
         # If not dry run, do a quick validation anyway
         logger.info("Performing preflight validation...")
         if not dry_run_validation(inputs, token):
             logger.error("Preflight validation failed. Use --dry-run for detailed diagnostics.")
             sys.exit(1)
-        
-        logger.info("\n" + "=" * 60)
+
+        logger.info("\n%s", "=" * 60)
         logger.info("STARTING DATA COLLECTION")
-        logger.info("=" * 60)
-        
+        logger.info("%s", "=" * 60)
+
         # Initialize collector and process data with validated inputs
         collector = PRMetricsCollector(token, inputs.users)
         collector.metrics_writers = {"pr": PRMetricsWriter(inputs.output_file, inputs.users)}
 
         # Collect PR data
         pr_collection_start = datetime.now()
-        pr_data = collector.collect_pr_data(inputs.repos, inputs.users, 
-                                           inputs.start_date.strftime('%Y-%m-%d'), 
+        pr_data = collector.collect_pr_data(inputs.repos, inputs.users,
+                                           inputs.start_date.strftime('%Y-%m-%d'),
                                            inputs.end_date.strftime('%Y-%m-%d'))
         pr_collection_time = datetime.now() - pr_collection_start
 
@@ -1514,9 +1510,9 @@ Examples:
             return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
         # Log summary
-        logger.info("\n" + "=" * 60)
+        logger.info("\n%s", "=" * 60)
         logger.info("EXECUTION SUMMARY")
-        logger.info("=" * 60)
+        logger.info("%s", "=" * 60)
         logger.info(f"✓ Total PRs processed: {len(pr_data)}")
         logger.info(f"✓ Date range: {inputs.start_date.date()} to {inputs.end_date.date()}")
         logger.info(f"✓ Repositories processed: {len(inputs.repos)}")
@@ -1527,9 +1523,9 @@ Examples:
         logger.info(f"✓ Metrics Processing: {format_time(metrics_time)}")
         logger.info(f"✓ Report Generation: {format_time(report_time)}")
         logger.info(f"✓ Total Execution Time: {format_time(execution_time)}")
-        
+
         logger.info("\n🎉 PR metrics collection completed successfully!")
-        
+
     except KeyboardInterrupt:
         logger.info("\n⚠️  Operation cancelled by user")
         sys.exit(1)

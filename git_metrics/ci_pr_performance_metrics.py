@@ -193,8 +193,10 @@ def setup_github_api():
 
 
 def get_single_pull_request(pr_number):
+    api_config = setup_github_api()
+    base_url = f"https://api.github.com/repos/{api_config['owner']}/{api_config['repo']}"
     url = f"{base_url}/pulls/{pr_number}"
-    response = requests.get(url, headers=headers, timeout=30)
+    response = requests.get(url, headers=api_config["headers"], timeout=30)
     return [response.json()] if response.status_code == 200 else []
 
 
@@ -274,7 +276,7 @@ def exponential_backoff(attempt, max_delay=60):
 def execute_graphql_query(query, variables, attempt=0, max_attempts=5):
     """Execute a GraphQL query with retry logic."""
     if attempt >= max_attempts:
-        raise Exception("Max retry attempts reached")
+        raise RuntimeError("Max retry attempts reached")
 
     try:
         # Add small delay between requests to avoid hitting rate limits
@@ -286,7 +288,7 @@ def execute_graphql_query(query, variables, attempt=0, max_attempts=5):
             "Accept": "application/vnd.github.v3+json",
         }
 
-        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers, timeout=30)
 
         if response.status_code == 403:
             delay = exponential_backoff(attempt)
@@ -503,8 +505,10 @@ def get_merged_prs_for_years(start_year, end_year):
 
 
 def get_pr_reviews(pr_number):
+    api_config = setup_github_api()
+    base_url = f"https://api.github.com/repos/{api_config['owner']}/{api_config['repo']}"
     url = f"{base_url}/pulls/{pr_number}/reviews"
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=api_config["headers"], timeout=30)
     reviews = response.json()
     # Ensure reviews is a list
     if isinstance(reviews, list):
@@ -528,12 +532,18 @@ def get_pr_commits(pr_number, headers=None):
         headers: Optional request headers. If None, will use default GitHub API headers
     """
     if headers is None:
-        headers = setup_github_api()["headers"]
+        api_config = setup_github_api()
+        headers = api_config["headers"]
+        base_url = f"https://api.github.com/repos/{api_config['owner']}/{api_config['repo']}"
+    else:
+        # If headers are provided, we need to get the base_url from environment
+        api_config = setup_github_api()
+        base_url = f"https://api.github.com/repos/{api_config['owner']}/{api_config['repo']}"
 
     url = f"{base_url}/pulls/{pr_number}/commits"
     commits = []
     while url:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=30)
         commits.extend(response.json())
         url = response.links.get("next", {}).get("url")
     return commits
@@ -541,12 +551,15 @@ def get_pr_commits(pr_number, headers=None):
 
 # pylint: disable=too-many-locals
 def get_check_runs(pr_number):
+    api_config = setup_github_api()
+    base_url = f"https://api.github.com/repos/{api_config['owner']}/{api_config['repo']}"
+    headers = api_config["headers"]
     commits = get_pr_commits(pr_number)
     all_check_runs = []
     for commit in commits:
         url = f"{base_url}/commits/{commit['sha']}/check-runs"
         while url:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=30)
             if response.status_code != 200:
                 print(f"Failed  to fetch / Noneexistent check runs for commit {commit['sha']}: {response.status_code}")
                 break

@@ -3,7 +3,7 @@ import sys
 import logging
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from lines_changed import setup_logging
+from .lines_changed import setup_logging
 import requests
 
 # pylint: disable=pointless-string-statement

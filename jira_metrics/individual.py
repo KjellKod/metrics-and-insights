@@ -7,6 +7,9 @@ import traceback
 import csv
 from dotenv import load_dotenv
 
+# Global variable for verbose mode
+VERBOSE = False
+
 # pylint: disable=import-error
 from jira_utils import (
     get_tickets_from_jira,
@@ -90,7 +93,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
     for _, issue in enumerate(tickets):
         history = extract_status_timestamps(issue)
         statuses = interpret_status_timestamps(history)
-        
+
         # Get the most recent completion status (Released, Done)
         completion_timestamp = None
         for status in [JiraStatus.RELEASED.value, JiraStatus.DONE.value]:
@@ -188,8 +191,8 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
                 total_metrics[assignee]["tickets"] += metrics["tickets"]
 
         # Mark this person as active this month
-        for assignee in all_assignees:
-            if all_assignees[assignee]["points"] > 0 or all_assignees[assignee]["tickets"] > 0:
+        for assignee, metrics in all_assignees.items():
+            if metrics["points"] > 0 or metrics["tickets"] > 0:
                 total_metrics[assignee]["months_active"] += 1
 
         # Calculate team average for this month
