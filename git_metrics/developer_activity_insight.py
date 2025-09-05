@@ -320,15 +320,20 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                 backoff = min(backoff * 2, 60)
                 continue
             
-            # Handle abuse detection
+            # Handle 403 errors (rate limiting and abuse detection)
             if r.status_code == 403:
-                if "abuse" in r.text.lower() or "secondary rate limit" in r.text.lower():
+                response_text = r.text.lower()
+                if ("abuse" in response_text or 
+                    "secondary rate limit" in response_text or 
+                    "rate limit" in response_text or
+                    "api rate limit exceeded" in response_text):
                     retry_after = r.headers.get("Retry-After")
-                    sleep_time = float(retry_after) if retry_after else 30
-                    logger.warning(f"Abuse detection triggered. Waiting {sleep_time} seconds")
+                    sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
+                    logger.warning(f"Rate limiting detected (403). Waiting {sleep_time:.1f} seconds")
                     time.sleep(sleep_time)
+                    backoff = min(backoff * 2, 60)
                     continue
-                # If not abuse, let it fall through to return the response
+                # If not rate limiting related, let it fall through to return the response
             
             # Log rate limit status
             if 'X-RateLimit-Remaining' in r.headers:
@@ -646,15 +651,24 @@ class GitHubAPI:
 
         try:
             response = gh_request(self.session, "GET", url, params=params)
-            response.raise_for_status()
+            
+            # gh_request already handled retries, so if we get a bad status code here,
+            # it means all retries were exhausted
+            if response.status_code >= 400:
+                logger.error(f"Request to {url} failed with status {response.status_code} after retries: {response.text[:200]}")
+                return None
+            
             data = response.json()
             
             # Cache successful response
             self.cache[cache_key] = data
             return data
             
+        except GitHubAPIError as e:
+            logger.error(f"GitHub API error for {url}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Request to {url} failed: {e}")
+            logger.error(f"Unexpected error for {url}: {e}")
             return None
 
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
