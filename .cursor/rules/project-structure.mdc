@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+
+# Engineering Metrics and Insights Project Structure
+
+This repository contains scripts for gathering and analyzing engineering metrics from Jira and GitHub to help engineering teams identify process improvement areas.
+
+## Core Architecture
+
+The project is organized into two main modules:
+
+### Git Metrics Module ([git_metrics/](mdc:git_metrics/))
+- **Primary Script**: [developer_activity_insight.py](mdc:git_metrics/developer_activity_insight.py) - Comprehensive PR metrics and developer activity analysis
+- **Supporting Scripts**: Analysis tools for releases, CI performance, code review patterns, and repository activity
+- **Documentation**: [git_metrics/README.md](mdc:git_metrics/README.md) contains detailed usage for all Git metrics scripts
+
+### Jira Metrics Module ([jira_metrics/](mdc:jira_metrics/))
+- **Utilities**: [jira_utils.py](mdc:jira_metrics/jira_utils.py) - Shared utilities for JIRA API interactions, authentication, and common patterns
+- **Core Scripts**: Individual contributor analysis, cycle time tracking, engineering excellence metrics, and release failure analysis
+- **Tests**: Located in [jira_metrics/tests/](mdc:jira_metrics/tests/) with comprehensive unit test coverage
+
+## Key Configuration Files
+
+- [requirements.txt](mdc:requirements.txt) - Python dependencies
+- [pyproject.toml](mdc:pyproject.toml) - Black code formatter configuration (line-length = 120)
+- `.env` file - Environment variables for GitHub and Jira API credentials (not tracked in git)
+
+## Entry Points and Usage Patterns
+
+All scripts follow a consistent pattern:
+1. Load environment variables using `python-dotenv`
+2. Parse command-line arguments with `argparse`
+3. Support `-verbose` and `-csv` flags for output control
+4. Include comprehensive error handling and validation
+5. Generate CSV exports for data visualization and sharing
+
+Scripts should be run from the project root directory using module notation (e.g., `python3 git_metrics/developer_activity_insight.py`).

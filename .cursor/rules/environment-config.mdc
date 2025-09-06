@@ -1,0 +1,83 @@
+---
+description: Environment variables and configuration management
+---
+
+# Environment Variables and Configuration
+
+## Required Environment Variables
+
+Create a `.env` file in the project root with the following variables:
+
+### GitHub Configuration
+```bash
+# GitHub Personal Access Token with repo read access
+GITHUB_TOKEN_READONLY_WEB="your_github_token"
+GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_org"
+GITHUB_REPO_FOR_RELEASE_TRACKING="your_repo_name"
+GITHUB_REPO_FOR_PR_TRACKING="your_repo_name"
+```
+
+### Jira Configuration
+```bash
+# Jira API credentials
+USER_EMAIL="your_email@example.com"
+JIRA_API_KEY="your_jira_api_key"
+JIRA_LINK="https://your_jira_instance.atlassian.net"
+JIRA_GRAPHQL_URL="https://your_jira_instance.atlassian.net/gateway/api/graphql"
+JIRA_PROJECTS="PROJECT1,PROJECT2,PROJECT3"
+```
+
+### Team Configuration
+```bash
+# Used when team field isn't available in project
+TEAM_<PROJECT_KEY>="team_name"  # e.g., TEAM_SWE="swedes"
+```
+
+### Jira Custom Fields
+```bash
+# Find your actual field IDs in Jira under Settings → Issues → Custom Fields
+CUSTOM_FIELD_STORYPOINTS=10025
+CUSTOM_FIELD_TEAM=10075
+CUSTOM_FIELD_WORK_TYPE=10079
+```
+
+## Environment Variable Validation
+
+All scripts using external APIs should validate required environment variables at startup using patterns from [jira_utils.py](mdc:jira_metrics/jira_utils.py):
+
+```python
+def validate_required_env_vars():
+    required_vars = [
+        "JIRA_API_KEY",
+        "USER_EMAIL", 
+        "JIRA_LINK",
+        "JIRA_PROJECTS"
+    ]
+    
+    for var in required_vars:
+        if not os.getenv(var):
+            raise ValueError(f"Environment variable {var} is not set")
+```
+
+## Configuration Access Patterns
+
+### Jira Custom Fields
+```python
+from jira_utils import CUSTOM_FIELD_TEAM, CUSTOM_FIELD_STORYPOINTS
+
+# Access custom field values
+team_field = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_TEAM}")
+story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
+```
+
+### Project Lists
+```python
+projects = os.environ.get("JIRA_PROJECTS").split(",")
+```
+
+## Security Notes
+
+- Never commit `.env` files to version control
+- Use descriptive error messages for missing environment variables
+- Mask sensitive information in debug output (see [jira_utils.py](mdc:jira_metrics/jira_utils.py) `print_env_variables()`)
+- Verify SSL certificates for API connections

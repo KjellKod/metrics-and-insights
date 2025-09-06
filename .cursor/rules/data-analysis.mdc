@@ -1,0 +1,169 @@
+---
+description: Data analysis and insights generation patterns
+---
+
+# Data Analysis and Insights Patterns
+
+## Metrics Philosophy
+
+### Important Principles
+- **Metrics are conversation starters**, not absolute measures of performance
+- Use metrics to identify trends over time, not for individual evaluation
+- Combine quantitative metrics with qualitative feedback
+- Focus on finding areas needing support or improvement
+
+### Data Export Workflow
+1. Run scripts regularly (e.g., monthly)
+2. Export to CSV using `-csv` flag
+3. Import into spreadsheet tools (Google Sheets, Excel)
+4. Create visualizations and dashboards
+5. Discuss trends and insights with teams
+
+## CSV Export Standards
+
+### Multi-Sheet Structure
+Most scripts export multiple data views in a single CSV:
+
+```python
+def export_comprehensive_csv(filename, pr_data, monthly_data, author_data):
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Sheet 1: Raw PR data
+        writer.writerow(['=== PR DETAILS ==='])
+        writer.writerow(['date', 'author', 'repository', 'pr_number', 'lines_changed'])
+        writer.writerows(pr_data)
+        
+        # Sheet 2: Monthly aggregations
+        writer.writerow(['', ''])  # Separator
+        writer.writerow(['=== MONTHLY AGGREGATIONS ==='])
+        writer.writerow(['month', 'pr_count', 'median_hours_to_merge'])
+        writer.writerows(monthly_data)
+```
+
+### Data Visualization Ready
+- Include calculated fields (totals, percentages, medians)
+- Use consistent date formats (YYYY-MM-DD)
+- Include metadata rows for context
+- Provide summary statistics
+
+## Statistical Analysis Patterns
+
+### Time-based Metrics
+```python
+from datetime import datetime, timedelta
+
+def calculate_cycle_time(start_date, end_date):
+    """Calculate time between two status changes"""
+    if not start_date or not end_date:
+        return None
+    
+    delta = end_date - start_date
+    return delta.total_seconds() / 3600  # Return hours
+```
+
+### Aggregation Patterns
+```python
+from collections import defaultdict
+
+def aggregate_by_month(data):
+    monthly_data = defaultdict(list)
+    
+    for record in data:
+        month_key = record['date'][:7]  # YYYY-MM
+        monthly_data[month_key].append(record)
+    
+    # Calculate monthly statistics
+    results = []
+    for month, records in monthly_data.items():
+        results.append({
+            'month': month,
+            'count': len(records),
+            'median_value': calculate_median([r['value'] for r in records])
+        })
+    
+    return results
+```
+
+### Percentile Calculations
+```python
+def calculate_percentiles(values):
+    """Calculate common percentiles for performance analysis"""
+    if not values:
+        return {}
+    
+    sorted_values = sorted(values)
+    n = len(sorted_values)
+    
+    return {
+        'p50': sorted_values[n // 2],
+        'p75': sorted_values[int(n * 0.75)],
+        'p90': sorted_values[int(n * 0.90)],
+        'p95': sorted_values[int(n * 0.95)]
+    }
+```
+
+## Report Generation Patterns
+
+### Progress Indicators
+```python
+def show_progress(current, total, description="Processing"):
+    """Show progress for long-running operations"""
+    percentage = (current / total) * 100
+    print(f"\r{description}: {current}/{total} ({percentage:.1f}%)", end='', flush=True)
+```
+
+### Summary Statistics
+```python
+def generate_summary_report(data):
+    """Generate human-readable summary statistics"""
+    total_items = len(data)
+    if total_items == 0:
+        return "No data available"
+    
+    summary = f"""
+    Summary Report
+    ==============
+    Total Items: {total_items}
+    Date Range: {min(d['date'] for d in data)} to {max(d['date'] for d in data)}
+    Average Value: {sum(d['value'] for d in data) / total_items:.2f}
+    """
+    
+    return summary
+```
+
+## Data Quality Patterns
+
+### Input Validation
+```python
+def validate_date_range(start_date, end_date):
+    """Validate date inputs and convert to datetime objects"""
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        if start > end:
+            raise ValueError("Start date must be before end date")
+        
+        return start, end
+    except ValueError as e:
+        raise ValueError(f"Invalid date format: {e}")
+```
+
+### Data Cleaning
+```python
+def clean_author_data(authors):
+    """Standardize author names and filter out bots"""
+    cleaned = []
+    bot_patterns = ['bot', 'automation', 'ci', 'deploy']
+    
+    for author in authors:
+        # Skip bot accounts
+        if any(pattern in author.lower() for pattern in bot_patterns):
+            continue
+            
+        # Standardize formatting
+        cleaned.append(author.strip().lower())
+    
+    return list(set(cleaned))  # Remove duplicates
+```

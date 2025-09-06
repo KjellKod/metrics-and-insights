@@ -1,0 +1,119 @@
+---
+globs: git_metrics/**/*.py
+---
+
+# Git Metrics Module Guidelines
+
+## Primary Script: developer_activity_insight.py
+
+[developer_activity_insight.py](mdc:git_metrics/developer_activity_insight.py) is the main comprehensive PR metrics tool. Use this instead of deprecated scripts like `code_review_metrics.py`.
+
+### Key Features
+- Monthly PR aggregations
+- Author-specific metrics (PR count, median hours to merge, lines changed)
+- Review participation metrics
+- Comprehensive CSV export with multiple data views
+- Robust caching and error handling
+- Input validation and dry-run mode
+
+### Usage Pattern
+```python
+python3 git_metrics/developer_activity_insight.py \
+    --repos 'org/repo1,org/repo2' \
+    --users 'user1,user2' \
+    --date_start '2024-01-01' \
+    --date_end '2024-12-31' \
+    --output pr_metrics.csv
+```
+
+## GitHub API Integration
+
+### Authentication
+Always use `GITHUB_TOKEN_READONLY_WEB` environment variable:
+```python
+import os
+github_token = os.getenv('GITHUB_TOKEN_READONLY_WEB')
+if not github_token:
+    raise ValueError("GITHUB_TOKEN_READONLY_WEB environment variable not set")
+```
+
+### Rate Limiting and Caching
+- Implement exponential backoff for rate limiting
+- Use caching for expensive API calls
+- Include `--force-fresh` and `--load-from-file` options for cache management
+- Log API usage and remaining rate limits
+
+### Repository Handling
+- Support both `owner/repo` and `repo` formats (with default owner)
+- Validate repository access before processing
+- Handle organization vs user repositories
+
+## Data Processing Patterns
+
+### PR Metrics Collection
+```python
+pr_data = {
+    'date': pr.created_at.strftime('%Y-%m-%d'),
+    'author': pr.user.login,
+    'repository': repo_name,
+    'pr_number': pr.number,
+    'lines_added': pr.additions,
+    'lines_removed': pr.deletions,
+    'total_changes': pr.additions + pr.deletions,
+    'hours_to_merge': calculate_hours_to_merge(pr),
+    'reviews_count': len(pr.get_reviews().get_page(0))
+}
+```
+
+### CSV Export Structure
+Provide multiple data views in single CSV:
+1. **PR Details**: Individual PR records
+2. **Monthly Aggregations**: Summary by month
+3. **Author Metrics**: Summary by developer
+4. **Review Metrics**: Review participation data
+
+## Performance Considerations
+
+### Pagination Handling
+```python
+def get_all_prs(repo, since_date, until_date):
+    prs = []
+    page = 0
+    while True:
+        pr_page = repo.get_pulls(
+            state='closed',
+            sort='updated',
+            direction='desc',
+            since=since_date,
+            until=until_date
+        ).get_page(page)
+        
+        if not pr_page:
+            break
+            
+        prs.extend(pr_page)
+        page += 1
+        
+        # Rate limiting consideration
+        time.sleep(0.1)
+    
+    return prs
+```
+
+### Memory Management
+- Process data in chunks for large date ranges
+- Use generators for large datasets
+- Clear intermediate data structures
+
+## Script Organization
+
+### Supporting Scripts
+- `releases.py`: Release pattern analysis
+- `lines_changed.py`: Code volume tracking
+- `ci_pr_performance_metrics.py`: CI performance metrics
+- `active_devs_one_off.py`: Active developer identification
+- `active_repos_one_off.py`: Repository activity analysis
+
+### Deprecation Notes
+- `code_review_metrics.py` is deprecated - use `developer_activity_insight.py` instead
+- One-off scripts (`active_*_one_off.py`) are for specific analysis tasks, not regular reporting
