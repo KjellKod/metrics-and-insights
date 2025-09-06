@@ -1,0 +1,142 @@
+---
+globs: *.py
+---
+
+# Python Coding Standards and Patterns
+
+## Code Formatting and Style
+
+- **Line Length**: 120 characters (configured in [pyproject.toml](mdc:pyproject.toml))
+- **Formatter**: Use Black for consistent code formatting
+- **Import Order**: Follow standard Python import conventions:
+  1. Standard library imports
+  2. Third-party imports  
+  3. Local application imports
+- **Linting**: Use pylint with `# pylint: disable=` comments for justified exceptions
+
+## Development Principles
+
+### Function Design
+- **Keep functions reasonably small** with one major responsibility
+- **Prioritize simple, readable code** over premature optimization
+- Avoid over-engineering - don't split functions unnecessarily if it hurts readability
+- A function should do one thing well and be easy to understand at a glance
+
+### Code Quality Validation
+- **Always run linting** before committing code:
+  ```bash
+  pylint your_module.py
+  black --check your_module.py
+  ```
+- Fix linting issues promptly - clean code is maintainable code
+- Use `# pylint: disable=` sparingly and only with justification
+
+### Performance Awareness
+- **Identify performance concerns** proactively during code review
+- **Ask the programmer** if performance issues should be addressed before proceeding
+- Common areas to watch:
+  - Nested loops with API calls
+  - Large data processing without pagination
+  - Inefficient data structures for the use case
+  - Repeated expensive operations that could be cached
+
+## Common Patterns Used in This Codebase
+
+### Environment Variable Management
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Access environment variables with validation
+required_vars = ["GITHUB_TOKEN_READONLY_WEB", "JIRA_API_KEY"]
+for var in required_vars:
+    if not os.getenv(var):
+        raise ValueError(f"Environment variable {var} is not set")
+```
+
+### Command Line Argument Parsing
+Use [jira_utils.py](mdc:jira_metrics/jira_utils.py) `get_common_parser()` for consistent argument handling:
+```python
+from jira_utils import get_common_parser, parse_common_arguments
+
+parser = get_common_parser()
+parser.add_argument("--custom-flag", help="Custom argument")
+args = parse_common_arguments(parser)
+```
+
+### Verbose Logging Pattern
+Use the global `VERBOSE` variable and `verbose_print()` function from [jira_utils.py](mdc:jira_utils.py):
+```python
+from jira_utils import verbose_print
+
+# Global variable set by command line args
+VERBOSE = False
+
+def verbose_print(message):
+    if VERBOSE:
+        print(message)
+```
+
+### Error Handling
+- Use try-catch blocks with informative error messages
+- Provide context about what failed and potential solutions
+- For API calls, include authentication verification steps
+
+### CSV Export Pattern
+All scripts should support CSV export with the `-csv` flag:
+```python
+import csv
+
+def export_to_csv(data, filename):
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)
+        writer.writerows(data)
+```
+
+## Testing Standards
+
+### Test Strategy
+- **Prefer tests without mocks** when possible - they're more reliable and catch real issues
+- Test pure functions and business logic directly with real data
+- Only mock external dependencies (APIs, file systems, databases)
+- Write tests that verify the actual logic, not just that functions are called
+
+### Test Organization
+- Tests located in module-specific `tests/` directories
+- Use `unittest` framework
+- Test file naming: `test_<module_name>.py`
+- Include path manipulation for local imports:
+```python
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+```
+
+### Testing Approach Priority
+1. **Unit tests for pure functions** (no mocks needed)
+   ```python
+   def test_calculate_cycle_time():
+       start_date = datetime(2024, 1, 1, 10, 0)
+       end_date = datetime(2024, 1, 1, 14, 0)
+       result = calculate_cycle_time(start_date, end_date)
+       assert result == 4.0  # 4 hours
+   ```
+
+2. **Integration tests with real data structures**
+   ```python
+   def test_process_ticket_data():
+       sample_tickets = create_sample_ticket_data()
+       result = process_tickets(sample_tickets)
+       assert len(result) == expected_count
+       assert result[0]['team'] == 'expected_team'
+   ```
+
+3. **Mock only external dependencies**
+   ```python
+   @patch('jira_utils.get_jira_instance')
+   def test_api_integration(self, mock_jira):
+       # Only mock the external API call
+   ```

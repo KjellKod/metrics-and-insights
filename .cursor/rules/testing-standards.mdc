@@ -1,0 +1,140 @@
+---
+globs: **/tests/**/*.py,test_*.py
+---
+
+# Testing Standards and Patterns
+
+## Test Philosophy
+
+**Prefer tests without mocks when possible** - they're more reliable, catch real issues, and are easier to maintain.
+
+### Testing Priority Order
+1. **Pure function tests** (no mocks needed) - Test business logic directly
+2. **Integration tests** with real data structures - Verify data processing
+3. **Mocked tests** only for external dependencies (APIs, databases, file systems)
+
+## Test Structure
+
+- Tests are organized in module-specific `tests/` directories
+- Test files follow naming convention: `test_<module_name>.py`
+- Use Python's built-in `unittest` framework
+- Example test structure in [jira_metrics/tests/](mdc:jira_metrics/tests/)
+
+## Test File Setup Pattern
+
+All test files should include path manipulation for local imports:
+
+```python
+import sys
+import os
+import unittest
+from unittest.mock import patch, MagicMock
+
+# Add the parent directory to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Now import the module being tested
+from module_name import function_to_test
+```
+
+## Mocking External Dependencies
+
+### Mock Jira API Calls
+```python
+@patch('jira_utils.get_jira_instance')
+def test_jira_function(self, mock_jira):
+    # Setup mock
+    mock_jira_instance = MagicMock()
+    mock_jira.return_value = mock_jira_instance
+    
+    # Configure mock responses
+    mock_jira_instance.search_issues.return_value = mock_tickets
+    
+    # Run test
+    result = function_under_test()
+    
+    # Assertions
+    self.assertEqual(result, expected_value)
+    mock_jira_instance.search_issues.assert_called_once()
+```
+
+### Mock Environment Variables
+```python
+@patch.dict(os.environ, {
+    'JIRA_API_KEY': 'test_key',
+    'USER_EMAIL': 'test@example.com',
+    'JIRA_LINK': 'https://test.atlassian.net'
+})
+def test_with_env_vars(self):
+    # Test function that depends on environment variables
+    result = function_using_env_vars()
+    self.assertIsNotNone(result)
+```
+
+## Test Coverage Areas
+
+### Input Validation Tests
+- Test valid inputs produce expected outputs
+- Test invalid inputs raise appropriate exceptions
+- Test edge cases and boundary conditions
+
+### API Integration Tests
+- Mock external API calls (GitHub, Jira)
+- Test error handling for API failures
+- Test pagination logic
+- Test authentication failures
+
+### Data Processing Tests
+- Test data transformation functions
+- Test CSV export functionality
+- Test date parsing and formatting
+- Test statistical calculations
+
+## Running Tests
+
+From project root:
+```bash
+# Run all tests
+python -m pytest
+
+# Run specific test file
+python -m pytest jira_metrics/tests/test_bug_stats.py
+
+# Run with coverage
+python -m pytest --cov=jira_metrics
+```
+
+## Code Quality Validation
+
+**Always validate with linting** before considering code complete:
+
+```bash
+# Run linting on your code
+pylint jira_metrics/your_module.py
+
+# Check formatting
+black --check jira_metrics/your_module.py
+
+# Run both tests and linting together
+python -m pytest && pylint jira_metrics/your_module.py
+```
+
+### Performance Review Process
+When reviewing code, actively look for performance concerns and:
+1. **Identify potential issues** (nested loops, inefficient data structures, repeated API calls)
+2. **Ask the programmer** if performance optimization should be addressed
+3. **Provide specific suggestions** for improvement when needed
+4. **Consider the trade-off** between readability and performance
+
+## Test Data Patterns
+
+Create realistic test data that mirrors actual API responses:
+
+```python
+def create_mock_jira_ticket(key="TEST-123", status="Done"):
+    mock_ticket = MagicMock()
+    mock_ticket.key = key
+    mock_ticket.fields.status.name = status
+    mock_ticket.fields.created = "2024-01-01T10:00:00.000+0000"
+    return mock_ticket
+```

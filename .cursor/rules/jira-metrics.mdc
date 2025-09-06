@@ -1,0 +1,200 @@
+---
+globs: jira_metrics/**/*.py
+---
+
+# Jira Metrics Module Guidelines
+
+## Core Utility: jira_utils.py
+
+[jira_utils.py](mdc:jira_metrics/jira_utils.py) provides shared functionality for all Jira metrics scripts:
+
+### Authentication and Connection
+```python
+from jira_utils import get_jira_instance
+
+# Get authenticated Jira instance with error handling
+jira = get_jira_instance()
+```
+
+### Common Argument Parsing
+```python
+from jira_utils import get_common_parser, parse_common_arguments
+
+parser = get_common_parser()  # Includes -verbose and -csv flags
+parser.add_argument("-team", help="Team name filter")
+args = parse_common_arguments(parser)
+```
+
+### Verbose Logging
+```python
+from jira_utils import verbose_print
+
+verbose_print("Processing ticket: {ticket.key}")
+```
+
+## Jira API Patterns
+
+**IMPORTANT**: Always use JIRA REST API v3 for all new integrations and updates. The v3 API provides better performance, more consistent responses, and improved pagination.
+
+### API Version Configuration
+When creating JIRA connections, ensure you're using the v3 API endpoints:
+```python
+# Use v3 API endpoints (default for python-jira library)
+options = {
+    "server": "https://your-instance.atlassian.net",
+    "verify": True,
+    "agile_rest_path": "agile",  # Uses v3 by default
+    "rest_api_version": "3"      # Explicitly specify v3
+}
+jira = JIRA(options=options, basic_auth=(user, api_key))
+```
+
+### Ticket Retrieval
+```python
+from jira_utils import get_tickets_from_jira
+
+# Standard JQL query with pagination handling (uses v3 API internally)
+jql = "project in (PROJECT1,PROJECT2) AND status = Done"
+tickets = get_tickets_from_jira(jql)
+```
+
+### Custom Field Access
+```python
+from jira_utils import CUSTOM_FIELD_TEAM, CUSTOM_FIELD_STORYPOINTS, get_team, get_ticket_points
+
+# Access custom fields safely
+team = get_team(ticket)  # Handles fallback to project-based team mapping
+points = get_ticket_points(ticket)  # Returns 0 if not set
+```
+
+### Status Change Analysis
+```python
+from jira_utils import extract_status_timestamps, interpret_status_timestamps
+
+# Extract all status changes
+status_timestamps = extract_status_timestamps(ticket)
+
+# Get key timestamps (first code review, last release)
+key_statuses = interpret_status_timestamps(status_timestamps)
+code_review_date = key_statuses[JiraStatus.CODE_REVIEW.value]
+release_date = key_statuses[JiraStatus.RELEASED.value]
+```
+
+## Script Categories
+
+### Individual Analysis
+- [individual.py](mdc:jira_metrics/individual.py): Individual contributor metrics
+- Supports team and project filtering
+- Generates comprehensive individual performance reports
+
+### Process Metrics
+- [cycle_time.py](mdc:jira_metrics/cycle_time.py): Time from code review to release
+- [engineering_excellence.py](mdc:jira_metrics/engineering_excellence.py): Balance between product work and technical improvements
+- [release_failure.py](mdc:jira_metrics/release_failure.py): Release failure analysis
+
+### Data Export
+- [released_tickets.py](mdc:jira_metrics/released_tickets.py): Monthly released ticket counts
+- All scripts support CSV export with `-csv` flag
+
+## JQL Query Patterns
+
+### Standard Filters
+```python
+# Released tickets in date range
+jql = f"status changed to Released during ('{start_date}', '{end_date}')"
+
+# Team-specific tickets
+jql = f"project = {project} AND cf[{CUSTOM_FIELD_TEAM}] = '{team}'"
+
+# Work type analysis
+jql = f"cf[{CUSTOM_FIELD_WORK_TYPE}] in ('Product', 'Engineering Excellence')"
+```
+
+### Complex Queries
+```python
+# Tickets with story points that moved to code review
+jql = f"""
+project in ({','.join(projects)}) 
+AND cf[{CUSTOM_FIELD_STORYPOINTS}] is not empty
+AND status changed to 'Code Review' 
+AND issueType in (Task, Bug, Story, Spike)
+"""
+```
+
+## Data Processing Patterns
+
+### Team Assignment Logic
+1. Check custom team field
+2. Fall back to project-based team mapping via environment variables (`TEAM_<PROJECT_KEY>`)
+3. Use project key as default team name
+
+### Status Interpretation
+- **Code Review**: First time ticket enters any code review status
+- **Released**: Last time ticket was marked as released
+- **Done**: Last time ticket was marked as done
+
+### Error Handling
+```python
+try:
+    tickets = get_tickets_from_jira(jql)
+except ConnectionError as e:
+    print(f"Failed to connect to Jira: {e}")
+    sys.exit(1)
+except ValueError as e:
+    print(f"Configuration error: {e}")
+    sys.exit(1)
+```
+
+## Performance Considerations
+
+### API Version Benefits
+- **JIRA v3 API** provides improved performance over v2
+- Better pagination support with cursor-based navigation
+- More consistent field naming and response structure
+- Enhanced error handling and status codes
+
+### Pagination
+- `get_tickets_from_jira()` automatically handles pagination with 100-ticket batches
+- v3 API supports more efficient cursor-based pagination for large datasets
+- Progress logging shows ticket retrieval status
+
+### GraphQL Alternative
+- [jira_utils.py](mdc:jira_metrics/jira_utils.py) includes `get_tickets_from_graphql()` for advanced queries
+- Use for complex data requirements or performance optimization
+- GraphQL endpoint automatically uses latest API version
+
+### Caching
+- Consider implementing caching for frequently accessed data
+- Store intermediate results for large datasets
+- v3 API responses are more cacheable due to consistent structure
+
+## Migration to JIRA v3 API
+
+### Key Differences from v2
+- Field names are more consistent (camelCase instead of mixed formats)
+- Improved error responses with better context
+- Enhanced pagination with `startAt` and `maxResults` parameters
+- Better support for expand parameters
+
+### Updating Existing Code
+When updating existing scripts to use v3 API:
+```python
+# OLD (v2 implicit)
+options = {"server": jira_url, "verify": True}
+
+# NEW (v3 explicit)
+options = {
+    "server": jira_url, 
+    "verify": True,
+    "rest_api_version": "3"
+}
+```
+
+### Field Access Patterns
+v3 API maintains backward compatibility for most field access patterns:
+```python
+# These patterns work with both v2 and v3
+ticket.fields.status.name
+ticket.fields.project.key
+getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_ID}")
+```
