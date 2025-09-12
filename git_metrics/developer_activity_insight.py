@@ -29,7 +29,7 @@ python3 developer_activity_insight.py --owner myorg --repos 'repo1,repo2' \
                                      --users 'user1,user2' \
                                      --date_start '2024-01-01' \
                                      --date_end '2024-12-31' \
-                                     [--output pr_metrics.csv]
+                                     [--output pr_metrics.csv] [--debug] [--dry-run]
 
 Arguments
 ---------
@@ -39,6 +39,7 @@ Arguments
 --date_start:  Start date in YYYY-MM-DD format
 --date_end:    End date in YYYY-MM-DD format
 --output:      Output CSV file name (default: pr_metrics.csv)
+--debug:       Enable debug logging
 --dry-run:     Validate inputs and setup without collecting data
 """
 
@@ -240,7 +241,7 @@ class PRData:
     changed_files: int
     hours_to_merge: float
     created_at: datetime
-    ready_for_review_at: datetime
+    # Note: Using created_at as ready_for_review time since GitHub API doesn't provide readyForReviewAt
     merged_at: datetime
 
 
@@ -256,7 +257,7 @@ class MonthlyMetrics:
     reviews_participated: int = 0
     review_response_times: List[float] = field(default_factory=list)
     # Add PR details for debugging
-    pr_details: List[Tuple[str, int, float, datetime, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, ready_for_review_at, merged_at)
+    pr_details: List[Tuple[str, int, float, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, merged_at)
 
 
 @dataclass
@@ -385,9 +386,14 @@ def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str
         rate_data = r.json()
         core_limit = rate_data["resources"]["core"]
         search_limit = rate_data["resources"]["search"]
+        graphql_limit = rate_data["resources"].get("graphql", {})
 
         logger.info(f"✓ Core API: {core_limit['remaining']}/{core_limit['limit']} remaining")
         logger.info(f"✓ Search API: {search_limit['remaining']}/{search_limit['limit']} remaining")
+        if graphql_limit:
+            logger.info(f"✓ GraphQL API: {graphql_limit['remaining']}/{graphql_limit['limit']} remaining")
+        else:
+            logger.warning("GraphQL rate limit info not available in response")
 
         if core_limit['remaining'] < 100:
             reset_time = datetime.fromtimestamp(core_limit['reset'])
@@ -396,6 +402,14 @@ def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str
         if search_limit['remaining'] < 10:
             reset_time = datetime.fromtimestamp(search_limit['reset'])
             raise GitHubAPIError(f"Insufficient search API quota. Resets at {reset_time}")
+
+        # Check GraphQL quota if available
+        if graphql_limit and graphql_limit.get('remaining', 0) < 500:  # Warn earlier
+            reset_time = datetime.fromtimestamp(graphql_limit['reset']) if graphql_limit.get('reset') else 'unknown'
+            logger.warning(f"GraphQL API quota getting low: {graphql_limit['remaining']}/{graphql_limit['limit']} remaining. Resets at {reset_time}")
+            if graphql_limit.get('remaining', 0) < 100:
+                logger.error(f"GraphQL quota critically low! Consider waiting for reset or the script will fall back to Search API")
+                logger.error("Search API is slower and provides less detailed data")
 
         # Authenticate and get user info
         logger.debug("Authenticating user...")
@@ -621,10 +635,59 @@ def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
 class GitHubAPI:
     """Handles all GitHub API interactions with robust error handling"""
 
+    # GraphQL query for fetching PR data with manageable complexity
+    # Based on successful patterns from ci_pr_performance_metrics.py
+    # TEMPORARY: Ultra-minimal query for testing (fixed variable name)
+    PR_QUERY = """
+    query($owner: String!, $repo: String!, $cursor: String) {
+      repository(owner: $owner, name: $repo) {
+        pullRequests(first: 25, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}, states: [MERGED]) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            number
+            title
+            createdAt
+            mergedAt
+            isDraft
+            additions
+            deletions
+            changedFiles
+            author { login }
+            reviews(first: 10) {
+              nodes {
+                state
+                submittedAt
+                author { login }
+              }
+            }
+            comments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+
+
     def __init__(self, token: str, users: List[str]):
         self.base_url = "https://api.github.com"
         self.users = users
-        self.cache = {}  # Simple cache for API responses
+        self.cache = {}  # Simple cache for REST API responses
+
+        # GraphQL setup and caches
+        self.graphql_url = "https://api.github.com/graphql"
+        self.graphql_session = requests.Session()
+        self.graphql_session.headers.update({
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v4+json",
+            "User-Agent": "PR-Metrics-Collector/1.0"
+        })
+        # Cache GraphQL pages per (repo,start,end)
+        self.repo_prs_cache: Dict[str, List[dict]] = {}
+        # Cache details and review data per (repo, number)
+        self.pr_details_cache: Dict[Tuple[str, int], dict] = {}
+        self.pr_reviews_cache: Dict[Tuple[str, int], dict] = {}
 
         # Setup session with robust headers
         self.session = requests.Session()
@@ -664,89 +727,476 @@ class GitHubAPI:
         except GitHubAPIError as e:
             logger.error(f"GitHub API error for {url}: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Unexpected error for {url}: {e}")
-            return None
+
+    def _execute_graphql_query(self, query: str, variables: dict) -> Optional[dict]:
+        """Execute a GraphQL query with retry/backoff and return JSON data."""
+        max_tries = 6
+        backoff = 1.0
+        for attempt in range(1, max_tries + 1):
+            try:
+                repo_info = f"{variables.get('owner', 'unknown')}/{variables.get('repo', 'unknown')}" if variables else "unknown"
+                logger.debug(f"Executing GraphQL query for {repo_info} (attempt {attempt}) with variables: {variables}")
+                
+                # Add small delay to avoid overwhelming GitHub's servers (like ci_pr_performance_metrics.py)
+                if attempt == 1:  # Only on first attempt, retries have their own backoff
+                    time.sleep(0.5)
+                
+                r = self.graphql_session.post(self.graphql_url, json={"query": query, "variables": variables}, timeout=60)
+
+                # Handle rate limiting / server errors similar to REST
+                if r.status_code in (429, 502, 503, 504):
+                    retry_after = r.headers.get("Retry-After")
+                    sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
+                    
+                    # Try to extract error details from response
+                    error_details = ""
+                    try:
+                        error_data = r.json()
+                        if "message" in error_data:
+                            error_details = f" - {error_data['message']}"
+                        elif "errors" in error_data:
+                            error_details = f" - {error_data['errors']}"
+                    except (ValueError, KeyError):
+                        # If we can't parse JSON, try to get plain text
+                        if r.text:
+                            error_details = f" - {r.text[:200]}"
+                    
+                    logger.warning(f"GraphQL {r.status_code} for {repo_info}{error_details}. Waiting {sleep_time:.1f}s before retry")
+                    time.sleep(sleep_time)
+                    backoff = min(backoff * 2, 60)
+                    continue
+
+                if r.status_code == 403:
+                    text = r.text.lower()
+                    if any(term in text for term in ["abuse", "secondary rate limit", "rate limit", "api rate limit exceeded"]):
+                        retry_after = r.headers.get("Retry-After")
+                        sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
+                        
+                        # Extract detailed error message for rate limiting
+                        error_details = ""
+                        try:
+                            error_data = r.json()
+                            if "message" in error_data:
+                                error_details = f" - {error_data['message']}"
+                        except (ValueError, KeyError):
+                            error_details = f" - {r.text[:200]}"
+                        
+                        logger.warning(f"GraphQL rate limit (403) for {repo_info}{error_details}. Waiting {sleep_time:.1f}s")
+                        time.sleep(sleep_time)
+                        backoff = min(backoff * 2, 60)
+                        continue
+
+                # 400s can include useful error payloads; log truncated body for diagnostics
+                if r.status_code == 400:
+                    try:
+                        body_text = r.text
+                        logger.error(
+                            "GraphQL 400 Bad Request. Truncated response: %s",
+                            (body_text[:500] + ("..." if len(body_text) > 500 else "")),
+                        )
+                    except Exception:  # pylint: disable=broad-except
+                        pass
+                r.raise_for_status()
+                data = r.json()
+                if "errors" in data:
+                    # Some errors are transient, others are permanent
+                    errors = data['errors']
+                    error_messages = []
+                    has_transient_error = False
+                    
+                    for error in errors:
+                        error_msg = error.get('message', 'Unknown error')
+                        error_type = error.get('type', 'Unknown')
+                        error_path = error.get('path', [])
+                        
+                        detailed_msg = f"Type: {error_type}, Message: {error_msg}"
+                        if error_path:
+                            detailed_msg += f", Path: {' -> '.join(map(str, error_path))}"
+                        error_messages.append(detailed_msg)
+                        
+                        # Check if this looks like a transient error
+                        if any(term in error_msg.lower() for term in ['timeout', 'server error', 'temporarily unavailable']):
+                            has_transient_error = True
+                    
+                    logger.warning(f"GraphQL returned {len(errors)} error(s):")
+                    for msg in error_messages:
+                        logger.warning(f"  - {msg}")
+                    
+                    # Only retry if we think the error might be transient
+                    if has_transient_error and attempt < max_tries:
+                        sleep_time = backoff + random.uniform(0, 1)
+                        logger.warning(f"Retrying in {sleep_time:.1f}s due to potential transient error")
+                        time.sleep(sleep_time)
+                        backoff = min(backoff * 2, 60)
+                        continue
+                    else:
+                        # Return None for permanent errors or after max retries
+                        logger.error("GraphQL errors appear to be permanent or max retries reached")
+                        return None
+                        
+                return data.get("data")
+            except requests.exceptions.RequestException as e:
+                if attempt == max_tries:
+                    logger.error(f"GraphQL request failed after {max_tries} attempts: {e}")
+                    return None
+                sleep_time = backoff + random.uniform(0, 1)
+                logger.warning(f"GraphQL exception: {e}. Retrying in {sleep_time:.1f}s")
+                time.sleep(sleep_time)
+                backoff = min(backoff * 2, 60)
+        return None
+
+    def _get_repo_key(self, repo: str, start_date: str, end_date: str) -> str:
+        return f"{repo}|{start_date}|{end_date}"
+
+    def fetch_repo_prs_graphql(self, repo: str, start_date: str, end_date: str) -> List[dict]:
+        """Fetch merged PRs for a repository within a date range via GraphQL and cache details/reviews."""
+        cache_key = self._get_repo_key(repo, start_date, end_date)
+        if cache_key in self.repo_prs_cache:
+            return self.repo_prs_cache[cache_key]
+
+        try:
+            owner, name = repo.split("/", 1)
+        except ValueError:
+            logger.error(f"Invalid repo format for GraphQL: {repo}")
+            return []
+
+        # Normalize date boundaries to ISO8601 with Z
+        since_iso = f"{start_date}T00:00:00Z"
+        until_iso = f"{end_date}T23:59:59Z"
+
+        # TEMPORARY: Skip GraphQL due to inefficient date filtering, use Search API directly
+        logger.warning(f"GraphQL date filtering is inefficient for {repo}. Using Search API directly for better performance.")
+        fallback_nodes = self._fallback_search_prs(repo, since_iso, until_iso)
+        self.repo_prs_cache[cache_key] = fallback_nodes
+        return fallback_nodes
+
+        # Original GraphQL code (commented out for now)
+        variables = {"owner": owner, "repo": name, "cursor": None}
+        all_nodes: List[dict] = []
+        page_count = 0
+        while True:
+            page_count += 1
+            logger.info(f"Fetching page {page_count} for {repo}...")
+            data = self._execute_graphql_query(self.PR_QUERY, variables)
+            if not data:
+                # Fall back to REST Search API if GraphQL repeatedly fails
+                logger.warning("GraphQL returned no data for %s after retries (likely due to 502/503/504 errors or permanent GraphQL errors). Falling back to Search API.", repo)
+                fallback_nodes = self._fallback_search_prs(repo, since_iso, until_iso)
+                self.repo_prs_cache[cache_key] = fallback_nodes
+                return fallback_nodes
+            pr_conn = data.get("repository", {}).get("pullRequests", {})
+            nodes = pr_conn.get("nodes", [])
+            logger.info(f"Page {page_count}: Found {len(nodes)} PRs")
+
+            # Filter by mergedAt window and populate caches
+            for node in nodes:
+                merged_at = node.get("mergedAt")
+                if not merged_at:
+                    continue
+                if not (since_iso <= merged_at <= until_iso):
+                    # Skip outside the requested window
+                    continue
+
+                number = node.get("number")
+                key = (repo, number)
+
+                # Cache details
+                self.pr_details_cache[key] = {
+                    "number": number,
+                    "created_at": node.get("createdAt"),
+                    "merged_at": node.get("mergedAt"),
+                    "is_draft": node.get("isDraft", False),
+                    "additions": node.get("additions", 0),
+                    "deletions": node.get("deletions", 0),
+                    "changed_files": node.get("changedFiles", 0),
+                    "user": {"login": (node.get("author") or {}).get("login", "")},
+                }
+
+                # Flatten review comments from reviewThreads
+                review_comments: List[dict] = []
+                for t in (node.get("reviewThreads", {}) or {}).get("nodes", []) or []:
+                    for c in (t.get("comments", {}) or {}).get("nodes", []) or []:
+                        review_comments.append({
+                            "created_at": c.get("createdAt"),
+                            "user": {"login": (c.get("author") or {}).get("login", "")},
+                            "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
+                        })
+
+                # Issue comments
+                issue_comments: List[dict] = []
+                for c in (node.get("comments", {}) or {}).get("nodes", []) or []:
+                    issue_comments.append({
+                        "created_at": c.get("createdAt"),
+                        "user": {"login": (c.get("author") or {}).get("login", "")},
+                        "issue_url": f"https://api.github.com/repos/{repo}/issues/{number}",
+                    })
+
+                # Reviews
+                reviews: List[dict] = []
+                for rnode in (node.get("reviews", {}) or {}).get("nodes", []) or []:
+                    reviews.append({
+                        "state": rnode.get("state"),
+                        "submitted_at": rnode.get("submittedAt"),
+                        "user": {"login": (rnode.get("author") or {}).get("login", "")},
+                        "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
+                    })
+
+                # Review requests via timeline items
+                review_requests: List[dict] = []
+                for ev in (node.get("timelineItems", {}) or {}).get("nodes", []) or []:
+                    created_at = ev.get("createdAt")
+                    actor_login = (ev.get("actor") or {}).get("login")
+                    requested_reviewer_login = (ev.get("requestedReviewer") or {}).get("login")
+                    if created_at and requested_reviewer_login:
+                        review_requests.append({
+                            "created_at": created_at,
+                            "actor": {"login": actor_login},
+                            "requested_reviewer": {"login": requested_reviewer_login},
+                        })
+
+                self.pr_reviews_cache[key] = {
+                    "reviews": reviews,
+                    "review_comments": review_comments,
+                    "issue_comments": issue_comments,
+                    "review_requests": review_requests,
+                }
+
+                all_nodes.append(node)
+
+            page_info = pr_conn.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+            variables["cursor"] = page_info.get("endCursor")
+
+        # Save minimal list for get_prs (only number needed)
+        self.repo_prs_cache[cache_key] = all_nodes
+        return all_nodes
+
+    def _fallback_search_prs(self, repo: str, since_iso: str, until_iso: str) -> List[dict]:
+        """Fallback: use Search API to get merged PRs for date window; minimal fields only.
+
+        Returns a list of dicts with at least {"number"} so downstream logic can proceed.
+        """
+        logger.info("Using Search API fallback for %s (%s..%s)", repo, since_iso[:10], until_iso[:10])
+        # Search for merged PRs in window
+        q = f"repo:{repo} is:pr is:merged merged:{since_iso[:10]}..{until_iso[:10]}"
+        url = f"{self.base_url}/search/issues"
+        page = 1
+        items: List[dict] = []
+        while True:
+            params = {"q": q, "per_page": 100, "page": page}
+            resp = gh_request(self.session, "GET", url, params=params)
+            if resp.status_code >= 400:
+                logger.error("Search API fallback failed (%s): %s", resp.status_code, resp.text[:200])
+                break
+            data = resp.json()
+            batch = data.get("items", [])
+            if not batch:
+                break
+            for it in batch:
+                # item has number, repository_url, pull_request field when it's a PR
+                if "pull_request" not in it:
+                    continue
+                items.append({
+                    "__fallback": True,
+                    "number": it.get("number"),
+                    # Provide a minimal author field best-effort; details will be fetched later
+                    "author": {"login": (it.get("user", {}) or {}).get("login", "")},
+                    # placeholders to satisfy downstream optional access
+                    "reviews": {"nodes": []},
+                    "participants": {"nodes": []},
+                    "comments": {"nodes": []},
+                    "reviewThreads": {"nodes": []},
+                    "timelineItems": {"nodes": []},
+                })
+            # Pagination heuristic: stop when less than per_page returned
+            if len(batch) < 100:
+                break
+            page += 1
+        return items
+
+    def get_all_prs_for_repo(self, repo: str, start_date: str, end_date: str) -> List[dict]:
+        """Get all PRs for a repo in the date range - more efficient than per-user calls"""
+        logger.info(f"Fetching all PRs for {repo} from {start_date} to {end_date}")
+        
+        # Use Search API with date filtering - much more efficient
+        since_iso = f"{start_date}T00:00:00Z"
+        until_iso = f"{end_date}T23:59:59Z"
+        
+        q = f"repo:{repo} is:pr is:merged merged:{start_date}..{end_date}"
+        url = f"{self.base_url}/search/issues"
+        page = 1
+        all_prs = []
+        
+        while True:
+            params = {"q": q, "per_page": 100, "page": page}
+            resp = gh_request(self.session, "GET", url, params=params)
+            if resp.status_code >= 400:
+                logger.error("Search API failed (%s) for %s: %s", resp.status_code, repo, resp.text[:200])
+                break
+            
+            data = resp.json()
+            batch = data.get("items", [])
+            if not batch:
+                break
+                
+            # Convert to our expected format
+            for item in batch:
+                if "pull_request" in item:
+                    all_prs.append({
+                        "number": item.get("number"),
+                        "title": item.get("title", ""),
+                        "user": {"login": item.get("user", {}).get("login", "")},
+                        "created_at": item.get("created_at"),
+                        "updated_at": item.get("updated_at"),
+                        # We'll need to fetch details later for full data
+                    })
+            
+            logger.info(f"Fetched page {page}: {len(batch)} PRs")
+            if len(batch) < 100:
+                break
+            page += 1
+            
+        logger.info(f"Total PRs found for {repo}: {len(all_prs)}")
+        return all_prs
+    
+    def pr_involves_user(self, pr: dict, username: str) -> bool:
+        """Check if a PR involves a specific user (as author initially, we'll expand this)"""
+        pr_author = pr.get("user", {}).get("login", "")
+        return self.normalize_username(pr_author) == self.normalize_username(username)
+
+    def _search_pr_numbers_for_user(self, repo: str, start_date: str, end_date: str, username: str, qualifier: str) -> Set[int]:
+        """Use Search API to get PR numbers for a user involvement type (author/commenter/reviewed-by)."""
+        q = f"repo:{repo} is:pr is:merged merged:{start_date}..{end_date} {qualifier}:{username}"
+        url = f"{self.base_url}/search/issues"
+        page = 1
+        numbers: Set[int] = set()
+        while True:
+            params = {"q": q, "per_page": 100, "page": page}
+            resp = gh_request(self.session, "GET", url, params=params)
+            if resp.status_code >= 400:
+                logger.error("Search API query failed (%s) for %s: %s", resp.status_code, q, resp.text[:200])
+                break
+            data = resp.json()
+            batch = data.get("items", [])
+            if not batch:
+                break
+            for it in batch:
+                if "pull_request" in it:
+                    n = it.get("number")
+                    if isinstance(n, int):
+                        numbers.add(n)
+            if len(batch) < 100:
+                break
+            page += 1
+        return numbers
 
     def get_prs(self, repo: str, author: str, start_date: str, end_date: str) -> List[dict]:
-        """Fetch PRs for a given repo and author"""
-        logger.info(f"Fetching PRs for {author} in {repo}")
-        search_url = f"{self.base_url}/search/issues"
-        unique_prs = {}  # Use a dict to track unique PRs by number
+        """Fetch PRs for a given repo and author using GraphQL with caching.
 
-        # Search for PRs authored by the user
-        author_query = f"repo:{repo} is:pr is:merged author:{author} merged:{start_date}..{end_date}"
-        logger.debug(f"Author query: {author_query}")
-        data = self._make_request(search_url, params={"q": author_query, "per_page": 100, "page": 1})
-        if data:
-            author_prs = data.get("items", [])
-            logger.info(f"Found {len(author_prs)} PRs authored by {author} in {repo}")
-            for pr in author_prs:
-                unique_prs[pr["number"]] = pr
+        We fetch all merged PRs for the repo within the date window once via GraphQL, cache
+        details/reviews, and then filter to the ones involving the specified author (as author,
+        reviewer, participant, or commenter). We return a minimal shape with {"number"} to
+        preserve the downstream behavior.
+        """
+        logger.info(f"Fetching PRs for {author} in {repo} (GraphQL - reduced complexity query)")
+        logger.info(f"Date range: {start_date} to {end_date}")
+        nodes = self.fetch_repo_prs_graphql(repo, start_date, end_date)
+        norm_author = self.normalize_username(author)
+        unique_numbers: Set[int] = set()
 
-        # Search for PRs reviewed by the user
-        reviewer_query = f"repo:{repo} is:pr is:merged review-requested:{author} merged:{start_date}..{end_date}"
-        logger.debug(f"Reviewer query: {reviewer_query}")
-        data = self._make_request(search_url, params={"q": reviewer_query, "per_page": 100, "page": 1})
-        if data:
-            reviewer_prs = data.get("items", [])
-            logger.info(f"Found {len(reviewer_prs)} PRs reviewed by {author} in {repo}")
-            for pr in reviewer_prs:
-                unique_prs[pr["number"]] = pr
+        for node in nodes:
+            number = node.get("number")
+            if not number:
+                continue
+            # If this is a fallback node, we cannot infer involvement from node content reliably.
+            # Use targeted Search API queries to gather involvement for this author.
+            if node.get("__fallback"):
+                author_nums = self._search_pr_numbers_for_user(repo, start_date, end_date, author, "author")
+                commenter_nums = self._search_pr_numbers_for_user(repo, start_date, end_date, author, "commenter")
+                reviewer_nums = self._search_pr_numbers_for_user(repo, start_date, end_date, author, "reviewed-by")
+                if number in author_nums or number in commenter_nums or number in reviewer_nums:
+                    unique_numbers.add(number)
+                continue
 
-        # Search for PRs where user commented
-        commenter_query = f"repo:{repo} is:pr is:merged commenter:{author} merged:{start_date}..{end_date}"
-        logger.debug(f"Commenter query: {commenter_query}")
-        data = self._make_request(search_url, params={"q": commenter_query, "per_page": 100, "page": 1})
-        if data:
-            commenter_prs = data.get("items", [])
-            logger.info(f"Found {len(commenter_prs)} PRs commented on by {author} in {repo}")
-            for pr in commenter_prs:
-                unique_prs[pr["number"]] = pr
+            # Author
+            pr_author = self.normalize_username(((node.get("author") or {}).get("login") or ""))
+            involved = pr_author == norm_author
 
-        # Convert dict values to list
-        pr_list = list(unique_prs.values())
+            # Participants (reviewers/commenters)
+            if not involved:
+                for p in (node.get("participants", {}) or {}).get("nodes", []) or []:
+                    if self.normalize_username(p.get("login")) == norm_author:
+                        involved = True
+                        break
+
+            # Reviews
+            if not involved:
+                for r in (node.get("reviews", {}) or {}).get("nodes", []) or []:
+                    if self.normalize_username(((r.get("author") or {}).get("login") or "")) == norm_author:
+                        involved = True
+                        break
+
+            # Issue comments
+            if not involved:
+                for c in (node.get("comments", {}) or {}).get("nodes", []) or []:
+                    if self.normalize_username(((c.get("author") or {}).get("login") or "")) == norm_author:
+                        involved = True
+                        break
+
+            # Review thread comments
+            if not involved:
+                for t in (node.get("reviewThreads", {}) or {}).get("nodes", []) or []:
+                    for c in (t.get("comments", {}) or {}).get("nodes", []) or []:
+                        if self.normalize_username(((c.get("author") or {}).get("login") or "")) == norm_author:
+                            involved = True
+                            break
+                    if involved:
+                        break
+
+            if involved:
+                unique_numbers.add(number)
+
+        pr_list = [{"number": n} for n in sorted(unique_numbers)]
         logger.info(f"Total unique PRs found for {author} in {repo}: {len(pr_list)}")
         return pr_list
 
     def get_pr_details(self, repo: str, pr_number: int) -> Optional[dict]:
-        """Fetch detailed PR information"""
+        """Fetch detailed PR information, preferring GraphQL cache when available."""
         logger.debug(f"Fetching details for PR #{pr_number} in {repo}")
+        key = (repo, pr_number)
+        if key in self.pr_details_cache:
+            # Adapt to REST-like field names expected by downstream code
+            cached = self.pr_details_cache[key]
+            return {
+                "number": cached.get("number"),
+                "created_at": cached.get("created_at"),
+                "merged_at": cached.get("merged_at"),
+                "is_draft": cached.get("is_draft", False),
+                "additions": cached.get("additions", 0),
+                "deletions": cached.get("deletions", 0),
+                "changed_files": cached.get("changed_files", 0),
+                "user": cached.get("user", {}),
+            }
         pr_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         return self._make_request(pr_url)
 
     def get_pr_reviews(self, repo: str, pr_number: int) -> dict:
-        """Fetch all review-related data for a PR"""
+        """Fetch all review-related data for a PR, preferring GraphQL cache when available."""
         logger.debug(f"Fetching reviews for PR #{pr_number} in {repo}")
-        base_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
+        key = (repo, pr_number)
+        if key in self.pr_reviews_cache:
+            return self.pr_reviews_cache[key]
 
+        # Fallback to REST if not cached (should be rare after GraphQL hydration)
+        base_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         try:
-            # Fetch all reviews and comments using robust requests
             all_reviews = self._make_request(f"{base_url}/reviews") or []
             all_comments = self._make_request(f"{base_url}/comments") or []
-            all_issue_comments = self._make_request(
-                f"{base_url.replace('/pulls/', '/issues/')}/comments"
-            ) or []
-
-            # Fetch review request events
+            all_issue_comments = self._make_request(f"{base_url.replace('/pulls/', '/issues/')}/comments") or []
             events_url = f"{base_url.replace('/pulls/', '/issues/')}/events"
             all_events = self._make_request(events_url) or []
             all_review_requests = [event for event in all_events if event.get("event") == "review_requested"]
-
-            # Log all reviews and requests for debugging
-            logger.debug(f"All reviews found for PR #{pr_number}:")
-            for review in all_reviews:
-                logger.debug(
-                    f"  Review by {review['user']['login']} at {review.get('submitted_at')} - State: {review['state']}"
-                )
-
-            logger.debug(f"All review requests found for PR #{pr_number}:")
-            for req in all_review_requests:
-                reviewer = req.get("requested_reviewer", {}).get("login", "unknown")
-                logger.debug(
-                    f"  Review requested for {reviewer} at {req.get('created_at')} by {req.get('actor', {}).get('login')}"
-                )
-
             return {
                 "reviews": all_reviews,
                 "review_comments": all_comments,
@@ -932,10 +1382,9 @@ class PRMetricsWriter(MetricsWriter):
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
                         logger.debug("    Individual PRs:")
-                        for repo, number, hours, created_at, ready_for_review_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
+                        for repo, number, hours, created_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
                             logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
                             logger.debug(f"        Created: {created_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                            logger.debug(f"        Ready for review: {ready_for_review_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                             logger.debug(f"        Merged:  {merged_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
             self._write_metric_section(
@@ -1062,18 +1511,24 @@ class PRMetricsCollector:
         return self.pr_creation_times[cache_key]
 
     def collect_pr_data(self, repos: List[str], users: List[str], start_date: str, end_date: str) -> List[PRData]:
-        """Collect PR data for all repos and users"""
-        logger.info(f"Starting PR data collection for {len(repos)} repos and {len(users)} users")
+        """Collect PR data for all repos and users - OPTIMIZED: fetch once per repo"""
+        logger.info(f"Starting OPTIMIZED PR data collection for {len(repos)} repos and {len(users)} users")
         pr_data = {}  # Use dict to track unique PRs by (repo, number)
         total_prs = 0
 
         for repo in repos:
+            logger.info(f"Fetching ALL PRs for {repo} in date range {start_date} to {end_date}")
+            # NEW: Fetch all PRs for this repo once, then filter by users
+            all_repo_prs = self.api.get_all_prs_for_repo(repo, start_date, end_date)
+            logger.info(f"Found {len(all_repo_prs)} total PRs in {repo}")
+            
+            # Filter for our specific users
             for user in users:
-                prs = self.api.get_prs(repo, user, start_date, end_date)
-                total_prs += len(prs)
-                logger.info(f"Processing {len(prs)} PRs for {user} in {repo}")
+                user_prs = [pr for pr in all_repo_prs if self.api.pr_involves_user(pr, user)]
+                total_prs += len(user_prs)
+                logger.info(f"Found {len(user_prs)} PRs involving {user} in {repo}")
 
-                for pr in prs:
+                for pr in user_prs:
                     # Skip if we've already processed this PR
                     pr_key = (repo, pr["number"])
                     if pr_key in pr_data:
@@ -1082,19 +1537,42 @@ class PRMetricsCollector:
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
-                        ready_for_review_at = datetime.fromisoformat(details["ready_for_review_at"].replace("Z", "+00:00")) if details.get("ready_for_review_at") else created_at
                         merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00")) if details.get("merged_at") else None
 
                         if not merged_at:
                             continue
 
+                        # Determine the baseline as the earliest review request time; fallback to created_at
+                        ready_for_review_at = created_at
+                        try:
+                            review_data = self.api.get_pr_reviews(repo, pr["number"])
+                            review_requests = review_data.get("review_requests", []) if review_data else []
+                            earliest_request_time: Optional[datetime] = None
+                            for req in review_requests:
+                                created = req.get("created_at")
+                                if created:
+                                    req_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                                    if earliest_request_time is None or req_time < earliest_request_time:
+                                        earliest_request_time = req_time
+                            if earliest_request_time is not None:
+                                ready_for_review_at = earliest_request_time
+                                logger.debug(
+                                    f"PR #{pr['number']} in {repo}: Using first review request time {ready_for_review_at}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"PR #{pr['number']} in {repo}: No valid review request times, using created_at"
+                                )
+                        except Exception as exc:  # pylint: disable=broad-except
+                            logger.warning(
+                                f"PR #{pr['number']} in {repo}: Failed to fetch/parse review requests ({exc}); using created_at"
+                            )
+
                         hours_to_merge = round((merged_at - ready_for_review_at).total_seconds() / 3600, 2)
 
-                        # Add debug logging for ready_for_review_at
-                        if not details.get("ready_for_review_at"):
-                            logger.warning(f"PR #{pr['number']} in {repo} has no ready_for_review_at, using created_at: {created_at}")
-                        else:
-                            logger.warning(f"PR #{pr['number']} in {repo} ready_for_review_at: {ready_for_review_at}")
+                        # Log draft status if available
+                        if details.get("is_draft"):
+                            logger.debug(f"PR #{pr['number']} in {repo} was marked as draft")
 
                         pr_data[pr_key] = PRData(
                             date=merged_at,
@@ -1106,7 +1584,6 @@ class PRMetricsCollector:
                             changed_files=details["changed_files"],
                             hours_to_merge=hours_to_merge,
                             created_at=created_at,
-                            ready_for_review_at=ready_for_review_at,
                             merged_at=merged_at,
                         )
 
@@ -1135,7 +1612,7 @@ class PRMetricsCollector:
             monthly_metrics[key].lines_removed.append(pr.deletions)
             monthly_metrics[key].total_changes.append(pr.additions + pr.deletions)
             # Store PR details for debugging
-            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.ready_for_review_at, pr.merged_at))
+            monthly_metrics[key].pr_details.append((pr.repo, pr.number, pr.hours_to_merge, pr.created_at, pr.merged_at))
 
             # Process review data
             logger.debug(f"Processing reviews for PR #{pr.number} in {pr.repo}")

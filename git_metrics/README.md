@@ -17,14 +17,22 @@ Required Environment Variables:
 - `GITHUB_TOKEN_READONLY_WEB`: GitHub Personal Access Token with repo read access
 
 ```bash
-python3 developer_activity_insight.py [options]
+python3 developer_activity_insight.py --owner <org> \
+                                     --repos 'repo1,repo2' \
+                                     --users 'user1,user2' \
+                                     --date_start '2024-01-01' \
+                                     --date_end '2024-12-31' \
+                                     [--output pr_metrics.csv] [--debug] [--dry-run]
+
 Options:
-  --repos REPOS         Comma-separated list of GitHub repos (e.g., 'org1/repo1,org2/repo2')
+  --owner OWNER         GitHub organization or user that owns repositories (required)
+  --repos REPOS         Comma-separated list of GitHub repos (or full 'owner/repo')
   --users USERS         Comma-separated list of GitHub usernames
   --date_start DATE     Start date in YYYY-MM-DD format
   --date_end DATE       End date in YYYY-MM-DD format
   --output FILE         Output CSV file name (default: pr_metrics.csv)
   --debug               Enable debug logging
+  --dry-run             Validate inputs and setup without collecting data
 ```
 
 ### releases.py

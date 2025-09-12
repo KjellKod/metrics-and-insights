@@ -135,7 +135,13 @@ Note: The custom field IDs are examples. You'll need to find your actual field I
 ### GitHub Metrics
 To analyze developer activity and PR metrics:
 ```bash
-python3 git_metrics/developer_activity_insight.py --repos 'org/repo1,org2/repo2' --users 'user1,user2' --date_start '2024-01-01' --date_end '2024-03-31'
+python3 git_metrics/developer_activity_insight.py \
+  --owner myorg \
+  --repos 'repo1,repo2' \
+  --users 'user1,user2' \
+  --date_start '2024-01-01' \
+  --date_end '2024-03-31' \
+  [--output pr_metrics.csv] [--debug] [--dry-run]
 ```
 
 To analyze release patterns:
