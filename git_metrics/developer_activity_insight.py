@@ -848,7 +848,7 @@ class GitHubAPI:
     def _get_repo_key(self, repo: str, start_date: str, end_date: str) -> str:
         return f"{repo}|{start_date}|{end_date}"
 
-    def fetch_repo_prs_graphql(self, repo: str, start_date: str, end_date: str) -> List[dict]:
+    def fetch_repo_prs_rest(self, repo: str, start_date: str, end_date: str) -> List[dict]:
         """Fetch merged PRs for a repository within a date range via GraphQL and cache details/reviews."""
         cache_key = self._get_repo_key(repo, start_date, end_date)
         if cache_key in self.repo_prs_cache:
@@ -864,13 +864,28 @@ class GitHubAPI:
         since_iso = f"{start_date}T00:00:00Z"
         until_iso = f"{end_date}T23:59:59Z"
 
-        # TEMPORARY: Skip GraphQL due to inefficient date filtering, use Search API directly
+        # Skip GraphQL due to inefficient date filtering, use Search API directly
         logger.warning(f"GraphQL date filtering is inefficient for {repo}. Using Search API directly for better performance.")
-        fallback_nodes = self._fallback_search_prs(repo, since_iso, until_iso)
+        fallback_nodes = self._rest_search_prs(repo, since_iso, until_iso)
         self.repo_prs_cache[cache_key] = fallback_nodes
         return fallback_nodes
 
-        # Original GraphQL code (commented out for now)
+        # GraphQL pagination code moved to `_fetch_repo_prs_graphql_paginated` for clarity.
+        # The REST Search API approach is significantly more efficient for this use case because:
+        # Date filtering is the primary bottleneck: For a typical enterprise repo with thousands of PRs over years, 
+        # by date server-side vs client-side makes a massive difference.
+        # Network efficiency: Downloading 50 relevant PRs + their details is far more efficient than downloading 
+        # 5000 PRs and filtering to 50.
+        # if you want to try out graphQL then uncomment the row below instead of the REST call section above. 
+        # ------------------------------------------------------------------------------------------------
+        # return self._fetch_repo_prs_graphql_paginated(repo, owner, name, since_iso, until_iso)
+
+    def _fetch_repo_prs_graphql_paginated(self, repo: str, owner: str, name: str, since_iso: str, until_iso: str) -> List[dict]:
+        """GraphQL pagination alternative (not enabled by default).
+
+        This exists for reference; REST Search is preferred for this use case because it filters
+        by date server-side and we still pull review-request timestamps from REST issue events.
+        """
         variables = {"owner": owner, "repo": name, "cursor": None}
         all_nodes: List[dict] = []
         page_count = 0
@@ -879,22 +894,14 @@ class GitHubAPI:
             logger.info(f"Fetching page {page_count} for {repo}...")
             data = self._execute_graphql_query(self.PR_QUERY, variables)
             if not data:
-                # Fall back to REST Search API if GraphQL repeatedly fails
-                logger.warning("GraphQL returned no data for %s after retries (likely due to 502/503/504 errors or permanent GraphQL errors). Falling back to Search API.", repo)
-                fallback_nodes = self._fallback_search_prs(repo, since_iso, until_iso)
-                self.repo_prs_cache[cache_key] = fallback_nodes
-                return fallback_nodes
+                break
             pr_conn = data.get("repository", {}).get("pullRequests", {})
             nodes = pr_conn.get("nodes", [])
             logger.info(f"Page {page_count}: Found {len(nodes)} PRs")
 
-            # Filter by mergedAt window and populate caches
             for node in nodes:
                 merged_at = node.get("mergedAt")
-                if not merged_at:
-                    continue
-                if not (since_iso <= merged_at <= until_iso):
-                    # Skip outside the requested window
+                if not merged_at or not (since_iso <= merged_at <= until_iso):
                     continue
 
                 number = node.get("number")
@@ -912,7 +919,7 @@ class GitHubAPI:
                     "user": {"login": (node.get("author") or {}).get("login", "")},
                 }
 
-                # Flatten review comments from reviewThreads
+                # Flatten review thread comments
                 review_comments: List[dict] = []
                 for t in (node.get("reviewThreads", {}) or {}).get("nodes", []) or []:
                     for c in (t.get("comments", {}) or {}).get("nodes", []) or []:
@@ -954,6 +961,7 @@ class GitHubAPI:
                             "requested_reviewer": {"login": requested_reviewer_login},
                         })
 
+                # Hydrate reviews cache
                 self.pr_reviews_cache[key] = {
                     "reviews": reviews,
                     "review_comments": review_comments,
@@ -968,11 +976,9 @@ class GitHubAPI:
                 break
             variables["cursor"] = page_info.get("endCursor")
 
-        # Save minimal list for get_prs (only number needed)
-        self.repo_prs_cache[cache_key] = all_nodes
         return all_nodes
 
-    def _fallback_search_prs(self, repo: str, since_iso: str, until_iso: str) -> List[dict]:
+    def _rest_search_prs(self, repo: str, since_iso: str, until_iso: str) -> List[dict]:
         """Fallback: use Search API to get merged PRs for date window; minimal fields only.
 
         Returns a list of dicts with at least {"number"} so downstream logic can proceed.
@@ -1101,7 +1107,7 @@ class GitHubAPI:
         """
         logger.info(f"Fetching PRs for {author} in {repo} (GraphQL - reduced complexity query)")
         logger.info(f"Date range: {start_date} to {end_date}")
-        nodes = self.fetch_repo_prs_graphql(repo, start_date, end_date)
+        nodes = self.fetch_repo_prs_rest(repo, start_date, end_date)
         norm_author = self.normalize_username(author)
         unique_numbers: Set[int] = set()
 
@@ -1191,18 +1197,63 @@ class GitHubAPI:
         # Fallback to REST if not cached (should be rare after GraphQL hydration)
         base_url = f"{self.base_url}/repos/{repo}/pulls/{pr_number}"
         try:
+            overall_start = time.time()
+
+            # /reviews
+            t0 = time.time()
             all_reviews = self._make_request(f"{base_url}/reviews") or []
+            t_reviews = time.time() - t0
+
+            # /comments (PR review comments endpoint)
+            t0 = time.time()
             all_comments = self._make_request(f"{base_url}/comments") or []
-            all_issue_comments = self._make_request(f"{base_url.replace('/pulls/', '/issues/')}/comments") or []
+            t_pr_comments = time.time() - t0
+
+            # /issues/{number}/comments (issue comments on the PR)
+            issue_comments_url = f"{base_url.replace('/pulls/', '/issues/')}/comments"
+            t0 = time.time()
+            all_issue_comments = self._make_request(issue_comments_url) or []
+            t_issue_comments = time.time() - t0
+
+            # /issues/{number}/events (used to derive review_requests)
             events_url = f"{base_url.replace('/pulls/', '/issues/')}/events"
+            t0 = time.time()
             all_events = self._make_request(events_url) or []
+            t_events = time.time() - t0
+
+            overall_time = time.time() - overall_start
+
+            # Timing logs
+            logger.info(
+                "Review API timings for %s #%d: total=%.2fs, reviews=%.2fs, pr_comments=%.2fs, issue_comments=%.2fs, events=%.2fs",
+                repo,
+                pr_number,
+                overall_time,
+                t_reviews,
+                t_pr_comments,
+                t_issue_comments,
+                t_events,
+            )
+
+            # Warn on slow endpoints (>2s)
+            if t_events > 2.0:
+                logger.warning(
+                    "Slow endpoint: /issues/%d/events took %.2fs in %s",
+                    pr_number,
+                    t_events,
+                    repo,
+                )
+
             all_review_requests = [event for event in all_events if event.get("event") == "review_requested"]
-            return {
+            result = {
                 "reviews": all_reviews,
                 "review_comments": all_comments,
                 "issue_comments": all_issue_comments,
                 "review_requests": all_review_requests,
             }
+            # Cache assembled review data for this PR for reuse within this run
+            self.pr_reviews_cache[key] = result
+            return result
         except Exception as e:
             logger.error(f"Error fetching reviews for PR {pr_number} in {repo}: {str(e)}")
             return {"reviews": [], "review_comments": [], "issue_comments": [], "review_requests": []}
