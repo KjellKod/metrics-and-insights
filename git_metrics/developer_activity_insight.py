@@ -241,7 +241,7 @@ class PRData:
     changed_files: int
     hours_to_merge: float
     created_at: datetime
-    # Note: Using created_at as ready_for_review time since GitHub API doesn't provide readyForReviewAt
+    # Baseline for duration: first human review request/submission if available; fallback to created_at
     merged_at: datetime
 
 
@@ -1542,30 +1542,52 @@ class PRMetricsCollector:
                         if not merged_at:
                             continue
 
-                        # Determine the baseline as the earliest review request time; fallback to created_at
+                        # Determine the baseline as the earliest human review request/submission; fallback to created_at
                         ready_for_review_at = created_at
                         try:
                             review_data = self.api.get_pr_reviews(repo, pr["number"])
                             review_requests = review_data.get("review_requests", []) if review_data else []
-                            earliest_request_time: Optional[datetime] = None
-                            for req in review_requests:
+                            ignored_accounts = {"ellipsis-dev"}
+                            ignored_accounts_norm = {self.api.normalize_username(u) for u in ignored_accounts}
+
+                            earliest_human_signal: Optional[datetime] = None
+
+                            # 1) Prefer earliest human review request (actor is the requester)
+                            for req in review_requests or []:
+                                actor_login = ((req.get("actor") or {}).get("login") or "")
+                                if self.api.normalize_username(actor_login) in ignored_accounts_norm:
+                                    continue
                                 created = req.get("created_at")
                                 if created:
                                     req_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                                    if earliest_request_time is None or req_time < earliest_request_time:
-                                        earliest_request_time = req_time
-                            if earliest_request_time is not None:
-                                ready_for_review_at = earliest_request_time
+                                    if earliest_human_signal is None or req_time < earliest_human_signal:
+                                        earliest_human_signal = req_time
+
+                            # 2) Fallback: earliest human review submission (reviewer is the author)
+                            if earliest_human_signal is None:
+                                for r in (review_data.get("reviews") or []):
+                                    submitted = r.get("submitted_at")
+                                    reviewer_login = ((r.get("user") or {}).get("login") or "")
+                                    if not submitted:
+                                        continue
+                                    if self.api.normalize_username(reviewer_login) in ignored_accounts_norm:
+                                        continue
+                                    sub_time = datetime.fromisoformat(submitted.replace("Z", "+00:00"))
+                                    if earliest_human_signal is None or sub_time < earliest_human_signal:
+                                        earliest_human_signal = sub_time
+
+                            if earliest_human_signal is not None:
+                                ready_for_review_at = earliest_human_signal
                                 logger.debug(
-                                    f"PR #{pr['number']} in {repo}: Using first review request time {ready_for_review_at}"
+                                    f"PR #{pr['number']} in {repo}: Using first human review timestamp {ready_for_review_at}"
                                 )
                             else:
                                 logger.debug(
-                                    f"PR #{pr['number']} in {repo}: No valid review request times, using created_at"
+                                    f"PR #{pr['number']} in {repo}: No human review events; using created_at"
                                 )
                         except Exception as exc:  # pylint: disable=broad-except
                             logger.warning(
-                                f"PR #{pr['number']} in {repo}: Failed to fetch/parse review requests ({exc}); using created_at"
+                                f"PR #{pr['number']} in {repo}: Failed to fetch/parse review data ({exc}); using created_at"
                             )
 
                         hours_to_merge = round((merged_at - ready_for_review_at).total_seconds() / 3600, 2)
