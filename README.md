@@ -45,7 +45,7 @@ Example workflow:
 │   ├── code_review_metrics.py          # Analyze code review patterns and timing
 │   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
 │   ├── active_devs_one_off.py          # Track active developers
-│   ├── active_repos_one_off.py         # Identify active repositories
+│   ├── active_repositories_in_organization.py  # Identify active repositories
 │
 ├── jira_metrics/                       # Scripts for extracting metrics from Jira
 │   ├── engineering_excellence.py       # Track engineering excellence vs product work
@@ -90,7 +90,7 @@ Scripts for analyzing GitHub repository metrics and developer activity. For deta
 - `code_review_metrics.py`: Analyze code review patterns and timing
 - `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
 - `active_devs_one_off.py`: Identify and analyze active developers
-- `active_repos_one_off.py`: Identify and analyze active repositories
+- `active_repositories_in_organization.py`: Identify and analyze active repositories
 
 ### Jira Metrics
 Scripts for extracting and analyzing Jira metrics:
