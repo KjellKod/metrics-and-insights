@@ -146,78 +146,211 @@ def print_env_variables():
         print(f"{var}: {value}")
 
 
-def convert_raw_issue_to_simple_object(raw_issue):
-    """Convert raw JSON issue data to simple objects that work with existing functions."""
-    # Create a simple object with the key
-    issue = SimpleNamespace()
-    issue.key = raw_issue.get("key")
-    
-    # Create fields object
-    fields_data = raw_issue.get("fields", {})
-    issue.fields = SimpleNamespace()
-    
-    # Add project info
+def _safe_get_nested(data, *keys, default=None):
+    """Safely get nested dictionary values with fallback to default."""
+    try:
+        result = data
+        for key in keys:
+            result = result[key]
+        return result
+    except (KeyError, TypeError):
+        return default
+
+
+def _create_project_object(fields_data):
+    """Create project object from fields data with error handling."""
     project_data = fields_data.get("project", {})
-    issue.fields.project = SimpleNamespace()
-    issue.fields.project.key = project_data.get("key")
-    issue.fields.project.name = project_data.get("name")
+    if not isinstance(project_data, dict):
+        verbose_print(f"Warning: Invalid project data format: {type(project_data)}")
+        project_data = {}
     
-    # Add status info
+    project = SimpleNamespace()
+    project.key = project_data.get("key")
+    project.name = project_data.get("name")
+    return project
+
+
+def _create_status_object(fields_data):
+    """Create status object from fields data with error handling."""
     status_data = fields_data.get("status", {})
-    issue.fields.status = SimpleNamespace()
-    issue.fields.status.name = status_data.get("name")
+    if not isinstance(status_data, dict):
+        verbose_print(f"Warning: Invalid status data format: {type(status_data)}")
+        status_data = {}
     
-    # Add assignee info
+    status = SimpleNamespace()
+    status.name = status_data.get("name")
+    return status
+
+
+def _create_assignee_object(fields_data):
+    """Create assignee object from fields data with error handling."""
     assignee_data = fields_data.get("assignee")
-    if assignee_data:
-        issue.fields.assignee = SimpleNamespace()
-        issue.fields.assignee.displayName = assignee_data.get("displayName")
-    else:
-        issue.fields.assignee = None
+    if not assignee_data:
+        return None
     
-    # Add issuelinks for release_failure.py
-    issue.fields.issuelinks = []
-    for link_data in fields_data.get("issuelinks", []):
+    if not isinstance(assignee_data, dict):
+        verbose_print(f"Warning: Invalid assignee data format: {type(assignee_data)}")
+        return None
+    
+    assignee = SimpleNamespace()
+    assignee.displayName = assignee_data.get("displayName")
+    return assignee
+
+
+def _create_issue_links(fields_data):
+    """Create issue links list from fields data with error handling."""
+    links_data = fields_data.get("issuelinks", [])
+    if not isinstance(links_data, list):
+        verbose_print(f"Warning: Invalid issuelinks data format: {type(links_data)}")
+        return []
+    
+    links = []
+    for link_data in links_data:
+        if not isinstance(link_data, dict):
+            verbose_print(f"Warning: Invalid link data format: {type(link_data)}")
+            continue
+            
         link = SimpleNamespace()
+        
+        # Handle outward issue
         if "outwardIssue" in link_data:
-            link.outwardIssue = SimpleNamespace()
-            link.outwardIssue.key = link_data["outwardIssue"].get("key")
+            outward_data = link_data["outwardIssue"]
+            if isinstance(outward_data, dict):
+                link.outwardIssue = SimpleNamespace()
+                link.outwardIssue.key = outward_data.get("key")
+        
+        # Handle inward issue
         if "inwardIssue" in link_data:
-            link.inwardIssue = SimpleNamespace()
-            link.inwardIssue.key = link_data["inwardIssue"].get("key")
-        issue.fields.issuelinks.append(link)
+            inward_data = link_data["inwardIssue"]
+            if isinstance(inward_data, dict):
+                link.inwardIssue = SimpleNamespace()
+                link.inwardIssue.key = inward_data.get("key")
+        
+        links.append(link)
     
-    # Add custom fields as attributes
+    return links
+
+
+def _create_custom_fields(fields_data):
+    """Create custom field attributes with error handling."""
+    custom_fields = {}
+    
     for field_name, field_value in fields_data.items():
-        if field_name.startswith("customfield_"):
+        if not field_name.startswith("customfield_"):
+            continue
+            
+        try:
             if field_value and isinstance(field_value, dict) and "value" in field_value:
                 # Create object with value attribute for custom fields
                 custom_field = SimpleNamespace()
                 custom_field.value = field_value["value"]
-                setattr(issue.fields, field_name, custom_field)
+                custom_fields[field_name] = custom_field
             else:
-                setattr(issue.fields, field_name, field_value)
+                custom_fields[field_name] = field_value
+        except Exception as e:
+            verbose_print(f"Warning: Error processing custom field {field_name}: {e}")
+            custom_fields[field_name] = None
     
-    # Create changelog object
+    return custom_fields
+
+
+def _create_changelog_object(raw_issue):
+    """Create changelog object from raw issue data with error handling."""
     changelog_data = raw_issue.get("changelog", {})
-    issue.changelog = SimpleNamespace()
-    issue.changelog.histories = []
+    if not isinstance(changelog_data, dict):
+        verbose_print(f"Warning: Invalid changelog data format: {type(changelog_data)}")
+        changelog_data = {}
     
-    for history_data in changelog_data.get("histories", []):
+    changelog = SimpleNamespace()
+    changelog.histories = []
+    
+    histories_data = changelog_data.get("histories", [])
+    if not isinstance(histories_data, list):
+        verbose_print(f"Warning: Invalid histories data format: {type(histories_data)}")
+        return changelog
+    
+    for history_data in histories_data:
+        if not isinstance(history_data, dict):
+            verbose_print(f"Warning: Invalid history data format: {type(history_data)}")
+            continue
+            
         history = SimpleNamespace()
         history.created = history_data.get("created")
         history.items = []
         
-        for item_data in history_data.get("items", []):
+        items_data = history_data.get("items", [])
+        if not isinstance(items_data, list):
+            verbose_print(f"Warning: Invalid history items data format: {type(items_data)}")
+            continue
+        
+        for item_data in items_data:
+            if not isinstance(item_data, dict):
+                verbose_print(f"Warning: Invalid history item data format: {type(item_data)}")
+                continue
+                
             item = SimpleNamespace()
             item.field = item_data.get("field")
             item.fromString = item_data.get("fromString")
             item.toString = item_data.get("toString")
             history.items.append(item)
         
-        issue.changelog.histories.append(history)
+        changelog.histories.append(history)
     
-    return issue
+    return changelog
+
+
+def convert_raw_issue_to_simple_object(raw_issue):
+    """
+    Convert raw JSON issue data to simple objects that work with existing functions.
+    
+    Args:
+        raw_issue (dict): Raw JSON issue data from JIRA API
+        
+    Returns:
+        SimpleNamespace: Issue object with fields, changelog, etc.
+        
+    Raises:
+        ValueError: If raw_issue is not a dictionary or missing required fields
+    """
+    if not isinstance(raw_issue, dict):
+        raise ValueError(f"Expected dictionary, got {type(raw_issue)}")
+    
+    if "key" not in raw_issue:
+        raise ValueError("Issue missing required 'key' field")
+    
+    try:
+        # Create main issue object
+        issue = SimpleNamespace()
+        issue.key = raw_issue.get("key")
+        
+        # Create fields object
+        fields_data = raw_issue.get("fields", {})
+        if not isinstance(fields_data, dict):
+            verbose_print(f"Warning: Invalid fields data for {issue.key}: {type(fields_data)}")
+            fields_data = {}
+        
+        issue.fields = SimpleNamespace()
+        
+        # Add standard fields using helper functions
+        issue.fields.project = _create_project_object(fields_data)
+        issue.fields.status = _create_status_object(fields_data)
+        issue.fields.assignee = _create_assignee_object(fields_data)
+        issue.fields.issuelinks = _create_issue_links(fields_data)
+        
+        # Add custom fields
+        custom_fields = _create_custom_fields(fields_data)
+        for field_name, field_value in custom_fields.items():
+            setattr(issue.fields, field_name, field_value)
+        
+        # Create changelog object
+        issue.changelog = _create_changelog_object(raw_issue)
+        
+        return issue
+        
+    except Exception as e:
+        issue_key = raw_issue.get("key", "unknown")
+        verbose_print(f"Error converting issue {issue_key}: {e}")
+        raise ValueError(f"Failed to convert issue {issue_key}: {e}") from e
 
 
 class SimpleNamespace:
