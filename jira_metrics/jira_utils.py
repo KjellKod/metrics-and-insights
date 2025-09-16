@@ -94,7 +94,7 @@ def get_jira_instance():
     options = {
         "server": link,
         "verify": True,  # Ensure SSL verification is enabled
-        "rest_api_version": "3"  # Explicitly specify v3 API
+        "rest_api_version": "3",  # Explicitly specify v3 API
     }
 
     try:
@@ -355,6 +355,7 @@ def convert_raw_issue_to_simple_object(raw_issue):  # pylint: disable=too-many-s
 
 class SimpleNamespace:
     """Simple object to hold attributes dynamically."""
+
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
@@ -381,10 +382,7 @@ def get_tickets_from_jira(jql_query):
     verbose_print(f"Using direct v3 API endpoint: {api_search_url}")
     verbose_print(f"JQL query: {jql_query}")
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
 
     all_issues = []
     next_page_token = None
@@ -395,7 +393,7 @@ def get_tickets_from_jira(jql_query):
             "jql": jql_query,
             "maxResults": max_results,
             "expand": "changelog",  # Include changelog for cycle time analysis
-            "fields": "*all"  # Get all fields
+            "fields": "*all",  # Get all fields
         }
 
         # Add pagination token if we have one
@@ -406,11 +404,7 @@ def get_tickets_from_jira(jql_query):
         for attempt in range(5):
             try:
                 response = requests.get(
-                    api_search_url,
-                    params=params,
-                    auth=(user_email, api_key),
-                    headers=headers,
-                    timeout=30
+                    api_search_url, params=params, auth=(user_email, api_key), headers=headers, timeout=30
                 )
 
                 verbose_print(f"Response status: {response.status_code}")
@@ -440,7 +434,7 @@ def get_tickets_from_jira(jql_query):
         try:
             data = response.json()
         except ValueError as e:  # JSONDecodeError is a subclass of ValueError
-            print(f"ERROR: Failed to decode JSON response")
+            print("ERROR: Failed to decode JSON response")
             print(f"Response status: {response.status_code}")
             print(f"Response headers: {dict(response.headers)}")
             print(f"Response text (first 500 chars): {response.text[:500]}")

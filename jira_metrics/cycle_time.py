@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import statistics
 import csv
 import pytz
+
 # Note: Using direct v3 API calls with simple object conversion
 
 # pylint: disable=import-error
@@ -24,7 +25,7 @@ SECONDS_TO_HOURS = 3600
 
 def validate_issue(issue):
     # Validate simple issue objects from direct v3 API
-    if not hasattr(issue, 'key') or not hasattr(issue, 'fields'):
+    if not hasattr(issue, "key") or not hasattr(issue, "fields"):
         print(f"Unexpected issue format: {type(issue)}  -- ignoring")
         return False
     return True
