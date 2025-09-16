@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 import statistics
 import csv
 import pytz
-from jira.resources import Issue
+
+# Note: Using direct v3 API calls with simple object conversion
 
 # pylint: disable=import-error
 from jira_utils import (
@@ -23,8 +24,9 @@ SECONDS_TO_HOURS = 3600
 
 
 def validate_issue(issue):
-    if not isinstance(issue, Issue):
-        print(f"Unexpected type: {type(issue)}  -- ignoring")
+    # Validate simple issue objects from direct v3 API
+    if not hasattr(issue, "key") or not hasattr(issue, "fields"):
+        print(f"Unexpected issue format: {type(issue)}  -- ignoring")
         return False
     return True
 
@@ -132,9 +134,13 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
 
 
 def calculate_monthly_cycle_time(projects, start_date, end_date):
-
+    """
+    Calculate cycle time metrics for tickets released within the date range.
+    Uses JIRA REST API v3 via jira_utils for efficient server-side date filtering.
+    """
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     tickets = get_tickets_from_jira(jql_query)
+    verbose_print(f"Retrieved {len(tickets)} total tickets from API")
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
@@ -190,7 +196,7 @@ def process_cycle_time_metrics(team, months):
     return metrics
 
 
-def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
+def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pylint: disable=unused-argument
     # Separate the "all" team from other teams
     all_team = cycle_times_per_month.pop("all", None)
 

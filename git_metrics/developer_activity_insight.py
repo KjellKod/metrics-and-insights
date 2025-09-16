@@ -736,18 +736,18 @@ class GitHubAPI:
             try:
                 repo_info = f"{variables.get('owner', 'unknown')}/{variables.get('repo', 'unknown')}" if variables else "unknown"
                 logger.debug(f"Executing GraphQL query for {repo_info} (attempt {attempt}) with variables: {variables}")
-                
+
                 # Add small delay to avoid overwhelming GitHub's servers (like ci_pr_performance_metrics.py)
                 if attempt == 1:  # Only on first attempt, retries have their own backoff
                     time.sleep(0.5)
-                
+
                 r = self.graphql_session.post(self.graphql_url, json={"query": query, "variables": variables}, timeout=60)
 
                 # Handle rate limiting / server errors similar to REST
                 if r.status_code in (429, 502, 503, 504):
                     retry_after = r.headers.get("Retry-After")
                     sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
-                    
+
                     # Try to extract error details from response
                     error_details = ""
                     try:
@@ -760,7 +760,7 @@ class GitHubAPI:
                         # If we can't parse JSON, try to get plain text
                         if r.text:
                             error_details = f" - {r.text[:200]}"
-                    
+
                     logger.warning(f"GraphQL {r.status_code} for {repo_info}{error_details}. Waiting {sleep_time:.1f}s before retry")
                     time.sleep(sleep_time)
                     backoff = min(backoff * 2, 60)
@@ -771,7 +771,7 @@ class GitHubAPI:
                     if any(term in text for term in ["abuse", "secondary rate limit", "rate limit", "api rate limit exceeded"]):
                         retry_after = r.headers.get("Retry-After")
                         sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
-                        
+
                         # Extract detailed error message for rate limiting
                         error_details = ""
                         try:
@@ -780,7 +780,7 @@ class GitHubAPI:
                                 error_details = f" - {error_data['message']}"
                         except (ValueError, KeyError):
                             error_details = f" - {r.text[:200]}"
-                        
+
                         logger.warning(f"GraphQL rate limit (403) for {repo_info}{error_details}. Waiting {sleep_time:.1f}s")
                         time.sleep(sleep_time)
                         backoff = min(backoff * 2, 60)
@@ -803,25 +803,25 @@ class GitHubAPI:
                     errors = data['errors']
                     error_messages = []
                     has_transient_error = False
-                    
+
                     for error in errors:
                         error_msg = error.get('message', 'Unknown error')
                         error_type = error.get('type', 'Unknown')
                         error_path = error.get('path', [])
-                        
+
                         detailed_msg = f"Type: {error_type}, Message: {error_msg}"
                         if error_path:
                             detailed_msg += f", Path: {' -> '.join(map(str, error_path))}"
                         error_messages.append(detailed_msg)
-                        
+
                         # Check if this looks like a transient error
                         if any(term in error_msg.lower() for term in ['timeout', 'server error', 'temporarily unavailable']):
                             has_transient_error = True
-                    
+
                     logger.warning(f"GraphQL returned {len(errors)} error(s):")
                     for msg in error_messages:
                         logger.warning(f"  - {msg}")
-                    
+
                     # Only retry if we think the error might be transient
                     if has_transient_error and attempt < max_tries:
                         sleep_time = backoff + random.uniform(0, 1)
@@ -833,7 +833,7 @@ class GitHubAPI:
                         # Return None for permanent errors or after max retries
                         logger.error("GraphQL errors appear to be permanent or max retries reached")
                         return None
-                        
+
                 return data.get("data")
             except requests.exceptions.RequestException as e:
                 if attempt == max_tries:
@@ -872,11 +872,11 @@ class GitHubAPI:
 
         # GraphQL pagination code moved to `_fetch_repo_prs_graphql_paginated` for clarity.
         # The REST Search API approach is significantly more efficient for this use case because:
-        # Date filtering is the primary bottleneck: For a typical enterprise repo with thousands of PRs over years, 
+        # Date filtering is the primary bottleneck: For a typical enterprise repo with thousands of PRs over years,
         # by date server-side vs client-side makes a massive difference.
-        # Network efficiency: Downloading 50 relevant PRs + their details is far more efficient than downloading 
+        # Network efficiency: Downloading 50 relevant PRs + their details is far more efficient than downloading
         # 5000 PRs and filtering to 50.
-        # if you want to try out graphQL then uncomment the row below instead of the REST call section above. 
+        # if you want to try out graphQL then uncomment the row below instead of the REST call section above.
         # ------------------------------------------------------------------------------------------------
         # return self._fetch_repo_prs_graphql_paginated(repo, owner, name, since_iso, until_iso)
 
@@ -1024,28 +1024,28 @@ class GitHubAPI:
     def get_all_prs_for_repo(self, repo: str, start_date: str, end_date: str) -> List[dict]:
         """Get all PRs for a repo in the date range - more efficient than per-user calls"""
         logger.info(f"Fetching all PRs for {repo} from {start_date} to {end_date}")
-        
+
         # Use Search API with date filtering - much more efficient
         since_iso = f"{start_date}T00:00:00Z"
         until_iso = f"{end_date}T23:59:59Z"
-        
+
         q = f"repo:{repo} is:pr is:merged merged:{start_date}..{end_date}"
         url = f"{self.base_url}/search/issues"
         page = 1
         all_prs = []
-        
+
         while True:
             params = {"q": q, "per_page": 100, "page": page}
             resp = gh_request(self.session, "GET", url, params=params)
             if resp.status_code >= 400:
                 logger.error("Search API failed (%s) for %s: %s", resp.status_code, repo, resp.text[:200])
                 break
-            
+
             data = resp.json()
             batch = data.get("items", [])
             if not batch:
                 break
-                
+
             # Convert to our expected format
             for item in batch:
                 if "pull_request" in item:
@@ -1057,15 +1057,15 @@ class GitHubAPI:
                         "updated_at": item.get("updated_at"),
                         # We'll need to fetch details later for full data
                     })
-            
+
             logger.info(f"Fetched page {page}: {len(batch)} PRs")
             if len(batch) < 100:
                 break
             page += 1
-            
+
         logger.info(f"Total PRs found for {repo}: {len(all_prs)}")
         return all_prs
-    
+
     def pr_involves_user(self, pr: dict, username: str) -> bool:
         """Check if a PR involves a specific user (as author initially, we'll expand this)"""
         pr_author = pr.get("user", {}).get("login", "")
@@ -1572,7 +1572,7 @@ class PRMetricsCollector:
             # NEW: Fetch all PRs for this repo once, then filter by users
             all_repo_prs = self.api.get_all_prs_for_repo(repo, start_date, end_date)
             logger.info(f"Found {len(all_repo_prs)} total PRs in {repo}")
-            
+
             # Filter for our specific users
             for user in users:
                 user_prs = [pr for pr in all_repo_prs if self.api.pr_involves_user(pr, user)]

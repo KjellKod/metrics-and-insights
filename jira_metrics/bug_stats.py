@@ -38,7 +38,7 @@ def build_jql_queries(year, projects):
     """
     Build JQL queries for different bug metrics.
     """
-    quoted_projects = [f"'{project.strip("'")}'" for project in projects]
+    quoted_projects = [f"'{project.strip(chr(39))}'" for project in projects]
     project_clause = f"project in ({', '.join(quoted_projects)})"
     return {
         "created": f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
