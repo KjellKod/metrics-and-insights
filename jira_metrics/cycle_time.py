@@ -196,7 +196,7 @@ def process_cycle_time_metrics(team, months):
     return metrics
 
 
-def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
+def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pylint: disable=unused-argument
     # Separate the "all" team from other teams
     all_team = cycle_times_per_month.pop("all", None)
 

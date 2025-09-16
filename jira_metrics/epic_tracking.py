@@ -6,7 +6,7 @@ Env vars:
   JIRA_SITE            e.g. https://your-domain.atlassian.net
   JIRA_EMAIL           e.g. you@company.com (or USER_EMAIL)
   JIRA_API_TOKEN       Atlassian API token (or JIRA_API_KEY)
-  JIRA_EPIC_LABELS     (optional) Comma-separated list of epic labels. 
+  JIRA_EPIC_LABELS     (optional) Comma-separated list of epic labels.
   JIRA_JQL_EPICS       (optional) JQL to select epics. Defaults to:
                        issuetype = Epic AND labels IN ("<LABELS>") AND status IN ("done", "released", "In Progress", "In Develop")
 
@@ -79,44 +79,44 @@ def _req_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """GET with basic auth + simple retry on 429/5xx - following GitHub API patterns."""
     verbose_print(f"Making request to: {url}")
     verbose_print(f"Request params: {params}")
-    
+
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    
+
     for attempt in range(5):
         try:
             r = requests.get(
-                url, 
-                params=params, 
+                url,
+                params=params,
                 auth=(EMAIL, API_TOKEN),
                 headers=headers,
                 timeout=30
             )
             verbose_print(f"Response status: {r.status_code}")
-            
+
             if r.status_code in (429, 500, 502, 503, 504):
                 wait = min(2**attempt, 10)
                 verbose_print(f"Rate limited or server error, waiting {wait}s...")
                 time.sleep(wait)
                 continue
-            
+
             if r.status_code != 200:
                 print(f"ERROR: Request failed with status {r.status_code}")
                 print(f"URL: {r.url}")
                 print(f"Response: {r.text[:500]}")  # Limit response text
-                
+
             r.raise_for_status()
             return r.json()
-            
+
         except requests.exceptions.RequestException as e:
             if attempt == 4:  # Last attempt
                 raise
             wait = min(2**attempt, 10)
             verbose_print(f"Request exception: {e}. Retrying in {wait}s...")
             time.sleep(wait)
-    
+
     # This shouldn't be reached, but just in case
     r.raise_for_status()
     return r.json()
@@ -126,13 +126,13 @@ def search_jql(jql: str, fields: List[str], max_per_page: int = 100) -> List[Dic
     """Paginate through search results using JIRA REST API v3."""
     if not API_SEARCH:
         raise ValueError("API_SEARCH endpoint not configured - check JIRA_SITE environment variable")
-        
+
     verbose_print(f"Executing JQL: {jql}")
     verbose_print(f"Requested fields: {fields}")
-    
+
     issues: List[Dict[str, Any]] = []
     start_at = 0
-    
+
     while True:
         params = {
             "jql": jql,
@@ -140,26 +140,26 @@ def search_jql(jql: str, fields: List[str], max_per_page: int = 100) -> List[Dic
             "maxResults": max_per_page,
             "fields": ",".join(fields),
         }
-        
+
         page = _req_get(API_SEARCH, params)
-        
+
         if not page:
             verbose_print("No response data received")
             break
-            
+
         page_issues = page.get("issues", [])
         issues.extend(page_issues)
-        
+
         verbose_print(f"Page retrieved: {len(page_issues)} issues (total so far: {len(issues)})")
-        
+
         start_at += len(page_issues)
         total = page.get("total", 0)
-        
+
         verbose_print(f"Progress: {start_at}/{total}")
-        
+
         if start_at >= total or len(page_issues) == 0:
             break
-            
+
     verbose_print(f"JQL search completed: {len(issues)} total issues found")
     return issues
 
@@ -201,7 +201,7 @@ def validate_env_variables():
         missing_vars.append("JIRA_EMAIL or USER_EMAIL (Jira email address)")
     if not API_TOKEN:
         missing_vars.append("JIRA_API_TOKEN or JIRA_API_KEY (Jira API token)")
-    
+
     env_values = {
         "JIRA_SITE": SITE,
         "EMAIL": EMAIL,
@@ -242,19 +242,19 @@ def bucket_counts(children: List[Dict[str, Any]]):
 def test_api_connection():
     """Test basic API connectivity with a simple bounded query."""
     verbose_print("Testing API connection...")
-    
+
     try:
         # Simple bounded test query to get just one issue from the last 30 days
         test_jql = "created >= -30d ORDER BY created DESC"
         test_result = search_jql(test_jql, ["key"], max_per_page=1)
-        
+
         if test_result:
             verbose_print(f"✓ API connection successful. Test issue: {test_result[0].get('key', 'unknown')}")
             return True
         else:
             verbose_print("✓ API connection successful but no recent issues found")
             return True  # Connection works, just no data
-            
+
     except Exception as e:
         print(f"✗ API connection test failed: {e}")
         return False
@@ -270,7 +270,7 @@ def main():
     validate_env_variables()
 
     verbose_print(f"Using JQL for epics: {JQL_EPICS}")
-    
+
     # Test API connection first
     if not test_api_connection():
         print("ERROR: Cannot connect to JIRA API. Please check your credentials and network connection.")

@@ -67,32 +67,32 @@ Note: You can get a GitHub personal access token from:
 https://github.com/settings/tokens
         """
     )
-    
+
     parser.add_argument(
         "--org", "-o",
         required=True,
         help="GitHub organization name (e.g., 'onfleet', 'microsoft')"
     )
-    
+
     parser.add_argument(
-        "--token-env", "-t", 
+        "--token-env", "-t",
         required=True,
         help="Environment variable name containing GitHub personal access token"
     )
-    
+
     parser.add_argument(
         "--days", "-d",
         type=int,
         default=60,
         help="Number of days to look back for activity (default: 60)"
     )
-    
+
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose logging"
     )
-    
+
     return parser.parse_args()
 
 
@@ -100,11 +100,11 @@ https://github.com/settings/tokens
 def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=None):
     """Fetch repositories with PR activity since the given date"""
     logger = logging.getLogger(__name__)
-    
+
     all_repos = []
     has_next_page = True
     cursor = None
-    
+
     while has_next_page:
         cursor_arg = f', after: "{cursor}"' if cursor else ""
         query = f"""
@@ -118,7 +118,7 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
                     nodes {{
                         name
                         pushedAt
-                        pullRequests(states: [OPEN, CLOSED, MERGED], 
+                        pullRequests(states: [OPEN, CLOSED, MERGED],
                                     first: 50,  # Increased to get more recent PRs
                                     orderBy: {{field: UPDATED_AT, direction: DESC}}) {{
                             nodes {{
@@ -136,7 +136,7 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
             }}
         }}
         """
-        
+
         variables = {"org": org_name}
 
         try:
@@ -156,23 +156,23 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
 
             repo_data = data["data"]["organization"]["repositories"]
             repositories = repo_data["nodes"]
-            
+
             # Add repositories to our collection
             all_repos.extend(repositories)
-            
+
             # Check pagination
             page_info = repo_data["pageInfo"]
             has_next_page = page_info["hasNextPage"]
             cursor = page_info["endCursor"]
-            
+
             logger.info("Fetched %d repositories so far...", len(all_repos))
-            
+
         except Exception as e:
             logger.error("Failed to fetch repository data: %s", str(e))
             return []
-    
+
     logger.info("Total repositories fetched: %d", len(all_repos))
-    
+
     # Filter repositories if a specific list is provided
     if repos_to_scan:
         all_repos = [repo for repo in all_repos if repo["name"] in repos_to_scan]
@@ -185,13 +185,13 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
 
         prs = repo.get("pullRequests", {})
         pr_nodes = prs.get("nodes", [])
-        
+
         # Check if repository has recent activity (push or PR activity)
         repo_pushed_at = repo.get("pushedAt")
         last_push_date = None
         if repo_pushed_at:
             last_push_date = parse_github_date(repo_pushed_at)
-        
+
         # Filter PRs by date
         recent_prs = []
         for pr in pr_nodes:
@@ -201,7 +201,7 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
 
         # Include repos with recent pushes OR recent PRs
         has_recent_activity = (last_push_date and last_push_date >= since_date) or len(recent_prs) > 0
-        
+
         if has_recent_activity:
             # Determine the most recent activity date
             activity_dates = []
@@ -209,9 +209,9 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
                 activity_dates.append(last_push_date)
             if recent_prs:
                 activity_dates.append(parse_github_date(recent_prs[0]["updatedAt"]))
-            
+
             last_activity_date = max(activity_dates) if activity_dates else last_push_date
-            
+
             active_repos.append(
                 {
                     "name": repo["name"],
@@ -232,14 +232,14 @@ def main():
     try:
         args = parse_arguments()
         logger = setup_logging(args.verbose)
-        
+
         # Get token from environment variable
         token = os.getenv(args.token_env)
         if not token:
             logger.error("Environment variable '%s' is not set or is empty", args.token_env)
             logger.error("Please set it with: export %s=your_github_token", args.token_env)
             sys.exit(1)
-        
+
         # Validate token format (basic check)
         if not token.startswith(('ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_')):
             logger.warning("Token doesn't appear to be in expected GitHub format (ghp_*, gho_*, etc.)")
@@ -254,7 +254,7 @@ def main():
 
         since_date = datetime.now(timezone.utc) - timedelta(days=args.days)
 
-        logger.info("Fetching repositories with activity since %s (%d days ago)", 
+        logger.info("Fetching repositories with activity since %s (%d days ago)",
                    since_date.date(), args.days)
         logger.info("Organization: %s", args.org)
 
