@@ -92,7 +92,7 @@ def get_jira_instance():
 
     # Configure for JIRA REST API v3 as per migration guidelines
     options = {
-        "server": link, 
+        "server": link,
         "verify": True,  # Ensure SSL verification is enabled
         "rest_api_version": "3"  # Explicitly specify v3 API
     }
@@ -163,7 +163,7 @@ def _create_project_object(fields_data):
     if not isinstance(project_data, dict):
         verbose_print(f"Warning: Invalid project data format: {type(project_data)}")
         project_data = {}
-    
+
     project = SimpleNamespace()
     project.key = project_data.get("key")
     project.name = project_data.get("name")
@@ -176,7 +176,7 @@ def _create_status_object(fields_data):
     if not isinstance(status_data, dict):
         verbose_print(f"Warning: Invalid status data format: {type(status_data)}")
         status_data = {}
-    
+
     status = SimpleNamespace()
     status.name = status_data.get("name")
     return status
@@ -187,13 +187,13 @@ def _create_assignee_object(fields_data):
     assignee_data = fields_data.get("assignee")
     if not assignee_data:
         return None
-    
+
     if not isinstance(assignee_data, dict):
         verbose_print(f"Warning: Invalid assignee data format: {type(assignee_data)}")
         return None
-    
+
     assignee = SimpleNamespace()
-    assignee.displayName = assignee_data.get("displayName")
+    assignee.displayName = assignee_data.get("displayName")  # pylint: disable=invalid-name
     return assignee
 
 
@@ -203,42 +203,42 @@ def _create_issue_links(fields_data):
     if not isinstance(links_data, list):
         verbose_print(f"Warning: Invalid issuelinks data format: {type(links_data)}")
         return []
-    
+
     links = []
     for link_data in links_data:
         if not isinstance(link_data, dict):
             verbose_print(f"Warning: Invalid link data format: {type(link_data)}")
             continue
-            
+
         link = SimpleNamespace()
-        
+
         # Handle outward issue
         if "outwardIssue" in link_data:
             outward_data = link_data["outwardIssue"]
             if isinstance(outward_data, dict):
-                link.outwardIssue = SimpleNamespace()
+                link.outwardIssue = SimpleNamespace()  # pylint: disable=invalid-name
                 link.outwardIssue.key = outward_data.get("key")
-        
+
         # Handle inward issue
         if "inwardIssue" in link_data:
             inward_data = link_data["inwardIssue"]
             if isinstance(inward_data, dict):
-                link.inwardIssue = SimpleNamespace()
+                link.inwardIssue = SimpleNamespace()  # pylint: disable=invalid-name
                 link.inwardIssue.key = inward_data.get("key")
-        
+
         links.append(link)
-    
+
     return links
 
 
 def _create_custom_fields(fields_data):
     """Create custom field attributes with error handling."""
     custom_fields = {}
-    
+
     for field_name, field_value in fields_data.items():
         if not field_name.startswith("customfield_"):
             continue
-            
+
         try:
             if field_value and isinstance(field_value, dict) and "value" in field_value:
                 # Create object with value attribute for custom fields
@@ -250,7 +250,7 @@ def _create_custom_fields(fields_data):
         except Exception as e:
             verbose_print(f"Warning: Error processing custom field {field_name}: {e}")
             custom_fields[field_name] = None
-    
+
     return custom_fields
 
 
@@ -260,93 +260,93 @@ def _create_changelog_object(raw_issue):
     if not isinstance(changelog_data, dict):
         verbose_print(f"Warning: Invalid changelog data format: {type(changelog_data)}")
         changelog_data = {}
-    
+
     changelog = SimpleNamespace()
     changelog.histories = []
-    
+
     histories_data = changelog_data.get("histories", [])
     if not isinstance(histories_data, list):
         verbose_print(f"Warning: Invalid histories data format: {type(histories_data)}")
         return changelog
-    
+
     for history_data in histories_data:
         if not isinstance(history_data, dict):
             verbose_print(f"Warning: Invalid history data format: {type(history_data)}")
             continue
-            
+
         history = SimpleNamespace()
         history.created = history_data.get("created")
         history.items = []
-        
+
         items_data = history_data.get("items", [])
         if not isinstance(items_data, list):
             verbose_print(f"Warning: Invalid history items data format: {type(items_data)}")
             continue
-        
+
         for item_data in items_data:
             if not isinstance(item_data, dict):
                 verbose_print(f"Warning: Invalid history item data format: {type(item_data)}")
                 continue
-                
+
             item = SimpleNamespace()
             item.field = item_data.get("field")
-            item.fromString = item_data.get("fromString")
-            item.toString = item_data.get("toString")
+            item.fromString = item_data.get("fromString")  # pylint: disable=invalid-name
+            item.toString = item_data.get("toString")  # pylint: disable=invalid-name
             history.items.append(item)
-        
+
         changelog.histories.append(history)
-    
+
     return changelog
 
 
-def convert_raw_issue_to_simple_object(raw_issue):
+def convert_raw_issue_to_simple_object(raw_issue):  # pylint: disable=too-many-statements
     """
     Convert raw JSON issue data to simple objects that work with existing functions.
-    
+
     Args:
         raw_issue (dict): Raw JSON issue data from JIRA API
-        
+
     Returns:
         SimpleNamespace: Issue object with fields, changelog, etc.
-        
+
     Raises:
         ValueError: If raw_issue is not a dictionary or missing required fields
     """
     if not isinstance(raw_issue, dict):
         raise ValueError(f"Expected dictionary, got {type(raw_issue)}")
-    
+
     if "key" not in raw_issue:
         raise ValueError("Issue missing required 'key' field")
-    
+
     try:
         # Create main issue object
         issue = SimpleNamespace()
         issue.key = raw_issue.get("key")
-        
+
         # Create fields object
         fields_data = raw_issue.get("fields", {})
         if not isinstance(fields_data, dict):
             verbose_print(f"Warning: Invalid fields data for {issue.key}: {type(fields_data)}")
             fields_data = {}
-        
+
         issue.fields = SimpleNamespace()
-        
+
         # Add standard fields using helper functions
         issue.fields.project = _create_project_object(fields_data)
         issue.fields.status = _create_status_object(fields_data)
         issue.fields.assignee = _create_assignee_object(fields_data)
         issue.fields.issuelinks = _create_issue_links(fields_data)
-        
+
         # Add custom fields
         custom_fields = _create_custom_fields(fields_data)
         for field_name, field_value in custom_fields.items():
             setattr(issue.fields, field_name, field_value)
-        
+
         # Create changelog object
         issue.changelog = _create_changelog_object(raw_issue)
-        
+
         return issue
-        
+
     except Exception as e:
         issue_key = raw_issue.get("key", "unknown")
         verbose_print(f"Error converting issue {issue_key}: {e}")
@@ -363,33 +363,33 @@ def get_tickets_from_jira(jql_query):
     """
     Retrieve tickets using JIRA REST API v3 /search/jql endpoint.
     Returns converted issue objects compatible with existing business logic.
-    
+
     This function uses direct HTTP requests to the v3 API with proper error handling,
     retry logic, and pagination support. Includes changelog expansion for status history.
     """
     # Get environment variables
     jira_link = os.environ.get("JIRA_LINK")
-    user_email = os.environ.get("USER_EMAIL") 
+    user_email = os.environ.get("USER_EMAIL")
     api_key = os.environ.get("JIRA_API_KEY")
-    
+
     if not all([jira_link, user_email, api_key]):
         raise ValueError("Missing required environment variables for direct v3 API access")
-    
+
     # Use the correct v3 /search/jql endpoint (not the deprecated /search endpoint)
     api_search_url = f"{jira_link.rstrip('/')}/rest/api/3/search/jql"
-    
+
     verbose_print(f"Using direct v3 API endpoint: {api_search_url}")
     verbose_print(f"JQL query: {jql_query}")
-    
+
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    
+
     all_issues = []
     next_page_token = None
     max_results = 100
-    
+
     while True:
         params = {
             "jql": jql_query,
@@ -397,11 +397,11 @@ def get_tickets_from_jira(jql_query):
             "expand": "changelog",  # Include changelog for cycle time analysis
             "fields": "*all"  # Get all fields
         }
-        
+
         # Add pagination token if we have one
         if next_page_token:
             params["nextPageToken"] = next_page_token
-        
+
         # Make request with retry logic (similar to epic_tracking.py)
         for attempt in range(5):
             try:
@@ -412,30 +412,30 @@ def get_tickets_from_jira(jql_query):
                     headers=headers,
                     timeout=30
                 )
-                
+
                 verbose_print(f"Response status: {response.status_code}")
-                
+
                 if response.status_code in (429, 500, 502, 503, 504):
                     wait = min(2**attempt, 10)
                     verbose_print(f"Rate limited or server error, waiting {wait}s...")
                     time.sleep(wait)
                     continue
-                
+
                 if response.status_code != 200:
                     print(f"ERROR: Request failed with status {response.status_code}")
                     print(f"URL: {response.url}")
                     print(f"Response: {response.text[:500]}")  # Limit response text
-                
+
                 response.raise_for_status()
                 break
-                
+
             except requests.exceptions.RequestException as e:
                 if attempt == 4:  # Last attempt
                     raise
                 wait = min(2**attempt, 10)
                 verbose_print(f"Request exception: {e}. Retrying in {wait}s...")
                 time.sleep(wait)
-        
+
         # Parse JSON response with error handling
         try:
             data = response.json()
@@ -445,35 +445,35 @@ def get_tickets_from_jira(jql_query):
             print(f"Response headers: {dict(response.headers)}")
             print(f"Response text (first 500 chars): {response.text[:500]}")
             raise ValueError(f"Invalid JSON response from JIRA API: {e}") from e
-        
+
         # Validate response structure
         if not isinstance(data, dict):
             print(f"ERROR: Expected JSON object, got {type(data)}")
             print(f"Response data: {data}")
-            raise ValueError(f"Unexpected response format: expected JSON object, got {type(data)}")
-        
+            raise ValueError(f"Unexpected response format: expected JSON object, got {type(data).__name__}")
+
         issues = data.get("issues", [])
         all_issues.extend(issues)
-        
+
         verbose_print(f"Retrieved {len(issues)} issues (total so far: {len(all_issues)})")
-        
+
         # Check if this is the last page using v3 API pagination format
         is_last = data.get("isLast", True)
         next_page_token = data.get("nextPageToken")
-        
+
         verbose_print(f"Is last page: {is_last}, Next page token: {next_page_token is not None}")
-        
+
         if is_last or len(issues) == 0:
             verbose_print(f"Breaking pagination loop: is_last={is_last}, issues_count={len(issues)}")
             break
-    
+
     verbose_print(f"Direct v3 API search completed: {len(all_issues)} total issues found")
-    
+
     # Convert raw JSON issues to objects compatible with existing business logic
     converted_issues = []
     for raw_issue in all_issues:
         converted_issues.append(convert_raw_issue_to_simple_object(raw_issue))
-    
+
     verbose_print(f"Converted {len(converted_issues)} raw issues to compatible objects")
     return converted_issues
 
