@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-epic_completion.py
 Fetch epics from Jira by JQL and compute child-issue completion metrics.
 
 Env vars:

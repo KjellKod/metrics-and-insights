@@ -146,10 +146,90 @@ def print_env_variables():
         print(f"{var}: {value}")
 
 
+def convert_raw_issue_to_simple_object(raw_issue):
+    """Convert raw JSON issue data to simple objects that work with existing functions."""
+    # Create a simple object with the key
+    issue = SimpleNamespace()
+    issue.key = raw_issue.get("key")
+    
+    # Create fields object
+    fields_data = raw_issue.get("fields", {})
+    issue.fields = SimpleNamespace()
+    
+    # Add project info
+    project_data = fields_data.get("project", {})
+    issue.fields.project = SimpleNamespace()
+    issue.fields.project.key = project_data.get("key")
+    issue.fields.project.name = project_data.get("name")
+    
+    # Add status info
+    status_data = fields_data.get("status", {})
+    issue.fields.status = SimpleNamespace()
+    issue.fields.status.name = status_data.get("name")
+    
+    # Add assignee info
+    assignee_data = fields_data.get("assignee")
+    if assignee_data:
+        issue.fields.assignee = SimpleNamespace()
+        issue.fields.assignee.displayName = assignee_data.get("displayName")
+    else:
+        issue.fields.assignee = None
+    
+    # Add issuelinks for release_failure.py
+    issue.fields.issuelinks = []
+    for link_data in fields_data.get("issuelinks", []):
+        link = SimpleNamespace()
+        if "outwardIssue" in link_data:
+            link.outwardIssue = SimpleNamespace()
+            link.outwardIssue.key = link_data["outwardIssue"].get("key")
+        if "inwardIssue" in link_data:
+            link.inwardIssue = SimpleNamespace()
+            link.inwardIssue.key = link_data["inwardIssue"].get("key")
+        issue.fields.issuelinks.append(link)
+    
+    # Add custom fields as attributes
+    for field_name, field_value in fields_data.items():
+        if field_name.startswith("customfield_"):
+            if field_value and isinstance(field_value, dict) and "value" in field_value:
+                # Create object with value attribute for custom fields
+                custom_field = SimpleNamespace()
+                custom_field.value = field_value["value"]
+                setattr(issue.fields, field_name, custom_field)
+            else:
+                setattr(issue.fields, field_name, field_value)
+    
+    # Create changelog object
+    changelog_data = raw_issue.get("changelog", {})
+    issue.changelog = SimpleNamespace()
+    issue.changelog.histories = []
+    
+    for history_data in changelog_data.get("histories", []):
+        history = SimpleNamespace()
+        history.created = history_data.get("created")
+        history.items = []
+        
+        for item_data in history_data.get("items", []):
+            item = SimpleNamespace()
+            item.field = item_data.get("field")
+            item.fromString = item_data.get("fromString")
+            item.toString = item_data.get("toString")
+            history.items.append(item)
+        
+        issue.changelog.histories.append(history)
+    
+    return issue
+
+
+class SimpleNamespace:
+    """Simple object to hold attributes dynamically."""
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
 def get_tickets_from_jira(jql_query):
     """
     Retrieve tickets using JIRA REST API v3 /search/jql endpoint.
-    Returns raw JSON issue data that needs to be converted by the caller.
+    Returns converted issue objects compatible with existing business logic.
     
     This function uses direct HTTP requests to the v3 API with proper error handling,
     retry logic, and pagination support. Includes changelog expansion for status history.
@@ -223,7 +303,22 @@ def get_tickets_from_jira(jql_query):
                 verbose_print(f"Request exception: {e}. Retrying in {wait}s...")
                 time.sleep(wait)
         
-        data = response.json()
+        # Parse JSON response with error handling
+        try:
+            data = response.json()
+        except ValueError as e:  # JSONDecodeError is a subclass of ValueError
+            print(f"ERROR: Failed to decode JSON response")
+            print(f"Response status: {response.status_code}")
+            print(f"Response headers: {dict(response.headers)}")
+            print(f"Response text (first 500 chars): {response.text[:500]}")
+            raise ValueError(f"Invalid JSON response from JIRA API: {e}") from e
+        
+        # Validate response structure
+        if not isinstance(data, dict):
+            print(f"ERROR: Expected JSON object, got {type(data)}")
+            print(f"Response data: {data}")
+            raise ValueError(f"Unexpected response format: expected JSON object, got {type(data)}")
+        
         issues = data.get("issues", [])
         all_issues.extend(issues)
         
@@ -240,7 +335,14 @@ def get_tickets_from_jira(jql_query):
             break
     
     verbose_print(f"Direct v3 API search completed: {len(all_issues)} total issues found")
-    return all_issues
+    
+    # Convert raw JSON issues to objects compatible with existing business logic
+    converted_issues = []
+    for raw_issue in all_issues:
+        converted_issues.append(convert_raw_issue_to_simple_object(raw_issue))
+    
+    verbose_print(f"Converted {len(converted_issues)} raw issues to compatible objects")
+    return converted_issues
 
 
 # pylint: disable=too-many-locals
