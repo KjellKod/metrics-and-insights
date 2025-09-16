@@ -1,4 +1,5 @@
 import os
+import time
 from enum import Enum
 from datetime import datetime
 import argparse
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 from jira import JIRA
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
+import requests
 
 load_dotenv()
 
@@ -88,7 +90,12 @@ def get_jira_instance():
     if not link or not link.startswith("https://"):
         raise ValueError("Invalid JIRA link format")
 
-    options = {"server": link, "verify": True}  # Ensure SSL verification is enabled
+    # Configure for JIRA REST API v3 as per migration guidelines
+    options = {
+        "server": link, 
+        "verify": True,  # Ensure SSL verification is enabled
+        "rest_api_version": "3"  # Explicitly specify v3 API
+    }
 
     try:
         print("\nInitializing JIRA connection...")
@@ -140,24 +147,100 @@ def print_env_variables():
 
 
 def get_tickets_from_jira(jql_query):
-    # Get the Jira instance
-    jira = get_jira_instance()
-    print(f"jql: '{jql_query}'")
-
+    """
+    Retrieve tickets using JIRA REST API v3 /search/jql endpoint.
+    Returns raw JSON issue data that needs to be converted by the caller.
+    
+    This function uses direct HTTP requests to the v3 API with proper error handling,
+    retry logic, and pagination support. Includes changelog expansion for status history.
+    """
+    # Get environment variables
+    jira_link = os.environ.get("JIRA_LINK")
+    user_email = os.environ.get("USER_EMAIL") 
+    api_key = os.environ.get("JIRA_API_KEY")
+    
+    if not all([jira_link, user_email, api_key]):
+        raise ValueError("Missing required environment variables for direct v3 API access")
+    
+    # Use the correct v3 /search/jql endpoint (not the deprecated /search endpoint)
+    api_search_url = f"{jira_link.rstrip('/')}/rest/api/3/search/jql"
+    
+    verbose_print(f"Using direct v3 API endpoint: {api_search_url}")
+    verbose_print(f"JQL query: {jql_query}")
+    
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    
+    all_issues = []
+    next_page_token = None
     max_results = 100
-    start_at = 0
-    total_tickets = []
-
+    
     while True:
-        tickets = jira.search_issues(jql_query, startAt=start_at, maxResults=max_results, expand="changelog")
-        if len(tickets) == 0:
+        params = {
+            "jql": jql_query,
+            "maxResults": max_results,
+            "expand": "changelog",  # Include changelog for cycle time analysis
+            "fields": "*all"  # Get all fields
+        }
+        
+        # Add pagination token if we have one
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        
+        # Make request with retry logic (similar to epic_tracking.py)
+        for attempt in range(5):
+            try:
+                response = requests.get(
+                    api_search_url,
+                    params=params,
+                    auth=(user_email, api_key),
+                    headers=headers,
+                    timeout=30
+                )
+                
+                verbose_print(f"Response status: {response.status_code}")
+                
+                if response.status_code in (429, 500, 502, 503, 504):
+                    wait = min(2**attempt, 10)
+                    verbose_print(f"Rate limited or server error, waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+                
+                if response.status_code != 200:
+                    print(f"ERROR: Request failed with status {response.status_code}")
+                    print(f"URL: {response.url}")
+                    print(f"Response: {response.text[:500]}")  # Limit response text
+                
+                response.raise_for_status()
+                break
+                
+            except requests.exceptions.RequestException as e:
+                if attempt == 4:  # Last attempt
+                    raise
+                wait = min(2**attempt, 10)
+                verbose_print(f"Request exception: {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+        
+        data = response.json()
+        issues = data.get("issues", [])
+        all_issues.extend(issues)
+        
+        verbose_print(f"Retrieved {len(issues)} issues (total so far: {len(all_issues)})")
+        
+        # Check if this is the last page using v3 API pagination format
+        is_last = data.get("isLast", True)
+        next_page_token = data.get("nextPageToken")
+        
+        verbose_print(f"Is last page: {is_last}, Next page token: {next_page_token is not None}")
+        
+        if is_last or len(issues) == 0:
+            verbose_print(f"Breaking pagination loop: is_last={is_last}, issues_count={len(issues)}")
             break
-        print(f"Received {len(tickets)} tickets")
-        total_tickets.extend(tickets)
-        start_at += max_results
-        if len(tickets) < max_results:
-            break
-    return total_tickets
+    
+    verbose_print(f"Direct v3 API search completed: {len(all_issues)} total issues found")
+    return all_issues
 
 
 # pylint: disable=too-many-locals

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import statistics
 import csv
 import pytz
-from jira.resources import Issue
+# Note: Using direct v3 API calls with simple object conversion
 
 # pylint: disable=import-error
 from jira_utils import (
@@ -22,9 +22,65 @@ HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
 
 
+def convert_raw_issue_to_simple_object(raw_issue):
+    """Convert raw JSON issue data to simple objects that work with existing functions."""
+    # Create a simple object with the key
+    issue = SimpleNamespace()
+    issue.key = raw_issue.get("key")
+    
+    # Create fields object
+    fields_data = raw_issue.get("fields", {})
+    issue.fields = SimpleNamespace()
+    
+    # Add project info
+    project_data = fields_data.get("project", {})
+    issue.fields.project = SimpleNamespace()
+    issue.fields.project.key = project_data.get("key")
+    issue.fields.project.name = project_data.get("name")
+    
+    # Add custom fields as attributes
+    for field_name, field_value in fields_data.items():
+        if field_name.startswith("customfield_"):
+            if field_value and isinstance(field_value, dict) and "value" in field_value:
+                # Create object with value attribute for custom fields
+                custom_field = SimpleNamespace()
+                custom_field.value = field_value["value"]
+                setattr(issue.fields, field_name, custom_field)
+            else:
+                setattr(issue.fields, field_name, field_value)
+    
+    # Create changelog object
+    changelog_data = raw_issue.get("changelog", {})
+    issue.changelog = SimpleNamespace()
+    issue.changelog.histories = []
+    
+    for history_data in changelog_data.get("histories", []):
+        history = SimpleNamespace()
+        history.created = history_data.get("created")
+        history.items = []
+        
+        for item_data in history_data.get("items", []):
+            item = SimpleNamespace()
+            item.field = item_data.get("field")
+            item.fromString = item_data.get("fromString")
+            item.toString = item_data.get("toString")
+            history.items.append(item)
+        
+        issue.changelog.histories.append(history)
+    
+    return issue
+
+
+class SimpleNamespace:
+    """Simple object to hold attributes dynamically."""
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
 def validate_issue(issue):
-    if not isinstance(issue, Issue):
-        print(f"Unexpected type: {type(issue)}  -- ignoring")
+    # Validate simple issue objects from direct v3 API
+    if not hasattr(issue, 'key') or not hasattr(issue, 'fields'):
+        print(f"Unexpected issue format: {type(issue)}  -- ignoring")
         return False
     return True
 
@@ -132,9 +188,20 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
 
 
 def calculate_monthly_cycle_time(projects, start_date, end_date):
-
+    """
+    Calculate cycle time metrics for tickets released within the date range.
+    Uses JIRA REST API v3 via jira_utils for efficient server-side date filtering.
+    """
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) AND status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
-    tickets = get_tickets_from_jira(jql_query)
+    raw_tickets = get_tickets_from_jira(jql_query)
+    verbose_print(f"Retrieved {len(raw_tickets)} total tickets from API")
+    
+    # Convert raw JSON to simple objects for compatibility with existing code
+    tickets = []
+    for raw_ticket in raw_tickets:
+        tickets.append(convert_raw_issue_to_simple_object(raw_ticket))
+    
+    verbose_print(f"Converted {len(tickets)} raw tickets to simple objects")
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
 
     for _, issue in enumerate(tickets):
@@ -228,7 +295,7 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):
 def main():
     args = parse_common_arguments()
     print_env_variables()
-    current_year = datetime.now().year
+    current_year = "2024" #datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
     projects = os.environ.get("JIRA_PROJECTS").split(",")
