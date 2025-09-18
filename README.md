@@ -2,7 +2,7 @@
 
 This repository contains a collection of scripts for gathering and analyzing engineering metrics from Jira and GitHub. The goal is to help engineering teams identify areas for process improvement, track progress, and make data-driven decisions.
 
-## Purpose and Usage
+# Purpose and Usage
 
 These tools are designed to provide insights into various aspects of the software development lifecycle:
 
