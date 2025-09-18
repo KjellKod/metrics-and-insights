@@ -12,7 +12,7 @@ These tools are designed to provide insights into various aspects of the softwar
 - **Team Workload**: Understand ticket distribution and completion patterns
 
 ### Important Note on Metrics
-These metrics should be used as conversation starters and indicators, not as absolute measures of performance. They are most valuable when:
+**These metrics should be used as conversation starters and indicators, not as absolute measures of performance**. They are most valuable when:
 - Used to identify trends over time
 - Combined with qualitative feedback
 - Discussed openly with teams
