@@ -52,12 +52,12 @@ if EPIC_LABELS and EPIC_LABELS.strip():
     if labels_list:  # Only add labels clause if we have actual labels
         labels_jql = ", ".join(f'"{label}"' for label in labels_list)
         default_jql = (
-            f'issuetype = Epic AND labels IN ({labels_jql}) AND status IN ("done", "released", "In Progress", "In Develop")'
+            f'issuetype = Epic AND labels IN ({labels_jql}) '
         )
     else:
-        default_jql = 'issuetype = Epic AND status IN ("done", "released", "In Progress", "In Develop")'
+        default_jql = 'issuetype = Epic'
 else:
-    default_jql = 'issuetype = Epic AND status IN ("done", "released", "In Progress", "In Develop")'
+    default_jql = 'issuetype = Epic'
 
 JQL_EPICS = os.environ.get("JIRA_JQL_EPICS", default_jql)
 
@@ -166,6 +166,7 @@ def search_jql(jql: str, fields: List[str], max_per_page: int = 100) -> List[Dic
 
 def get_epics() -> List[Dict[str, Any]]:
     fields = ["summary", "status"]
+    print(f"JQL to find epics: {JQL_EPICS}")
     issues = search_jql(JQL_EPICS, fields)
     return issues
 
