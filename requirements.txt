@@ -35,3 +35,4 @@ tomlkit==0.13.2
 typing_extensions==4.12.2
 urllib3==2.5.0
 yarl==1.18.3
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
