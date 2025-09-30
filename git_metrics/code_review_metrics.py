@@ -2,6 +2,7 @@
 import argparse
 import csv
 import os
+import re
 from datetime import datetime
 import requests
 from dotenv import load_dotenv
@@ -28,6 +29,27 @@ def iso_to_datetime(iso_str):
     except (ValueError, TypeError):
         return None
 
+
+# Additional defense-in-depth validation for user-provided repository input
+def validate_repo_format(repo):
+    """Validate GitHub repo input strictly as owner/repo.
+
+    This prevents path traversal and protocol tricks when composing the request URL
+    even though the base host is fixed. Returns the repo if valid, else raises.
+    """
+    if not isinstance(repo, str):
+        raise ValueError("Repository must be a string like 'owner/repo'.")
+
+    # Basic owner/repo shape with allowed GitHub characters
+    pattern = r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
+    if not re.match(pattern, repo):
+        raise ValueError("Expected format 'owner/repo' using letters, numbers, '.', '_' or '-'.")
+
+    # Disallow common traversal or protocol-esque characters
+    if ".." in repo or repo.startswith("/") or repo.endswith("/") or " " in repo:
+        raise ValueError("Repository contains invalid characters or path traversal attempts.")
+
+    return repo
 
 # ========== FETCH PULL REQUESTS ========== #
 def fetch_pull_requests(repo, state="closed", per_page=100):
@@ -265,9 +287,15 @@ def main():
         print("Please set GITHUB_TOKEN_READONLY_WEB or GITHUB_TOKEN")
         return
 
-    print(f"Fetching PR data for repository: {args.repo}")
+    try:
+        repo = validate_repo_format(args.repo)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
 
-    prs = fetch_pull_requests(args.repo)
+    print(f"Fetching PR data for repository: {repo}")
+
+    prs = fetch_pull_requests(repo)
 
     if args.limit and args.limit > 0:
         prs = prs[: args.limit]
@@ -277,7 +305,7 @@ def main():
 
     results = []
     for i, pr in enumerate(prs):
-        result = process_pr(args.repo, pr)
+        result = process_pr(repo, pr)
         if result:
             results.append(result)
         if (i + 1) % 10 == 0 or i == len(prs) - 1:
