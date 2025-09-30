@@ -291,7 +291,7 @@ def main():
         repo = validate_repo_format(args.repo)
     except ValueError as e:
         print(f"Error: {e}")
-        return
+        sys.exit(1)
 
     print(f"Fetching PR data for repository: {repo}")
 
