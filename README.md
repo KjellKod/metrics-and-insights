@@ -154,14 +154,39 @@ python3 git_metrics/releases.py
 ### Jira Metrics
 To track epic completion with time-based analysis:
 ```bash
-# Analyze specific epic with quarterly completion timeline
-python3 jira_metrics/epic_tracking.py --epic PROJ-123 --quarter 2024-Q4
+# Epic Tracking with Time-Based Analysis
 
-# Analyze epics by label with monthly completion timeline
-python3 jira_metrics/epic_tracking.py --label 2025-Q3 --month 2024-01 --periods 6
+The epic_tracking.py script provides detailed completion metrics for epics, including a powerful time-based analysis feature through the --periods option. This option shows when tickets were actually completed (marked as Done/Released) during specific time periods.
 
-# Multiple epics with custom time periods
-python3 jira_metrics/epic_tracking.py --epics PROJ-123,PROJ-456 --year 2024
+Key Features of --periods:
+- Shows completion timeline data backwards from your specified time period
+- Helps track when work was actually completed over time
+- Default periods vary by time unit:
+  - Quarters: 4 periods (1 year of data)
+  - Months: 6 periods (half year of data)
+  - Years: 1 period (full year)
+
+Examples:
+
+# Analyze specific epic with quarterly completion timeline (last 4 quarters)
+python3 jira_metrics/epic_tracking.py --epic PROJ-123 --quarter 2024-Q4 --periods 4
+# Shows completion data for: 2024-Q1, Q2, Q3, Q4
+
+# Analyze epics by label with monthly completion timeline (last 6 months)
+python3 jira_metrics/epic_tracking.py --label 2025-Q3 --month 2024-06 --periods 6
+# Shows completion data for: Jan, Feb, Mar, Apr, May, Jun 2024
+
+# Multiple epics with custom yearly periods
+python3 jira_metrics/epic_tracking.py --epics PROJ-123,PROJ-456 --year 2024 --periods 2
+# Shows completion data for: 2023, 2024
+
+The output includes:
+- Total tickets and story points for each epic
+- Current completion status (Done vs Other)
+- Completion timeline showing:
+  - Number of tickets completed in each period
+  - Story points completed in each period
+  - Helps identify completion patterns and velocity
 ```
 
 To analyze engineering excellence:
