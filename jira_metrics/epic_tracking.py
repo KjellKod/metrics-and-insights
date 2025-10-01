@@ -329,9 +329,7 @@ def build_csv_fieldnames(time_periods):
     period_fieldnames = []
     for period in time_periods:
         period_label = period["label"]
-        period_fieldnames.extend(
-            [f"{period_label}_tickets_completed", f"{period_label}_points_completed"]
-        )
+        period_fieldnames.extend([f"{period_label}_tickets_completed", f"{period_label}_points_completed"])
 
     return base_fieldnames + period_fieldnames
 
@@ -568,7 +566,7 @@ def main():
         except Exception:
             team = epic.fields.project.key if epic.fields.project else "ZZZ"
         return (team, epic.key)
-    
+
     epics.sort(key=get_epic_sort_key)
 
     # Generate time periods for analysis
@@ -586,7 +584,7 @@ def main():
         epic_key = epic.key
         epic_summary = getattr(epic.fields, "summary", "") or ""
         epic_status = epic.fields.status.name
-        
+
         # Get team name (or project key as fallback)
         try:
             epic_team = get_team(epic)
