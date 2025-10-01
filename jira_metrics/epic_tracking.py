@@ -54,6 +54,7 @@ try:
         extract_status_timestamps,
         interpret_status_timestamps,
         JiraStatus,
+        get_team,
     )
 except ImportError:
     # Fallback for when running from different directory
@@ -68,6 +69,7 @@ except ImportError:
         extract_status_timestamps,
         interpret_status_timestamps,
         JiraStatus,
+        get_team,
     )
 
 # Load environment variables from .env file
@@ -295,7 +297,7 @@ def build_stdout_header(time_periods):
     on the same concept of dynamic period columns.
     """
     base_header = (
-        f"{'Epic':10}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
+        f"{'Epic':10}  {'Team':8}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
         f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Other':>9}  {'Pts % Done':>11}"
     )
 
@@ -311,6 +313,7 @@ def build_csv_fieldnames(time_periods):
     """Construct the CSV fieldnames, including dynamic period columns."""
     base_fieldnames = [
         "epic_key",
+        "team",
         "epic_description",
         "status",
         "tickets_total",
@@ -558,6 +561,16 @@ def main():
         print("No epics found for JQL:", epic_jql)
         return
 
+    # Sort epics by team (with project key fallback) and then by epic key
+    def get_epic_sort_key(epic):
+        try:
+            team = get_team(epic)
+        except Exception:
+            team = epic.fields.project.key if epic.fields.project else "ZZZ"
+        return (team, epic.key)
+    
+    epics.sort(key=get_epic_sort_key)
+
     # Generate time periods for analysis
     time_periods = generate_time_periods(time_period)
 
@@ -573,6 +586,13 @@ def main():
         epic_key = epic.key
         epic_summary = getattr(epic.fields, "summary", "") or ""
         epic_status = epic.fields.status.name
+        
+        # Get team name (or project key as fallback)
+        try:
+            epic_team = get_team(epic)
+        except Exception as e:
+            verbose_print(f"Warning: Could not get team for {epic_key}: {e}")
+            epic_team = epic.fields.project.key if epic.fields.project else "Unknown"
 
         children = get_children_for_epic(epic_key)
         verbose_print(f"Epic {epic_key}: Found {len(children)} child issues")
@@ -591,7 +611,7 @@ def main():
 
         # Build base row output
         base_output = (
-            f"{epic_key:10}  {epic_status:12}  {total_tickets:5d}  {done_tickets:4d}  {other_tickets:5d}  "
+            f"{epic_key:10}  {epic_team:8}  {epic_status:12}  {total_tickets:5d}  {done_tickets:4d}  {other_tickets:5d}  "
             f"{tickets_pct_done:7.1f}  {total_points:9d}  {done_points:8d}  {other_points:9d}  "
             f"{points_pct_done:11.1f}"
         )
@@ -610,6 +630,7 @@ def main():
         # Build row data for CSV
         row_data = {
             "epic_key": epic_key,
+            "team": epic_team,
             "epic_description": epic_summary,
             "status": epic_status,
             "tickets_total": total_tickets,
