@@ -25,7 +25,7 @@ Options:
   
 Examples:
   python epic_tracking.py --epic PROJ-123
-  python epic_tracking.py --quarter 2024-Q1 --periods 4
+  python epic_tracking.py --quarter 2024-Q1 --periods 4  # I.e.  4 periods means 2024-Q1, 2023/Q4,Q3,Q2 -- 4 quarters
   python epic_tracking.py --month 2024-01 --periods 6
   
 Output:
