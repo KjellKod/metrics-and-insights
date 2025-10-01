@@ -288,6 +288,51 @@ def bucket_counts_and_points_with_periods(children, time_periods):
     )
 
 
+def build_stdout_header(time_periods):
+    """Construct the human-friendly stdout header, including optional period columns.
+
+    Keeping this in a helper reduces duplication and ensures stdout and CSV stay aligned
+    on the same concept of dynamic period columns.
+    """
+    base_header = (
+        f"{'Epic':10}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
+        f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Other':>9}  {'Pts % Done':>11}"
+    )
+
+    period_header = ""
+    if len(time_periods) > 1:
+        for period in reversed(time_periods):  # Show most recent first
+            period_header += f"  {period['label']+' Tix':>8}  {period['label']+' Pts':>8}"
+
+    return base_header + period_header + "  Summary"
+
+
+def build_csv_fieldnames(time_periods):
+    """Construct the CSV fieldnames, including dynamic period columns."""
+    base_fieldnames = [
+        "epic_key",
+        "epic_description",
+        "status",
+        "tickets_total",
+        "tickets_done",
+        "tickets_other",
+        "tickets_percent_done",
+        "points_total",
+        "points_done",
+        "points_other",
+        "points_percent_done",
+    ]
+
+    period_fieldnames = []
+    for period in time_periods:
+        period_label = period["label"]
+        period_fieldnames.extend(
+            [f"{period_label}_tickets_completed", f"{period_label}_points_completed"]
+        )
+
+    return base_fieldnames + period_fieldnames
+
+
 def test_api_connection():
     """Test basic API connectivity with a simple bounded query."""
     verbose_print("Testing API connection...")
@@ -520,17 +565,7 @@ def main():
     print(f"Found {len(epics)} epics. Computing completion metrics...\n")
 
     # Build dynamic header based on time periods
-    base_header = (
-        f"{'Epic':10}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
-        f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Other':>9}  {'Pts % Done':>11}"
-    )
-
-    period_header = ""
-    if len(time_periods) > 1:
-        for period in reversed(time_periods):  # Show most recent first
-            period_header += f"  {period['label']+' Tix':>8}  {period['label']+' Pts':>8}"
-
-    header = base_header + period_header + "  Summary"
+    header = build_stdout_header(time_periods)
     print(header)
     print("-" * len(header))
 
@@ -599,26 +634,7 @@ def main():
     out_path = os.path.abspath("epic_completion.csv")
 
     # Build dynamic fieldnames including time periods
-    base_fieldnames = [
-        "epic_key",
-        "epic_description",
-        "status",
-        "tickets_total",
-        "tickets_done",
-        "tickets_other",
-        "tickets_percent_done",
-        "points_total",
-        "points_done",
-        "points_other",
-        "points_percent_done",
-    ]
-
-    period_fieldnames = []
-    for period in time_periods:
-        period_label = period["label"]
-        period_fieldnames.extend([f"{period_label}_tickets_completed", f"{period_label}_points_completed"])
-
-    all_fieldnames = base_fieldnames + period_fieldnames
+    all_fieldnames = build_csv_fieldnames(time_periods)
 
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=all_fieldnames)

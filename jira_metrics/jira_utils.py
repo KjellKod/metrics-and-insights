@@ -48,7 +48,7 @@ def parse_common_arguments(parser=None):
     args = parser.parse_args()
     VERBOSE = args.verbose
     print(f"Verbose printing enabled: {VERBOSE}")
-    return parser.parse_args()
+    return args
 
 
 def get_jira_instance():
