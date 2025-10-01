@@ -126,7 +126,9 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
         assignee_metrics[month_key][team][assignee]["points"] += points
         assignee_metrics[month_key][team][assignee]["tickets"] += 1
 
-        verbose_print(f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key} (Status: {issue.fields.status.name})")
+        verbose_print(
+            f"Processed issue {issue.key}: {points} points for ({team}) {assignee} in {month_key} (Status: {issue.fields.status.name})"
+        )
 
     return metrics_per_month, assignee_metrics
 

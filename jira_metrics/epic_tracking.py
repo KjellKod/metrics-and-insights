@@ -44,15 +44,31 @@ from dotenv import load_dotenv
 # Import common utilities from jira_metrics
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "jira_metrics"))
 try:
-    from jira_utils import (get_common_parser, parse_common_arguments, verbose_print, get_ticket_points, 
-                           get_tickets_from_jira, get_children_for_epic, extract_status_timestamps, 
-                           interpret_status_timestamps, JiraStatus)
+    from jira_utils import (
+        get_common_parser,
+        parse_common_arguments,
+        verbose_print,
+        get_ticket_points,
+        get_tickets_from_jira,
+        get_children_for_epic,
+        extract_status_timestamps,
+        interpret_status_timestamps,
+        JiraStatus,
+    )
 except ImportError:
     # Fallback for when running from different directory
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from jira_metrics.jira_utils import (get_common_parser, parse_common_arguments, verbose_print, get_ticket_points, 
-                                        get_tickets_from_jira, get_children_for_epic, extract_status_timestamps, 
-                                        interpret_status_timestamps, JiraStatus)
+    from jira_metrics.jira_utils import (
+        get_common_parser,
+        parse_common_arguments,
+        verbose_print,
+        get_ticket_points,
+        get_tickets_from_jira,
+        get_children_for_epic,
+        extract_status_timestamps,
+        interpret_status_timestamps,
+        JiraStatus,
+    )
 
 # Load environment variables from .env file
 load_dotenv()
@@ -69,12 +85,6 @@ API_TOKEN = os.environ.get("JIRA_API_TOKEN") or os.environ.get("JIRA_API_KEY")
 # Buckets (lowercase status names compared against these sets)
 # These statuses indicate completed work
 DONE_STATUSES = {"done", "released", "closed"}
-
-
-
-
-
-
 
 
 def validate_env_variables():
@@ -124,35 +134,31 @@ def validate_env_variables():
 def get_quarter_dates(year, quarter):
     """Get start and end dates for a quarter."""
     from datetime import timezone
-    
-    quarter_starts = {
-        1: (1, 1), 2: (4, 1), 3: (7, 1), 4: (10, 1)
-    }
-    quarter_ends = {
-        1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)
-    }
-    
+
+    quarter_starts = {1: (1, 1), 2: (4, 1), 3: (7, 1), 4: (10, 1)}
+    quarter_ends = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+
     start_month, start_day = quarter_starts[quarter]
     end_month, end_day = quarter_ends[quarter]
-    
+
     start_date = datetime(year, start_month, start_day, tzinfo=timezone.utc)
     end_date = datetime(year, end_month, end_day, 23, 59, 59, tzinfo=timezone.utc)
-    
+
     return start_date, end_date
 
 
 def get_month_dates(year, month):
     """Get start and end dates for a month."""
     from datetime import timezone
-    
+
     start_date = datetime(year, month, 1, tzinfo=timezone.utc)
-    
+
     # Get last day of month
     if month == 12:
         end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(days=1)
     else:
         end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc) - timedelta(days=1)
-    
+
     end_date = end_date.replace(hour=23, minute=59, second=59)
     return start_date, end_date
 
@@ -160,61 +166,51 @@ def get_month_dates(year, month):
 def generate_time_periods(time_period):
     """Generate list of time periods to analyze."""
     periods = []
-    
+
     if time_period["type"] == "quarter":
         year = time_period["year"]
         quarter = time_period["quarter"]
-        
+
         for i in range(time_period["periods"]):
             current_quarter = quarter - i
             current_year = year
-            
+
             # Handle year rollover
             while current_quarter <= 0:
                 current_quarter += 4
                 current_year -= 1
-            
+
             start_date, end_date = get_quarter_dates(current_year, current_quarter)
-            periods.append({
-                "label": f"{current_year}-Q{current_quarter}",
-                "start": start_date,
-                "end": end_date,
-                "type": "quarter"
-            })
-    
+            periods.append(
+                {"label": f"{current_year}-Q{current_quarter}", "start": start_date, "end": end_date, "type": "quarter"}
+            )
+
     elif time_period["type"] == "month":
         year = time_period["year"]
         month = time_period["month"]
-        
+
         for i in range(time_period["periods"]):
             current_month = month - i
             current_year = year
-            
+
             # Handle year rollover
             while current_month <= 0:
                 current_month += 12
                 current_year -= 1
-            
+
             start_date, end_date = get_month_dates(current_year, current_month)
-            periods.append({
-                "label": f"{current_year}-{current_month:02d}",
-                "start": start_date,
-                "end": end_date,
-                "type": "month"
-            })
-    
+            periods.append(
+                {"label": f"{current_year}-{current_month:02d}", "start": start_date, "end": end_date, "type": "month"}
+            )
+
     else:  # year
         from datetime import timezone
+
         year = time_period["year"]
         start_date = datetime(year, 1, 1, tzinfo=timezone.utc)
         end_date = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-        periods.append({
-            "label": str(year),
-            "start": start_date,
-            "end": end_date,
-            "type": "year"
-        })
-    
+        periods.append({"label": str(year), "start": start_date, "end": end_date, "type": "year"})
+
     return periods
 
 
@@ -223,7 +219,7 @@ def get_completion_date(child):
     try:
         status_timestamps = extract_status_timestamps(child)
         key_statuses = interpret_status_timestamps(status_timestamps)
-        
+
         # Check for Released first, then Done
         completion_date = key_statuses.get(JiraStatus.RELEASED.value) or key_statuses.get(JiraStatus.DONE.value)
         return completion_date
@@ -240,19 +236,16 @@ def bucket_counts_and_points_with_periods(children, time_periods):
     total_points = 0
     done_points = 0
     other_points = 0
-    
+
     # Initialize period tracking
     period_data = {}
     for period in time_periods:
-        period_data[period["label"]] = {
-            "tickets_completed": 0,
-            "points_completed": 0
-        }
-    
+        period_data[period["label"]] = {"tickets_completed": 0, "points_completed": 0}
+
     for child in children:
         # Use the proper status name from the converted issue object
         status_name = (child.fields.status.name or "").strip().lower()
-        
+
         # Use the existing jira_utils function to get story points
         try:
             points = get_ticket_points(child)
@@ -260,13 +253,13 @@ def bucket_counts_and_points_with_periods(children, time_periods):
             verbose_print(f"Warning: Could not get story points for {child.key}: {e}")
             points = 0
         total_points += points
-        
+
         is_done = status_name in DONE_STATUSES
-        
+
         if is_done:
             done_tickets += 1
             done_points += points
-            
+
             # Check which time period this ticket was completed in
             completion_date = get_completion_date(child)
             if completion_date:
@@ -278,12 +271,21 @@ def bucket_counts_and_points_with_periods(children, time_periods):
         else:
             other_tickets += 1
             other_points += points
-    
+
     tickets_pct_done = round((done_tickets / total_tickets) * 100, 1) if total_tickets else 0.0
     points_pct_done = round((done_points / total_points) * 100, 1) if total_points else 0.0
-    
-    return (total_tickets, done_tickets, other_tickets, tickets_pct_done,
-            total_points, done_points, other_points, points_pct_done, period_data)
+
+    return (
+        total_tickets,
+        done_tickets,
+        other_tickets,
+        tickets_pct_done,
+        total_points,
+        done_points,
+        other_points,
+        points_pct_done,
+        period_data,
+    )
 
 
 def test_api_connection():
@@ -350,22 +352,26 @@ def parse_epic_arguments():
     """Parse command line arguments specific to epic tracking."""
     parser = get_common_parser()
     parser.description = "Fetch epics from Jira by JQL and compute child-issue completion metrics."
-    
+
     # Epic selection arguments (required)
     epic_group = parser.add_mutually_exclusive_group(required=True)
     epic_group.add_argument("--epic", help="Target specific epic key (e.g., PROJ-123)")
     epic_group.add_argument("--epics", help="Target multiple epic keys (comma-separated)")
     epic_group.add_argument("--label", help="Filter epics by single label (e.g., 2024-Q1)")
     epic_group.add_argument("--labels", help="Filter epics by multiple labels (comma-separated)")
-    
+
     # Time period arguments (required)
     time_group = parser.add_mutually_exclusive_group(required=True)
     time_group.add_argument("--quarter", help="Analyze specific quarter (e.g., 2024-Q1)")
     time_group.add_argument("--month", help="Analyze specific month (e.g., 2024-01)")
     time_group.add_argument("--year", type=int, help="Analyze specific year")
-    
-    parser.add_argument("--periods", type=int, help="Show completion timeline for last N periods going backwards from your specified time period. Shows when tickets were actually completed (marked Done/Released) during each period. Default: 4 for quarters, 6 for months, 1 for years. Example: --quarter 2024-Q4 --periods 4 shows completion data for 2024-Q1, Q2, Q3, Q4")
-    
+
+    parser.add_argument(
+        "--periods",
+        type=int,
+        help="Show completion timeline for last N periods going backwards from your specified time period. Shows when tickets were actually completed (marked Done/Released) during each period. Default: 4 for quarters, 6 for months, 1 for years. Example: --quarter 2024-Q4 --periods 4 shows completion data for 2024-Q1, Q2, Q3, Q4",
+    )
+
     return parse_common_arguments(parser)
 
 
@@ -382,7 +388,7 @@ def build_epic_jql(args):
     elif args.labels:
         label_list = [label.strip() for label in args.labels.split(",") if label.strip()]
         labels_jql = ", ".join(f'"{label}"' for label in label_list)
-        return f'issuetype = Epic AND labels IN ({labels_jql})'
+        return f"issuetype = Epic AND labels IN ({labels_jql})"
     else:
         # This shouldn't happen with required arguments, but just in case
         raise ValueError("No epic selection method specified")
@@ -399,15 +405,10 @@ def parse_time_period(args):
             if quarter not in [1, 2, 3, 4]:
                 raise ValueError("Quarter must be 1, 2, 3, or 4")
             periods = args.periods if args.periods else 4  # Default: 4 quarters
-            return {
-                "type": "quarter",
-                "year": year,
-                "quarter": quarter,
-                "periods": periods
-            }
+            return {"type": "quarter", "year": year, "quarter": quarter, "periods": periods}
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid quarter format. Use YYYY-QN (e.g., 2024-Q1): {e}")
-    
+
     elif args.month:
         # Parse month format: YYYY-MM
         try:
@@ -417,24 +418,15 @@ def parse_time_period(args):
             if month not in range(1, 13):
                 raise ValueError("Month must be 1-12")
             periods = args.periods if args.periods else 6  # Default: 6 months
-            return {
-                "type": "month",
-                "year": year,
-                "month": month,
-                "periods": periods
-            }
+            return {"type": "month", "year": year, "month": month, "periods": periods}
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid month format. Use YYYY-MM (e.g., 2024-01): {e}")
-    
+
     elif args.year:
         # Specific year
         periods = args.periods if args.periods else 1  # Default: 1 year
-        return {
-            "type": "year",
-            "year": args.year,
-            "periods": periods
-        }
-    
+        return {"type": "year", "year": args.year, "periods": periods}
+
     else:
         # This shouldn't happen with required arguments, but just in case
         raise ValueError("No time period specified")
@@ -445,7 +437,7 @@ def display_analysis_target(epic_jql, time_period, args):
     print("\n" + "=" * 80)
     print("EPIC TRACKING ANALYSIS")
     print("=" * 80)
-    
+
     print(f"\n📋 Epic Selection:")
     if args.epic:
         print(f"   Single Epic: {args.epic}")
@@ -457,7 +449,7 @@ def display_analysis_target(epic_jql, time_period, args):
     elif args.labels:
         print(f"   Epic Labels: {args.labels}")
         print(f"   JQL Query: {epic_jql}")
-    
+
     print(f"\n📅 Time Period Analysis:")
     if time_period["type"] == "quarter":
         print(f"   Quarter: {time_period['year']}-Q{time_period['quarter']}")
@@ -469,14 +461,14 @@ def display_analysis_target(epic_jql, time_period, args):
             print(f"   Completion timeline: {time_period['periods']} months (shows when tickets were completed)")
     else:
         print(f"   Year: {time_period['year']}")
-    
+
     print(f"\n🔧 Environment Variables:")
     env_vars = [
         ("JIRA_SITE", SITE, "Jira server URL"),
         ("JIRA_EMAIL/USER_EMAIL", EMAIL, "Jira email address"),
         ("JIRA_API_TOKEN/JIRA_API_KEY", "***" if API_TOKEN else None, "Jira API token"),
     ]
-    
+
     for var_name, var_value, description in env_vars:
         if var_value:
             if "API" in var_name and var_value != "***":
@@ -486,7 +478,7 @@ def display_analysis_target(epic_jql, time_period, args):
             print(f"   ✓ {var_name}: {display_value}")
         else:
             print(f"   ⚠️  {var_name}: (not set - {description})")
-    
+
     print("\n" + "=" * 80 + "\n")
 
 
@@ -496,7 +488,7 @@ def main():
 
     # Validate environment variables first
     validate_env_variables()
-    
+
     # Build JQL and parse time period
     try:
         epic_jql = build_epic_jql(args)
@@ -504,10 +496,10 @@ def main():
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
-    
+
     # Display what we're analyzing
     display_analysis_target(epic_jql, time_period, args)
-    
+
     verbose_print(f"Using JQL for epics: {epic_jql}")
 
     # Test API connection first
@@ -523,35 +515,44 @@ def main():
 
     # Generate time periods for analysis
     time_periods = generate_time_periods(time_period)
-    
+
     rows = []
     print(f"Found {len(epics)} epics. Computing completion metrics...\n")
-    
+
     # Build dynamic header based on time periods
     base_header = (
         f"{'Epic':10}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
         f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Other':>9}  {'Pts % Done':>11}"
     )
-    
+
     period_header = ""
     if len(time_periods) > 1:
         for period in reversed(time_periods):  # Show most recent first
             period_header += f"  {period['label']+' Tix':>8}  {period['label']+' Pts':>8}"
-    
+
     header = base_header + period_header + "  Summary"
     print(header)
     print("-" * len(header))
 
     for epic in epics:
         epic_key = epic.key
-        epic_summary = getattr(epic.fields, 'summary', '') or ''
+        epic_summary = getattr(epic.fields, "summary", "") or ""
         epic_status = epic.fields.status.name
 
         children = get_children_for_epic(epic_key)
         verbose_print(f"Epic {epic_key}: Found {len(children)} child issues")
-        
-        (total_tickets, done_tickets, other_tickets, tickets_pct_done,
-         total_points, done_points, other_points, points_pct_done, period_data) = bucket_counts_and_points_with_periods(children, time_periods)
+
+        (
+            total_tickets,
+            done_tickets,
+            other_tickets,
+            tickets_pct_done,
+            total_points,
+            done_points,
+            other_points,
+            points_pct_done,
+            period_data,
+        ) = bucket_counts_and_points_with_periods(children, time_periods)
 
         # Build base row output
         base_output = (
@@ -559,7 +560,7 @@ def main():
             f"{tickets_pct_done:7.1f}  {total_points:9d}  {done_points:8d}  {other_points:9d}  "
             f"{points_pct_done:11.1f}"
         )
-        
+
         # Add period data to output
         period_output = ""
         if len(time_periods) > 1:
@@ -567,7 +568,7 @@ def main():
                 tix = period_data[period["label"]]["tickets_completed"]
                 pts = period_data[period["label"]]["points_completed"]
                 period_output += f"  {tix:8d}  {pts:8d}"
-        
+
         full_output = base_output + period_output + f"  {epic_summary}"
         print(full_output)
 
@@ -585,18 +586,18 @@ def main():
             "points_other": other_points,
             "points_percent_done": points_pct_done,
         }
-        
+
         # Add period data to CSV row
         for period in time_periods:
             period_label = period["label"]
             row_data[f"{period_label}_tickets_completed"] = period_data[period_label]["tickets_completed"]
             row_data[f"{period_label}_points_completed"] = period_data[period_label]["points_completed"]
-        
+
         rows.append(row_data)
 
     # Export to CSV if requested or by default
     out_path = os.path.abspath("epic_completion.csv")
-    
+
     # Build dynamic fieldnames including time periods
     base_fieldnames = [
         "epic_key",
@@ -611,17 +612,14 @@ def main():
         "points_other",
         "points_percent_done",
     ]
-    
+
     period_fieldnames = []
     for period in time_periods:
         period_label = period["label"]
-        period_fieldnames.extend([
-            f"{period_label}_tickets_completed",
-            f"{period_label}_points_completed"
-        ])
-    
+        period_fieldnames.extend([f"{period_label}_tickets_completed", f"{period_label}_points_completed"])
+
     all_fieldnames = base_fieldnames + period_fieldnames
-    
+
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=all_fieldnames)
         writer.writeheader()

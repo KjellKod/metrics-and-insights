@@ -46,9 +46,7 @@ def parse_github_date(date_str):
 def setup_logging(verbose=False):
     """Configure logging settings."""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     return logging.getLogger(__name__)
 
 
@@ -65,33 +63,20 @@ Examples:
 
 Note: You can get a GitHub personal access token from:
 https://github.com/settings/tokens
-        """
+        """,
+    )
+
+    parser.add_argument("--org", "-o", required=True, help="GitHub organization name (e.g., 'onfleet', 'microsoft')")
+
+    parser.add_argument(
+        "--token-env", "-t", required=True, help="Environment variable name containing GitHub personal access token"
     )
 
     parser.add_argument(
-        "--org", "-o",
-        required=True,
-        help="GitHub organization name (e.g., 'onfleet', 'microsoft')"
+        "--days", "-d", type=int, default=60, help="Number of days to look back for activity (default: 60)"
     )
 
-    parser.add_argument(
-        "--token-env", "-t",
-        required=True,
-        help="Environment variable name containing GitHub personal access token"
-    )
-
-    parser.add_argument(
-        "--days", "-d",
-        type=int,
-        default=60,
-        help="Number of days to look back for activity (default: 60)"
-    )
-
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose logging"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
 
     return parser.parse_args()
 
@@ -141,7 +126,10 @@ def fetch_active_repositories(api_config, org_name, since_date, repos_to_scan=No
 
         try:
             response = requests.post(
-                api_config["url"], headers=api_config["headers"], json={"query": query, "variables": variables}, timeout=120
+                api_config["url"],
+                headers=api_config["headers"],
+                json={"query": query, "variables": variables},
+                timeout=120,
             )
             response.raise_for_status()
             data = response.json()
@@ -241,7 +229,7 @@ def main():
             sys.exit(1)
 
         # Validate token format (basic check)
-        if not token.startswith(('ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_')):
+        if not token.startswith(("ghp_", "gho_", "ghu_", "ghs_", "ghr_")):
             logger.warning("Token doesn't appear to be in expected GitHub format (ghp_*, gho_*, etc.)")
 
         api_config = {
@@ -254,8 +242,7 @@ def main():
 
         since_date = datetime.now(timezone.utc) - timedelta(days=args.days)
 
-        logger.info("Fetching repositories with activity since %s (%d days ago)",
-                   since_date.date(), args.days)
+        logger.info("Fetching repositories with activity since %s (%d days ago)", since_date.date(), args.days)
         logger.info("Organization: %s", args.org)
 
         active_repos = fetch_active_repositories(api_config, args.org, since_date, None)
