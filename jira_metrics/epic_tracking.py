@@ -334,6 +334,18 @@ def build_csv_fieldnames(time_periods):
     return base_fieldnames + period_fieldnames
 
 
+def get_epic_team(epic):
+    """Return team name for an epic using jira_utils.get_team with project fallback.
+
+    Centralizes error handling to avoid duplication across sorting and row rendering.
+    """
+    try:
+        return get_team(epic)
+    except Exception as e:  # pylint: disable=broad-except
+        verbose_print(f"Warning: Could not get team for {epic.key}: {e}")
+        return epic.fields.project.key if getattr(epic.fields, "project", None) else "Unknown"
+
+
 def test_api_connection():
     """Test basic API connectivity with a simple bounded query."""
     verbose_print("Testing API connection...")
@@ -561,10 +573,7 @@ def main():
 
     # Sort epics by team (with project key fallback) and then by epic key
     def get_epic_sort_key(epic):
-        try:
-            team = get_team(epic)
-        except Exception:
-            team = epic.fields.project.key if epic.fields.project else "Unknown"
+        team = get_epic_team(epic)
         return (team, epic.key)
 
     epics.sort(key=get_epic_sort_key)
@@ -586,11 +595,7 @@ def main():
         epic_status = epic.fields.status.name
 
         # Get team name (or project key as fallback)
-        try:
-            epic_team = get_team(epic)
-        except Exception as e:
-            verbose_print(f"Warning: Could not get team for {epic_key}: {e}")
-            epic_team = epic.fields.project.key if epic.fields.project else "Unknown"
+        epic_team = get_epic_team(epic)
 
         children = get_children_for_epic(epic_key)
         verbose_print(f"Epic {epic_key}: Found {len(children)} child issues")
