@@ -336,6 +336,8 @@ def convert_raw_issue_to_simple_object(raw_issue):  # pylint: disable=too-many-s
         issue.fields.status = _create_status_object(fields_data)
         issue.fields.assignee = _create_assignee_object(fields_data)
         issue.fields.issuelinks = _create_issue_links(fields_data)
+        # Include commonly used primitive fields
+        issue.fields.summary = fields_data.get("summary")
 
         # Add custom fields
         custom_fields = _create_custom_fields(fields_data)
