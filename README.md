@@ -48,6 +48,7 @@ Example workflow:
 │   ├── active_repositories_in_organization.py  # Identify active repositories
 │
 ├── jira_metrics/                       # Scripts for extracting metrics from Jira
+│   ├── epic_tracking.py                # Track epic completion metrics with time-based analysis
 │   ├── engineering_excellence.py       # Track engineering excellence vs product work
 │   ├── cycle_time.py                   # Analyze time from code review to release
 │   ├── release_failure.py              # Analyze release failures and impact
@@ -94,6 +95,7 @@ Scripts for analyzing GitHub repository metrics and developer activity. For deta
 
 ### Jira Metrics
 Scripts for extracting and analyzing Jira metrics:
+- `epic_tracking.py`: Track epic completion metrics with time-based analysis
 - `engineering_excellence.py`: Track engineering excellence vs product work
 - `cycle_time.py`: Calculate cycle time metrics
 - `release_failure.py`: Analyze release failures and impact
@@ -150,6 +152,18 @@ python3 git_metrics/releases.py
 ```
 
 ### Jira Metrics
+To track epic completion with time-based analysis:
+```bash
+# Analyze specific epic with quarterly completion timeline
+python3 jira_metrics/epic_tracking.py --epic PROJ-123 --quarter 2024-Q4
+
+# Analyze epics by label with monthly completion timeline
+python3 jira_metrics/epic_tracking.py --label 2025-Q3 --month 2024-01 --periods 6
+
+# Multiple epics with custom time periods
+python3 jira_metrics/epic_tracking.py --epics PROJ-123,PROJ-456 --year 2024
+```
+
 To analyze engineering excellence:
 ```bash
 python3 jira_metrics/engineering_excellence.py

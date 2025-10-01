@@ -610,6 +610,22 @@ def get_ticket_points(ticket):
     return int(story_points) if story_points else 0
 
 
+def get_children_for_epic(epic_key: str):
+    """Get child issues for an epic (works for company-managed and team-managed).
+    
+    Args:
+        epic_key (str): The epic key (e.g., 'PROJ-123')
+        
+    Returns:
+        List of converted issue objects compatible with jira_utils functions
+    """
+    # We explicitly exclude Epics here and allow any standard child type
+    jql = f'issuetype != Epic AND ("Epic Link" = {epic_key} OR parent = {epic_key})'
+    
+    verbose_print(f"Fetching children for epic {epic_key}")
+    return get_tickets_from_jira(jql)
+
+
 def extract_status_timestamps(issue):
     # Extract the status change timestamps. Most recent first.
     # To see the oldest first, reverse the order of histories (reverse(extract_status_timestamps(issue)))
