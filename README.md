@@ -157,6 +157,15 @@ To track epic completion with time-based analysis:
 # Analyze specific epic with quarterly completion timeline
 python3 jira_metrics/epic_tracking.py --epic PROJ-123 --quarter 2024-Q4
 
+The 'periods' option allows you to analyze completion trends over time:
+- For quarters (--quarter): Shows completion data for N quarters going backwards (default: 4)
+  Example: --quarter 2024-Q1 --periods 4 analyzes 2024-Q1, 2023-Q4, Q3, Q2
+- For months (--month): Shows N months of completion data (default: 6)
+  Example: --month 2024-01 --periods 6 analyzes Jan 2024 back to Aug 2023
+- For years (--year): Shows N years of completion data (default: 1)
+
+This helps track when tickets were actually completed (marked as Done/Released) during each period.
+
 # Analyze epics by label with monthly completion timeline
 python3 jira_metrics/epic_tracking.py --label 2025-Q3 --month 2024-01 --periods 6
 
