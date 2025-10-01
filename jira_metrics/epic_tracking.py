@@ -564,7 +564,7 @@ def main():
         try:
             team = get_team(epic)
         except Exception:
-            team = epic.fields.project.key if epic.fields.project else "ZZZ"
+            team = epic.fields.project.key if epic.fields.project else "Unknown"
         return (team, epic.key)
 
     epics.sort(key=get_epic_sort_key)
