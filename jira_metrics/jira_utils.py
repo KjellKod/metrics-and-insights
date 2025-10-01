@@ -48,7 +48,7 @@ def parse_common_arguments(parser=None):
     args = parser.parse_args()
     VERBOSE = args.verbose
     print(f"Verbose printing enabled: {VERBOSE}")
-    return parser.parse_args()
+    return args
 
 
 def get_jira_instance():
@@ -336,6 +336,8 @@ def convert_raw_issue_to_simple_object(raw_issue):  # pylint: disable=too-many-s
         issue.fields.status = _create_status_object(fields_data)
         issue.fields.assignee = _create_assignee_object(fields_data)
         issue.fields.issuelinks = _create_issue_links(fields_data)
+        # Include commonly used primitive fields
+        issue.fields.summary = fields_data.get("summary")
 
         # Add custom fields
         custom_fields = _create_custom_fields(fields_data)
@@ -608,6 +610,22 @@ def get_ticket_points(ticket):
     # such as ticket count, but it's not a reliable metric on its own.
     story_points = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_STORYPOINTS}")
     return int(story_points) if story_points else 0
+
+
+def get_children_for_epic(epic_key: str):
+    """Get child issues for an epic (works for company-managed and team-managed).
+
+    Args:
+        epic_key (str): The epic key (e.g., 'PROJ-123')
+
+    Returns:
+        List of converted issue objects compatible with jira_utils functions
+    """
+    # We explicitly exclude Epics here and allow any standard child type
+    jql = f'issuetype != Epic AND ("Epic Link" = {epic_key} OR parent = {epic_key})'
+
+    verbose_print(f"Fetching children for epic {epic_key}")
+    return get_tickets_from_jira(jql)
 
 
 def extract_status_timestamps(issue):

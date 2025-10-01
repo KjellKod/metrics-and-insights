@@ -65,10 +65,7 @@ from dotenv import load_dotenv
 import pytz
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -83,6 +80,7 @@ class GitHubAPIError(Exception):
 @dataclass
 class ValidatedInputs:
     """Container for validated and normalized inputs"""
+
     owner: str
     repos: List[str]  # Full owner/repo format
     users: List[str]  # Original case preserved
@@ -97,6 +95,7 @@ class ValidatedInputs:
 @dataclass
 class RepoInfo:
     """Information about a repository"""
+
     name: str
     default_branch: str
     visibility: str
@@ -107,6 +106,7 @@ class RepoInfo:
 @dataclass
 class UserInfo:
     """Information about a GitHub user"""
+
     login: str
     id: int
     type: str
@@ -129,12 +129,12 @@ def normalize_inputs(args) -> ValidatedInputs:
     logger.info("Validating and normalizing inputs...")
 
     # Validate owner
-    if not hasattr(args, 'owner') or not args.owner:
+    if not hasattr(args, "owner") or not args.owner:
         raise ValidationError("--owner is required")
     owner = args.owner.strip()
     if not owner:
         raise ValidationError("Owner cannot be empty")
-    if '/' in owner:
+    if "/" in owner:
         raise ValidationError("Owner should not contain '/', use --repos for full repo names")
 
     # Validate and normalize repos
@@ -149,9 +149,9 @@ def normalize_inputs(args) -> ValidatedInputs:
     for repo in raw_repos:
         if not repo:
             continue
-        if '/' not in repo:
+        if "/" not in repo:
             repo = f"{owner}/{repo}"
-        elif repo.count('/') != 1:
+        elif repo.count("/") != 1:
             raise ValidationError(f"Invalid repo format: {repo}. Expected 'owner/repo'")
         repos.append(repo)
 
@@ -193,12 +193,12 @@ def normalize_inputs(args) -> ValidatedInputs:
 
     # Validate output file
     output_file = args.output.strip() if args.output else "pr_metrics.csv"
-    if not output_file.endswith('.csv'):
-        output_file += '.csv'
+    if not output_file.endswith(".csv"):
+        output_file += ".csv"
 
     # Check if output directory exists and is writable
     output_path = Path(output_file)
-    if output_path.parent != Path('.'):
+    if output_path.parent != Path("."):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"✓ Normalized {len(repos)} repositories")
@@ -214,8 +214,8 @@ def normalize_inputs(args) -> ValidatedInputs:
         start_date=start_date,
         end_date=end_date,
         output_file=output_file,
-        debug=getattr(args, 'debug', False),
-        dry_run=getattr(args, 'dry_run', False)
+        debug=getattr(args, "debug", False),
+        dry_run=getattr(args, "dry_run", False),
     )
 
 
@@ -257,7 +257,9 @@ class MonthlyMetrics:
     reviews_participated: int = 0
     review_response_times: List[float] = field(default_factory=list)
     # Add PR details for debugging
-    pr_details: List[Tuple[str, int, float, datetime, datetime]] = field(default_factory=list)  # (repo, number, hours, created_at, merged_at)
+    pr_details: List[Tuple[str, int, float, datetime, datetime]] = field(
+        default_factory=list
+    )  # (repo, number, hours, created_at, merged_at)
 
 
 @dataclass
@@ -321,10 +323,12 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
             # Handle 403 errors (rate limiting and abuse detection)
             if r.status_code == 403:
                 response_text = r.text.lower()
-                if ("abuse" in response_text or
-                    "secondary rate limit" in response_text or
-                    "rate limit" in response_text or
-                    "api rate limit exceeded" in response_text):
+                if (
+                    "abuse" in response_text
+                    or "secondary rate limit" in response_text
+                    or "rate limit" in response_text
+                    or "api rate limit exceeded" in response_text
+                ):
                     retry_after = r.headers.get("Retry-After")
                     sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
                     logger.warning(f"Rate limiting detected (403). Waiting {sleep_time:.1f} seconds")
@@ -334,9 +338,9 @@ def gh_request(session: requests.Session, method: str, url: str, **kwargs) -> re
                 # If not rate limiting related, let it fall through to return the response
 
             # Log rate limit status
-            if 'X-RateLimit-Remaining' in r.headers:
-                remaining = r.headers.get('X-RateLimit-Remaining')
-                reset_time = r.headers.get('X-RateLimit-Reset')
+            if "X-RateLimit-Remaining" in r.headers:
+                remaining = r.headers.get("X-RateLimit-Remaining")
+                reset_time = r.headers.get("X-RateLimit-Reset")
                 if reset_time:
                     reset_dt = datetime.fromtimestamp(int(reset_time))
                     logger.debug(f"Rate limit: {remaining} remaining, resets at {reset_dt}")
@@ -371,11 +375,13 @@ def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str
     logger.info("Validating GitHub authentication and scopes...")
 
     session = requests.Session()
-    session.headers.update({
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "PR-Metrics-Collector/1.0"
-    })
+    session.headers.update(
+        {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "PR-Metrics-Collector/1.0",
+        }
+    )
 
     try:
         # Check rate limits first
@@ -395,20 +401,24 @@ def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str
         else:
             logger.warning("GraphQL rate limit info not available in response")
 
-        if core_limit['remaining'] < 100:
-            reset_time = datetime.fromtimestamp(core_limit['reset'])
+        if core_limit["remaining"] < 100:
+            reset_time = datetime.fromtimestamp(core_limit["reset"])
             logger.warning(f"Low rate limit remaining. Resets at {reset_time}")
 
-        if search_limit['remaining'] < 10:
-            reset_time = datetime.fromtimestamp(search_limit['reset'])
+        if search_limit["remaining"] < 10:
+            reset_time = datetime.fromtimestamp(search_limit["reset"])
             raise GitHubAPIError(f"Insufficient search API quota. Resets at {reset_time}")
 
         # Check GraphQL quota if available
-        if graphql_limit and graphql_limit.get('remaining', 0) < 500:  # Warn earlier
-            reset_time = datetime.fromtimestamp(graphql_limit['reset']) if graphql_limit.get('reset') else 'unknown'
-            logger.warning(f"GraphQL API quota getting low: {graphql_limit['remaining']}/{graphql_limit['limit']} remaining. Resets at {reset_time}")
-            if graphql_limit.get('remaining', 0) < 100:
-                logger.error(f"GraphQL quota critically low! Consider waiting for reset or the script will fall back to Search API")
+        if graphql_limit and graphql_limit.get("remaining", 0) < 500:  # Warn earlier
+            reset_time = datetime.fromtimestamp(graphql_limit["reset"]) if graphql_limit.get("reset") else "unknown"
+            logger.warning(
+                f"GraphQL API quota getting low: {graphql_limit['remaining']}/{graphql_limit['limit']} remaining. Resets at {reset_time}"
+            )
+            if graphql_limit.get("remaining", 0) < 100:
+                logger.error(
+                    f"GraphQL quota critically low! Consider waiting for reset or the script will fall back to Search API"
+                )
                 logger.error("Search API is slower and provides less detailed data")
 
         # Authenticate and get user info
@@ -420,13 +430,13 @@ def validate_github_auth_and_scopes(token: str) -> Tuple[Dict[str, Any], Set[str
         logger.info(f"✓ Authenticated as: {user_info['login']} (ID: {user_info['id']})")
 
         # Extract OAuth scopes
-        scopes_header = r.headers.get('X-OAuth-Scopes', '')
-        scopes = {scope.strip() for scope in scopes_header.split(',') if scope.strip()}
+        scopes_header = r.headers.get("X-OAuth-Scopes", "")
+        scopes = {scope.strip() for scope in scopes_header.split(",") if scope.strip()}
 
         logger.info(f"✓ OAuth scopes: {', '.join(sorted(scopes)) if scopes else 'none'}")
 
         # Check for required scopes
-        required_scopes = {'repo', 'read:org'}  # repo for private repos, read:org for org membership
+        required_scopes = {"repo", "read:org"}  # repo for private repos, read:org for org membership
         missing_scopes = required_scopes - scopes
 
         if missing_scopes:
@@ -480,13 +490,15 @@ def validate_repositories(session: requests.Session, repos: List[str]) -> Dict[s
 
             repo_info[repo] = RepoInfo(
                 name=repo,
-                default_branch=data.get('default_branch', 'main'),
-                visibility=data.get('visibility', 'unknown'),
-                permissions=data.get('permissions', {}),
-                accessible=True
+                default_branch=data.get("default_branch", "main"),
+                visibility=data.get("visibility", "unknown"),
+                permissions=data.get("permissions", {}),
+                accessible=True,
             )
 
-            logger.info(f"✓ {repo} ({data.get('visibility', 'unknown')}, default: {data.get('default_branch', 'main')})")
+            logger.info(
+                f"✓ {repo} ({data.get('visibility', 'unknown')}, default: {data.get('default_branch', 'main')})"
+            )
 
         except Exception as e:
             logger.error(f"✗ Error accessing {repo}: {e}")
@@ -536,10 +548,10 @@ def validate_users(session: requests.Session, users: List[str]) -> Dict[str, Use
             data = r.json()
 
             user_info[user] = UserInfo(
-                login=data['login'],  # Use the canonical case from GitHub
-                id=data['id'],
-                type=data.get('type', 'User'),
-                exists=True
+                login=data["login"],  # Use the canonical case from GitHub
+                id=data["id"],
+                type=data.get("type", "User"),
+                exists=True,
             )
 
             logger.info(f"✓ {data['login']} (ID: {data['id']}, Type: {data.get('type', 'User')})")
@@ -554,8 +566,6 @@ def validate_users(session: requests.Session, users: List[str]) -> Dict[str, Use
 
     logger.info(f"✓ All {len(users)} users found")
     return user_info
-
-
 
 
 def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
@@ -576,11 +586,13 @@ def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
     try:
         # Setup session
         session = requests.Session()
-        session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "PR-Metrics-Collector/1.0"
-        })
+        session.headers.update(
+            {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "PR-Metrics-Collector/1.0",
+            }
+        )
 
         # 1. Validate authentication and scopes
         logger.info("\n1. Validating GitHub authentication...")
@@ -600,8 +612,8 @@ def dry_run_validation(inputs: ValidatedInputs, token: str) -> bool:
         test_user = inputs.users[0]
 
         # Test search with a very limited date range
-        test_start = inputs.start_date.strftime('%Y-%m-%d')
-        test_end = (inputs.start_date.replace(day=min(inputs.start_date.day + 1, 28))).strftime('%Y-%m-%d')
+        test_start = inputs.start_date.strftime("%Y-%m-%d")
+        test_end = (inputs.start_date.replace(day=min(inputs.start_date.day + 1, 28))).strftime("%Y-%m-%d")
 
         search_query = f"repo:{test_repo} is:pr author:{test_user} created:{test_start}..{test_end}"
         search_url = "https://api.github.com/search/issues"
@@ -669,7 +681,6 @@ class GitHubAPI:
     }
     """
 
-
     def __init__(self, token: str, users: List[str]):
         self.base_url = "https://api.github.com"
         self.users = users
@@ -678,11 +689,13 @@ class GitHubAPI:
         # GraphQL setup and caches
         self.graphql_url = "https://api.github.com/graphql"
         self.graphql_session = requests.Session()
-        self.graphql_session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v4+json",
-            "User-Agent": "PR-Metrics-Collector/1.0"
-        })
+        self.graphql_session.headers.update(
+            {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v4+json",
+                "User-Agent": "PR-Metrics-Collector/1.0",
+            }
+        )
         # Cache GraphQL pages per (repo,start,end)
         self.repo_prs_cache: Dict[str, List[dict]] = {}
         # Cache details and review data per (repo, number)
@@ -691,11 +704,13 @@ class GitHubAPI:
 
         # Setup session with robust headers
         self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "PR-Metrics-Collector/1.0"
-        })
+        self.session.headers.update(
+            {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "PR-Metrics-Collector/1.0",
+            }
+        )
 
     def normalize_username(self, username: str) -> str:
         """Normalize username to lowercase for consistent comparison"""
@@ -715,7 +730,9 @@ class GitHubAPI:
             # gh_request already handled retries, so if we get a bad status code here,
             # it means all retries were exhausted
             if response.status_code >= 400:
-                logger.error(f"Request to {url} failed with status {response.status_code} after retries: {response.text[:200]}")
+                logger.error(
+                    f"Request to {url} failed with status {response.status_code} after retries: {response.text[:200]}"
+                )
                 return None
 
             data = response.json()
@@ -734,14 +751,20 @@ class GitHubAPI:
         backoff = 1.0
         for attempt in range(1, max_tries + 1):
             try:
-                repo_info = f"{variables.get('owner', 'unknown')}/{variables.get('repo', 'unknown')}" if variables else "unknown"
+                repo_info = (
+                    f"{variables.get('owner', 'unknown')}/{variables.get('repo', 'unknown')}"
+                    if variables
+                    else "unknown"
+                )
                 logger.debug(f"Executing GraphQL query for {repo_info} (attempt {attempt}) with variables: {variables}")
 
                 # Add small delay to avoid overwhelming GitHub's servers (like ci_pr_performance_metrics.py)
                 if attempt == 1:  # Only on first attempt, retries have their own backoff
                     time.sleep(0.5)
 
-                r = self.graphql_session.post(self.graphql_url, json={"query": query, "variables": variables}, timeout=60)
+                r = self.graphql_session.post(
+                    self.graphql_url, json={"query": query, "variables": variables}, timeout=60
+                )
 
                 # Handle rate limiting / server errors similar to REST
                 if r.status_code in (429, 502, 503, 504):
@@ -761,14 +784,19 @@ class GitHubAPI:
                         if r.text:
                             error_details = f" - {r.text[:200]}"
 
-                    logger.warning(f"GraphQL {r.status_code} for {repo_info}{error_details}. Waiting {sleep_time:.1f}s before retry")
+                    logger.warning(
+                        f"GraphQL {r.status_code} for {repo_info}{error_details}. Waiting {sleep_time:.1f}s before retry"
+                    )
                     time.sleep(sleep_time)
                     backoff = min(backoff * 2, 60)
                     continue
 
                 if r.status_code == 403:
                     text = r.text.lower()
-                    if any(term in text for term in ["abuse", "secondary rate limit", "rate limit", "api rate limit exceeded"]):
+                    if any(
+                        term in text
+                        for term in ["abuse", "secondary rate limit", "rate limit", "api rate limit exceeded"]
+                    ):
                         retry_after = r.headers.get("Retry-After")
                         sleep_time = float(retry_after) if retry_after else backoff + random.uniform(0, 1)
 
@@ -781,7 +809,9 @@ class GitHubAPI:
                         except (ValueError, KeyError):
                             error_details = f" - {r.text[:200]}"
 
-                        logger.warning(f"GraphQL rate limit (403) for {repo_info}{error_details}. Waiting {sleep_time:.1f}s")
+                        logger.warning(
+                            f"GraphQL rate limit (403) for {repo_info}{error_details}. Waiting {sleep_time:.1f}s"
+                        )
                         time.sleep(sleep_time)
                         backoff = min(backoff * 2, 60)
                         continue
@@ -800,14 +830,14 @@ class GitHubAPI:
                 data = r.json()
                 if "errors" in data:
                     # Some errors are transient, others are permanent
-                    errors = data['errors']
+                    errors = data["errors"]
                     error_messages = []
                     has_transient_error = False
 
                     for error in errors:
-                        error_msg = error.get('message', 'Unknown error')
-                        error_type = error.get('type', 'Unknown')
-                        error_path = error.get('path', [])
+                        error_msg = error.get("message", "Unknown error")
+                        error_type = error.get("type", "Unknown")
+                        error_path = error.get("path", [])
 
                         detailed_msg = f"Type: {error_type}, Message: {error_msg}"
                         if error_path:
@@ -815,7 +845,9 @@ class GitHubAPI:
                         error_messages.append(detailed_msg)
 
                         # Check if this looks like a transient error
-                        if any(term in error_msg.lower() for term in ['timeout', 'server error', 'temporarily unavailable']):
+                        if any(
+                            term in error_msg.lower() for term in ["timeout", "server error", "temporarily unavailable"]
+                        ):
                             has_transient_error = True
 
                     logger.warning(f"GraphQL returned {len(errors)} error(s):")
@@ -865,7 +897,9 @@ class GitHubAPI:
         until_iso = f"{end_date}T23:59:59Z"
 
         # Skip GraphQL due to inefficient date filtering, use Search API directly
-        logger.warning(f"GraphQL date filtering is inefficient for {repo}. Using Search API directly for better performance.")
+        logger.warning(
+            f"GraphQL date filtering is inefficient for {repo}. Using Search API directly for better performance."
+        )
         fallback_nodes = self._rest_search_prs(repo, since_iso, until_iso)
         self.repo_prs_cache[cache_key] = fallback_nodes
         return fallback_nodes
@@ -880,7 +914,9 @@ class GitHubAPI:
         # ------------------------------------------------------------------------------------------------
         # return self._fetch_repo_prs_graphql_paginated(repo, owner, name, since_iso, until_iso)
 
-    def _fetch_repo_prs_graphql_paginated(self, repo: str, owner: str, name: str, since_iso: str, until_iso: str) -> List[dict]:
+    def _fetch_repo_prs_graphql_paginated(
+        self, repo: str, owner: str, name: str, since_iso: str, until_iso: str
+    ) -> List[dict]:
         """GraphQL pagination alternative (not enabled by default).
 
         This exists for reference; REST Search is preferred for this use case because it filters
@@ -923,30 +959,36 @@ class GitHubAPI:
                 review_comments: List[dict] = []
                 for t in (node.get("reviewThreads", {}) or {}).get("nodes", []) or []:
                     for c in (t.get("comments", {}) or {}).get("nodes", []) or []:
-                        review_comments.append({
-                            "created_at": c.get("createdAt"),
-                            "user": {"login": (c.get("author") or {}).get("login", "")},
-                            "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
-                        })
+                        review_comments.append(
+                            {
+                                "created_at": c.get("createdAt"),
+                                "user": {"login": (c.get("author") or {}).get("login", "")},
+                                "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
+                            }
+                        )
 
                 # Issue comments
                 issue_comments: List[dict] = []
                 for c in (node.get("comments", {}) or {}).get("nodes", []) or []:
-                    issue_comments.append({
-                        "created_at": c.get("createdAt"),
-                        "user": {"login": (c.get("author") or {}).get("login", "")},
-                        "issue_url": f"https://api.github.com/repos/{repo}/issues/{number}",
-                    })
+                    issue_comments.append(
+                        {
+                            "created_at": c.get("createdAt"),
+                            "user": {"login": (c.get("author") or {}).get("login", "")},
+                            "issue_url": f"https://api.github.com/repos/{repo}/issues/{number}",
+                        }
+                    )
 
                 # Reviews
                 reviews: List[dict] = []
                 for rnode in (node.get("reviews", {}) or {}).get("nodes", []) or []:
-                    reviews.append({
-                        "state": rnode.get("state"),
-                        "submitted_at": rnode.get("submittedAt"),
-                        "user": {"login": (rnode.get("author") or {}).get("login", "")},
-                        "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
-                    })
+                    reviews.append(
+                        {
+                            "state": rnode.get("state"),
+                            "submitted_at": rnode.get("submittedAt"),
+                            "user": {"login": (rnode.get("author") or {}).get("login", "")},
+                            "pull_request_url": f"https://api.github.com/repos/{repo}/pulls/{number}",
+                        }
+                    )
 
                 # Review requests via timeline items
                 review_requests: List[dict] = []
@@ -955,11 +997,13 @@ class GitHubAPI:
                     actor_login = (ev.get("actor") or {}).get("login")
                     requested_reviewer_login = (ev.get("requestedReviewer") or {}).get("login")
                     if created_at and requested_reviewer_login:
-                        review_requests.append({
-                            "created_at": created_at,
-                            "actor": {"login": actor_login},
-                            "requested_reviewer": {"login": requested_reviewer_login},
-                        })
+                        review_requests.append(
+                            {
+                                "created_at": created_at,
+                                "actor": {"login": actor_login},
+                                "requested_reviewer": {"login": requested_reviewer_login},
+                            }
+                        )
 
                 # Hydrate reviews cache
                 self.pr_reviews_cache[key] = {
@@ -1003,18 +1047,20 @@ class GitHubAPI:
                 # item has number, repository_url, pull_request field when it's a PR
                 if "pull_request" not in it:
                     continue
-                items.append({
-                    "__fallback": True,
-                    "number": it.get("number"),
-                    # Provide a minimal author field best-effort; details will be fetched later
-                    "author": {"login": (it.get("user", {}) or {}).get("login", "")},
-                    # placeholders to satisfy downstream optional access
-                    "reviews": {"nodes": []},
-                    "participants": {"nodes": []},
-                    "comments": {"nodes": []},
-                    "reviewThreads": {"nodes": []},
-                    "timelineItems": {"nodes": []},
-                })
+                items.append(
+                    {
+                        "__fallback": True,
+                        "number": it.get("number"),
+                        # Provide a minimal author field best-effort; details will be fetched later
+                        "author": {"login": (it.get("user", {}) or {}).get("login", "")},
+                        # placeholders to satisfy downstream optional access
+                        "reviews": {"nodes": []},
+                        "participants": {"nodes": []},
+                        "comments": {"nodes": []},
+                        "reviewThreads": {"nodes": []},
+                        "timelineItems": {"nodes": []},
+                    }
+                )
             # Pagination heuristic: stop when less than per_page returned
             if len(batch) < 100:
                 break
@@ -1049,14 +1095,16 @@ class GitHubAPI:
             # Convert to our expected format
             for item in batch:
                 if "pull_request" in item:
-                    all_prs.append({
-                        "number": item.get("number"),
-                        "title": item.get("title", ""),
-                        "user": {"login": item.get("user", {}).get("login", "")},
-                        "created_at": item.get("created_at"),
-                        "updated_at": item.get("updated_at"),
-                        # We'll need to fetch details later for full data
-                    })
+                    all_prs.append(
+                        {
+                            "number": item.get("number"),
+                            "title": item.get("title", ""),
+                            "user": {"login": item.get("user", {}).get("login", "")},
+                            "created_at": item.get("created_at"),
+                            "updated_at": item.get("updated_at"),
+                            # We'll need to fetch details later for full data
+                        }
+                    )
 
             logger.info(f"Fetched page {page}: {len(batch)} PRs")
             if len(batch) < 100:
@@ -1071,7 +1119,9 @@ class GitHubAPI:
         pr_author = pr.get("user", {}).get("login", "")
         return self.normalize_username(pr_author) == self.normalize_username(username)
 
-    def _search_pr_numbers_for_user(self, repo: str, start_date: str, end_date: str, username: str, qualifier: str) -> Set[int]:
+    def _search_pr_numbers_for_user(
+        self, repo: str, start_date: str, end_date: str, username: str, qualifier: str
+    ) -> Set[int]:
         """Use Search API to get PR numbers for a user involvement type (author/commenter/reviewed-by)."""
         q = f"repo:{repo} is:pr is:merged merged:{start_date}..{end_date} {qualifier}:{username}"
         url = f"{self.base_url}/search/issues"
@@ -1433,7 +1483,9 @@ class PRMetricsWriter(MetricsWriter):
                         logger.debug(f"    PR count: {count}")
                         logger.debug(f"    Average: {average}")
                         logger.debug("    Individual PRs:")
-                        for repo, number, hours, created_at, merged_at in sorted(metrics.pr_details, key=lambda x: x[2], reverse=True):
+                        for repo, number, hours, created_at, merged_at in sorted(
+                            metrics.pr_details, key=lambda x: x[2], reverse=True
+                        ):
                             logger.debug(f"      {repo} #{number}: {hours:.2f} hours")
                             logger.debug(f"        Created: {created_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                             logger.debug(f"        Merged:  {merged_at.strftime('%Y-%m-%d %H:%M:%S %Z')}")
@@ -1588,7 +1640,11 @@ class PRMetricsCollector:
                     details = self.api.get_pr_details(repo, pr["number"])
                     if details:
                         created_at = datetime.fromisoformat(details["created_at"].replace("Z", "+00:00"))
-                        merged_at = datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00")) if details.get("merged_at") else None
+                        merged_at = (
+                            datetime.fromisoformat(details["merged_at"].replace("Z", "+00:00"))
+                            if details.get("merged_at")
+                            else None
+                        )
 
                         if not merged_at:
                             continue
@@ -1605,7 +1661,7 @@ class PRMetricsCollector:
 
                             # 1) Prefer earliest human review request (actor is the requester)
                             for req in review_requests or []:
-                                actor_login = ((req.get("actor") or {}).get("login") or "")
+                                actor_login = (req.get("actor") or {}).get("login") or ""
                                 if self.api.normalize_username(actor_login) in ignored_accounts_norm:
                                     continue
                                 created = req.get("created_at")
@@ -1616,9 +1672,9 @@ class PRMetricsCollector:
 
                             # 2) Fallback: earliest human review submission (reviewer is the author)
                             if earliest_human_signal is None:
-                                for r in (review_data.get("reviews") or []):
+                                for r in review_data.get("reviews") or []:
                                     submitted = r.get("submitted_at")
-                                    reviewer_login = ((r.get("user") or {}).get("login") or "")
+                                    reviewer_login = (r.get("user") or {}).get("login") or ""
                                     if not submitted:
                                         continue
                                     if self.api.normalize_username(reviewer_login) in ignored_accounts_norm:
@@ -1633,9 +1689,7 @@ class PRMetricsCollector:
                                     f"PR #{pr['number']} in {repo}: Using first human review timestamp {ready_for_review_at}"
                                 )
                             else:
-                                logger.debug(
-                                    f"PR #{pr['number']} in {repo}: No human review events; using created_at"
-                                )
+                                logger.debug(f"PR #{pr['number']} in {repo}: No human review events; using created_at")
                         except Exception as exc:  # pylint: disable=broad-except
                             logger.warning(
                                 f"PR #{pr['number']} in {repo}: Failed to fetch/parse review data ({exc}); using created_at"
@@ -1971,25 +2025,19 @@ Examples:
 
   # Dry run validation only
   python3 developer_activity_insight.py --owner myorg --repos "repo1" --users "user1" --date_start "2024-01-01" --date_end "2024-12-31" --dry-run
-        """
+        """,
     )
 
-    parser.add_argument("--owner", required=True,
-                       help="GitHub organization or user that owns repositories")
-    parser.add_argument("--repos", required=True,
-                       help="Comma-separated list of repositories (can be just names if same owner)")
-    parser.add_argument("--users", required=True,
-                       help="Comma-separated list of GitHub usernames to analyze")
-    parser.add_argument("--date_start", required=True,
-                       help="Start date in YYYY-MM-DD format")
-    parser.add_argument("--date_end", required=True,
-                       help="End date in YYYY-MM-DD format")
-    parser.add_argument("--output", default="pr_metrics.csv",
-                       help="Output CSV file name (default: pr_metrics.csv)")
-    parser.add_argument("--debug", action="store_true",
-                       help="Enable debug logging")
-    parser.add_argument("--dry-run", action="store_true",
-                       help="Validate inputs and setup without collecting data")
+    parser.add_argument("--owner", required=True, help="GitHub organization or user that owns repositories")
+    parser.add_argument(
+        "--repos", required=True, help="Comma-separated list of repositories (can be just names if same owner)"
+    )
+    parser.add_argument("--users", required=True, help="Comma-separated list of GitHub usernames to analyze")
+    parser.add_argument("--date_start", required=True, help="Start date in YYYY-MM-DD format")
+    parser.add_argument("--date_end", required=True, help="End date in YYYY-MM-DD format")
+    parser.add_argument("--output", default="pr_metrics.csv", help="Output CSV file name (default: pr_metrics.csv)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--dry-run", action="store_true", help="Validate inputs and setup without collecting data")
 
     try:
         args = parser.parse_args()
@@ -1997,7 +2045,7 @@ Examples:
         # Set logging level
         if args.debug:
             logger.setLevel(logging.DEBUG)
-            logging.getLogger('requests').setLevel(logging.DEBUG)
+            logging.getLogger("requests").setLevel(logging.DEBUG)
 
         # Validate and normalize inputs
         try:
@@ -2034,9 +2082,9 @@ Examples:
 
         # Collect PR data
         pr_collection_start = datetime.now()
-        pr_data = collector.collect_pr_data(inputs.repos, inputs.users,
-                                           inputs.start_date.strftime('%Y-%m-%d'),
-                                           inputs.end_date.strftime('%Y-%m-%d'))
+        pr_data = collector.collect_pr_data(
+            inputs.repos, inputs.users, inputs.start_date.strftime("%Y-%m-%d"), inputs.end_date.strftime("%Y-%m-%d")
+        )
         pr_collection_time = datetime.now() - pr_collection_start
 
         # Process metrics
@@ -2081,8 +2129,9 @@ Examples:
         sys.exit(1)
     except Exception as e:
         logger.error(f"❌ Unexpected error: {e}")
-        if hasattr(args, 'debug') and args.debug:
+        if hasattr(args, "debug") and args.debug:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

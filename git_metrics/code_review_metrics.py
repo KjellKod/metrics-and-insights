@@ -3,6 +3,7 @@ import argparse
 import csv
 import os
 import re
+import sys
 from datetime import datetime
 import requests
 from dotenv import load_dotenv
@@ -50,6 +51,7 @@ def validate_repo_format(repo):
         raise ValueError("Repository contains invalid characters or path traversal attempts.")
 
     return repo
+
 
 # ========== FETCH PULL REQUESTS ========== #
 def fetch_pull_requests(repo, state="closed", per_page=100):
