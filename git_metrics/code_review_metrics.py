@@ -52,7 +52,6 @@ def validate_repo_format(repo):
 
     return repo
 
-
 # ========== FETCH PULL REQUESTS ========== #
 def fetch_pull_requests(repo, state="closed", per_page=100):
     """Fetch all pull requests with pagination."""
