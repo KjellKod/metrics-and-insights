@@ -51,7 +51,21 @@ def print_skip_issue(issue, team, month_display, reason):
 
 
 def business_time_spent_in_seconds(start, end):
-    """extract only the time spent during business hours from a jira time range -- only count 8h"""
+    """Extract only the time spent during business hours from a jira time range -- only count 8h per weekday.
+
+    Important: This function measures elapsed time capped at 8 hours per weekday (Mon-Fri).
+    It does NOT track specific business hours (e.g., 9am-5pm).
+
+    When advancing to the next day (e.g., skipping a weekend), the time resets to midnight (00:00).
+    Example: Start Sunday 9am, End Monday 2pm → counts from Monday 00:00 to 14:00 = 8 hours (capped).
+
+    Args:
+        start: datetime object for the start time
+        end: datetime object for the end time
+
+    Returns:
+        int: Total business seconds (capped at 8 hours per weekday)
+    """
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
     seconds_in_workday = 8 * 60 * 60  # 8 hours * 60 minutes * 60 seconds
@@ -71,6 +85,7 @@ def business_time_spent_in_seconds(start, end):
                 total_business_seconds += min(remaining_time_on_last_day.total_seconds(), seconds_in_workday)
                 break
         else:
+            # Skip weekend: advance to next day starting at midnight
             current += timedelta(days=1)
             current = current.replace(hour=0, minute=0)
 
