@@ -678,7 +678,7 @@ def extract_status_timestamps(issue):
 def interpret_status_timestamps(status_timestamps):
     # Interpret the status change timestamps to determine the status timestamps that is of value
     # code review --> the FIRST code review date
-    # completion   --> the EARLIEST occurrence among configured completion statuses
+    # completion   --> the MOST RECENT occurrence among configured completion statuses
     code_review_statuses = get_code_review_statuses()
     extracted_statuses = {
         JiraStatus.CODE_REVIEW.value: None,
@@ -695,26 +695,27 @@ def interpret_status_timestamps(status_timestamps):
             # we only check for code review for now. We might want to change this later.
             break
 
-    # Determine the earliest completion status based on configuration
+    # Determine the MOST RECENT completion status based on configuration
     completion_statuses = get_completion_statuses()
-    earliest_completion_timestamp = None
-    earliest_completion_name = None
+    most_recent_completion_timestamp = None
+    most_recent_completion_name = None
 
-    # status_timestamps is most-recent-first; iterate reversed to get oldest-first
-    for entry in reversed(status_timestamps):
+    # status_timestamps is most-recent-first; iterate forward to get most-recent-first
+    # DO NOT reverse - we want the most recent completion, not the earliest
+    for entry in status_timestamps:
         status = entry["status"].lower()
         timestamp = entry["timestamp"]
         if status in completion_statuses:
-            earliest_completion_timestamp = timestamp
-            earliest_completion_name = status
-            break
+            most_recent_completion_timestamp = timestamp
+            most_recent_completion_name = status
+            break  # Break on first match which is the most recent
 
-    # For compatibility, set both RELEASED and DONE to the earliest completion timestamp
-    if earliest_completion_timestamp:
-        extracted_statuses[JiraStatus.RELEASED.value] = earliest_completion_timestamp
-        extracted_statuses[JiraStatus.DONE.value] = earliest_completion_timestamp
+    # For compatibility, set both RELEASED and DONE to the most recent completion timestamp
+    if most_recent_completion_timestamp:
+        extracted_statuses[JiraStatus.RELEASED.value] = most_recent_completion_timestamp
+        extracted_statuses[JiraStatus.DONE.value] = most_recent_completion_timestamp
         verbose_print(
-            f"Earliest completion status detected: '{earliest_completion_name}' at {earliest_completion_timestamp}"
+            f"Most recent completion status detected: '{most_recent_completion_name}' at {most_recent_completion_timestamp}"
         )
 
     return extracted_statuses
