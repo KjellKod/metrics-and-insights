@@ -17,6 +17,8 @@ from jira_utils import (
     JiraStatus,
     print_env_variables,
     verbose_print,
+    get_completion_statuses,
+    get_code_review_statuses,
 )
 
 HOURS_TO_DAYS = 8
@@ -29,6 +31,23 @@ def validate_issue(issue):
         print(f"Unexpected issue format: {type(issue)}  -- ignoring")
         return False
     return True
+
+
+def print_skip_issue(issue, team, month_display, reason):
+    """Print a standardized skip line with helpful context."""
+    issue_id = issue.key
+    summary = getattr(issue.fields, "summary", None)
+    assignee_name = None
+    if getattr(issue.fields, "assignee", None):
+        assignee_name = getattr(issue.fields.assignee, "displayName", None)
+
+    summary_str = summary if summary else "no summary"
+    assignee_str = assignee_name if assignee_name else "unassigned"
+
+    print(
+        f"[SKIP] {issue_id}: <{assignee_str}>, <{summary_str}>  — "
+        f"Team: {team}, Month: {month_display} — No cycle time ({reason})"
+    )
 
 
 def business_time_spent_in_seconds(start, end):
@@ -152,7 +171,7 @@ def calculate_monthly_cycle_time(projects, start_date, end_date):
             cycle_times_per_month["all"][month_key].append((cycle_time, issue_id))
         else:
             month_display = month_key if month_key else "unknown"
-            print(f"[SKIP] {issue_id} — Team: {team}, Month: {month_display} — No cycle time ({reason})")
+            print_skip_issue(issue, team, month_display, reason)
     return cycle_times_per_month
 
 
@@ -234,6 +253,17 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pyli
 def main():
     args = parse_common_arguments()
     print_env_variables()
+    # Print measurement configuration (start)
+    review_statuses = sorted(get_code_review_statuses())
+    completion_statuses = get_completion_statuses()
+    print(
+        "Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration)."
+    )
+    print(f"Code review statuses: {review_statuses}")
+    print(
+        "Completion statuses: "
+        f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)"
+    )
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
@@ -241,6 +271,15 @@ def main():
     print(f"Projects: {projects}")
     cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
+    # Print measurement configuration (end)
+    print(
+        "Completed cycle time measurement using: FIRST code review status and EARLIEST completion status."
+    )
+    print(f"Code review statuses: {review_statuses}")
+    print(
+        "Completion statuses: "
+        f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)"
+    )
 
 
 if __name__ == "__main__":
