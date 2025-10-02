@@ -17,6 +17,8 @@ from jira_utils import (
     JiraStatus,
     print_env_variables,
     verbose_print,
+    get_completion_statuses,
+    get_code_review_statuses,
 )
 
 HOURS_TO_DAYS = 8
@@ -31,8 +33,39 @@ def validate_issue(issue):
     return True
 
 
+def print_skip_issue(issue, team, month_display, reason):
+    """Print a standardized skip line with helpful context."""
+    issue_id = issue.key
+    summary = getattr(issue.fields, "summary", None)
+    assignee_name = None
+    if getattr(issue.fields, "assignee", None):
+        assignee_name = getattr(issue.fields.assignee, "displayName", None)
+
+    summary_str = summary if summary else "no summary"
+    assignee_str = assignee_name if assignee_name else "unassigned"
+
+    print(
+        f"[SKIP] {issue_id}: <{assignee_str}>, <{summary_str}>  — "
+        f"Team: {team}, Month: {month_display} — No cycle time ({reason})"
+    )
+
+
 def business_time_spent_in_seconds(start, end):
-    """extract only the time spent during business hours from a jira time range -- only count 8h"""
+    """Extract only the time spent during business hours from a jira time range -- only count 8h per weekday.
+
+    Important: This function measures elapsed time capped at 8 hours per weekday (Mon-Fri).
+    It does NOT track specific business hours (e.g., 9am-5pm).
+
+    When advancing to the next day (e.g., skipping a weekend), the time resets to midnight (00:00).
+    Example: Start Sunday 9am, End Monday 2pm → counts from Monday 00:00 to 14:00 = 8 hours (capped).
+
+    Args:
+        start: datetime object for the start time
+        end: datetime object for the end time
+
+    Returns:
+        int: Total business seconds (capped at 8 hours per weekday)
+    """
     weekdays = [0, 1, 2, 3, 4]  # Monday to Friday
     total_business_seconds = 0
     seconds_in_workday = 8 * 60 * 60  # 8 hours * 60 minutes * 60 seconds
@@ -52,6 +85,7 @@ def business_time_spent_in_seconds(start, end):
                 total_business_seconds += min(remaining_time_on_last_day.total_seconds(), seconds_in_workday)
                 break
         else:
+            # Skip weekend: advance to next day starting at midnight
             current += timedelta(days=1)
             current = current.replace(hour=0, minute=0)
 
@@ -152,7 +186,7 @@ def calculate_monthly_cycle_time(projects, start_date, end_date):
             cycle_times_per_month["all"][month_key].append((cycle_time, issue_id))
         else:
             month_display = month_key if month_key else "unknown"
-            print(f"[SKIP] {issue_id} — Team: {team}, Month: {month_display} — No cycle time ({reason})")
+            print_skip_issue(issue, team, month_display, reason)
     return cycle_times_per_month
 
 
@@ -234,6 +268,12 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pyli
 def main():
     args = parse_common_arguments()
     print_env_variables()
+    # Print measurement configuration (start)
+    review_statuses = sorted(get_code_review_statuses())
+    completion_statuses = get_completion_statuses()
+    print("Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration).")
+    print(f"Code review statuses: {review_statuses}")
+    print(f"Completion statuses: {completion_statuses} (override via environment variable COMPLETION_STATUSES)")
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
@@ -241,6 +281,10 @@ def main():
     print(f"Projects: {projects}")
     cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
+    # Print measurement configuration (end)
+    print("Completed cycle time measurement using: FIRST code review status and EARLIEST completion status.")
+    print(f"Code review statuses: {review_statuses}")
+    print("Completion statuses: " f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)")
 
 
 if __name__ == "__main__":

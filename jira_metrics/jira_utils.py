@@ -51,6 +51,36 @@ def parse_common_arguments(parser=None):
     return args
 
 
+def get_completion_statuses():
+    """
+    Return the list of configured completion statuses used to determine the end of cycle time.
+
+    Defaults to ["released", "done"]. Teams can override via the COMPLETION_STATUSES
+    environment variable with a comma-separated list, e.g. "closed,done,to release,released".
+    """
+    completion_statuses_str = os.getenv("COMPLETION_STATUSES", "released,done")
+    completion_statuses = [s.strip().lower() for s in completion_statuses_str.split(",") if s.strip()]
+    verbose_print(f"Using completion statuses: {completion_statuses}")
+    return completion_statuses
+
+
+def get_code_review_statuses():
+    """
+    Return the set of statuses considered as entering code review.
+
+    Currently static, but centralized so callers can print and so we can
+    adjust in one place later if needed.
+    """
+    return {
+        "code review",
+        "in code review",
+        "to review",
+        "to code review",
+        "in review",
+        "in design review",
+    }
+
+
 def get_jira_instance():
     """
     Create and verify the jira instance
@@ -647,15 +677,9 @@ def extract_status_timestamps(issue):
 
 def interpret_status_timestamps(status_timestamps):
     # Interpret the status change timestamps to determine the status timestamps that is of value
-    # example: released --> the LAST release date, code review --> the FIRST code review date
-    code_review_statuses = {
-        "code review",
-        "in code review",
-        "to review",
-        "to code review",
-        "in review",
-        "in design review",
-    }
+    # code review --> the FIRST code review date
+    # completion   --> the MOST RECENT occurrence among configured completion statuses
+    code_review_statuses = get_code_review_statuses()
     extracted_statuses = {
         JiraStatus.CODE_REVIEW.value: None,
         JiraStatus.RELEASED.value: None,
@@ -668,18 +692,30 @@ def interpret_status_timestamps(status_timestamps):
         timestamp = entry["timestamp"]
         if status.lower() in code_review_statuses and not extracted_statuses[JiraStatus.CODE_REVIEW.value]:
             extracted_statuses[JiraStatus.CODE_REVIEW.value] = timestamp
-            # we might want to change this later, but for now we only check for code review
+            # we only check for code review for now. We might want to change this later.
             break
 
-    # look at the histories in reverse-chronological order to find the LAST time it was released.
+    # Determine the MOST RECENT completion status based on configuration
+    completion_statuses = get_completion_statuses()
+    most_recent_completion_timestamp = None
+    most_recent_completion_name = None
+
+    # status_timestamps is most-recent-first; iterate forward to get most-recent-first
+    # DO NOT reverse - we want the most recent completion, not the earliest
     for entry in status_timestamps:
-        status = entry["status"]
+        status = entry["status"].lower()
         timestamp = entry["timestamp"]
-        if status.lower() == "released" and not extracted_statuses[JiraStatus.RELEASED.value]:
-            extracted_statuses[JiraStatus.RELEASED.value] = timestamp
-            break
-        if status.lower() == "done" and not extracted_statuses[JiraStatus.DONE.value]:
-            extracted_statuses[JiraStatus.DONE.value] = timestamp
-            break
+        if status in completion_statuses:
+            most_recent_completion_timestamp = timestamp
+            most_recent_completion_name = status
+            break  # Break on first match which is the most recent
+
+    # For compatibility, set both RELEASED and DONE to the most recent completion timestamp
+    if most_recent_completion_timestamp:
+        extracted_statuses[JiraStatus.RELEASED.value] = most_recent_completion_timestamp
+        extracted_statuses[JiraStatus.DONE.value] = most_recent_completion_timestamp
+        verbose_print(
+            f"Most recent completion status detected: '{most_recent_completion_name}' at {most_recent_completion_timestamp}"
+        )
 
     return extracted_statuses

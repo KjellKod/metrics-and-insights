@@ -103,6 +103,20 @@ Scripts for extracting and analyzing Jira metrics:
 - `released_tickets.py`: Track monthly released ticket counts
 - `jira_utils.py`: Helper utility module
 
+#### Cycle Time configuration
+`cycle_time.py` measures time between the first entry into a code review state and the earliest
+completion state. Completion states are configurable via the environment variable `COMPLETION_STATUSES`.
+
+Defaults:
+- Code review states: `{"code review", "in code review", "to review", "to code review", "in review", "in design review"}`
+- Completion states: `["released", "done"]`
+
+Override completion states (example for mobile team):
+```bash
+export COMPLETION_STATUSES="closed,done,to release,released"
+```
+The script prints the active code review and completion status sets at the start and end of execution.
+
 ## Environment Variables
 
 Create an `.env` file in the root directory with the following variables:

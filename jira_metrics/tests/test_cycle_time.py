@@ -10,7 +10,7 @@ from jira.resources import Issue
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from cycle_time import process_changelog
+from cycle_time import process_changelog, business_time_spent_in_seconds
 
 
 # Define the PST timezone
@@ -114,6 +114,169 @@ class TestProcessChangelog(unittest.TestCase):
         expected_released_timestamp = datetime.strptime("2024-01-05T15:00:00.000-0800", "%Y-%m-%dT%H:%M:%S.%f%z")
         self.assertEqual(code_review_timestamp, expected_code_review_timestamp)
         self.assertEqual(released_timestamp, expected_released_timestamp)
+
+
+class TestBusinessTimeCalculations(unittest.TestCase):
+    """Tests for business_time_spent_in_seconds function.
+
+    This function calculates time spent during business hours (8 hours per weekday).
+    Key behaviors:
+    - Only counts Monday-Friday
+    - Caps at 8 hours (28800 seconds) per day
+    - Handles multi-day spans
+    - Excludes weekends
+    """
+
+    def test_same_day_within_8_hours(self):
+        """Test calculation for same day, within 8 hour cap."""
+        # Monday Jan 2, 2023: 9am to 1pm = 4 hours
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 2, 13, 0)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 4 * 3600  # 4 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_same_day_exceeds_8_hours(self):
+        """Test that same day duration is capped at 8 hours."""
+        # Monday Jan 2, 2023: 9am to 11pm = should cap at 8 hours
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 2, 23, 0)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 8 * 3600  # 8 hours (capped)
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_two_consecutive_weekdays(self):
+        """Test calculation spanning two consecutive weekdays."""
+        # Monday Jan 2, 2023 2pm to Tuesday Jan 3, 2023 10am
+        # Monday: 2pm to end of day = min(10 hours, 8) = 8 hours
+        # Tuesday: start to 10am = min(10 hours, 8) = 8 hours
+        # Total = 16 hours
+        start = datetime(2023, 1, 2, 14, 0)  # Monday 2pm
+        end = datetime(2023, 1, 3, 10, 0)  # Tuesday 10am
+        result = business_time_spent_in_seconds(start, end)
+        expected = 16 * 3600  # 16 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_spans_weekend(self):
+        """Test that weekends are excluded from calculation."""
+        # Friday Jan 6, 2023 2pm to Monday Jan 9, 2023 10am
+        # Friday: 2pm to end of day = min(10 hours, 8) = 8 hours
+        # Saturday: 0 hours (weekend)
+        # Sunday: 0 hours (weekend)
+        # Monday: start to 10am = min(10 hours, 8) = 8 hours
+        # Total = 16 hours
+        start = datetime(2023, 1, 6, 14, 0)  # Friday 2pm
+        end = datetime(2023, 1, 9, 10, 0)  # Monday 10am
+        result = business_time_spent_in_seconds(start, end)
+        expected = 16 * 3600  # 16 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_starts_on_saturday(self):
+        """Test that starting on Saturday only counts from Monday."""
+        # Saturday Jan 7, 2023 9am to Monday Jan 9, 2023 5pm
+        # Saturday: 0 hours (weekend)
+        # Sunday: 0 hours (weekend)
+        # Monday: start to 5pm = min(8 hours, 8) = 8 hours
+        start = datetime(2023, 1, 7, 9, 0)  # Saturday
+        end = datetime(2023, 1, 9, 17, 0)  # Monday
+        result = business_time_spent_in_seconds(start, end)
+        expected = 8 * 3600  # 8 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_starts_on_sunday(self):
+        """Test that starting on Sunday only counts from Monday at midnight."""
+        # Sunday Jan 8, 2023 9am to Monday Jan 9, 2023 2pm
+        # Sunday: 0 hours (weekend, skipped)
+        # Monday: midnight to 2pm = 14 hours, capped at 8 hours = 8 hours
+        start = datetime(2023, 1, 8, 9, 0)  # Sunday
+        end = datetime(2023, 1, 9, 14, 0)  # Monday
+        result = business_time_spent_in_seconds(start, end)
+        expected = 8 * 3600  # 8 hours (capped)
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_entire_weekend(self):
+        """Test that an entire weekend returns 0 hours."""
+        # Saturday Jan 7, 2023 9am to Sunday Jan 8, 2023 5pm
+        start = datetime(2023, 1, 7, 9, 0)  # Saturday
+        end = datetime(2023, 1, 8, 17, 0)  # Sunday
+        result = business_time_spent_in_seconds(start, end)
+        expected = 0  # No business hours on weekend
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_full_work_week(self):
+        """Test calculation for a full work week."""
+        # Monday Jan 2, 2023 9am to Friday Jan 6, 2023 5pm
+        # Each day capped at 8 hours = 5 days * 8 hours = 40 hours
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 6, 17, 0)  # Friday
+        result = business_time_spent_in_seconds(start, end)
+        expected = 40 * 3600  # 40 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_two_full_weeks(self):
+        """Test calculation spanning two weeks with weekends."""
+        # Monday Jan 2, 2023 to Friday Jan 13, 2023
+        # Week 1: Mon-Fri = 40 hours
+        # Weekend: 0 hours
+        # Week 2: Mon-Fri = 40 hours
+        # Total = 80 hours
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 13, 17, 0)  # Friday (next week)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 80 * 3600  # 80 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_very_short_duration(self):
+        """Test calculation for very short duration (less than 1 hour)."""
+        # Monday Jan 2, 2023: 9am to 9:30am = 30 minutes
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 2, 9, 30)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 30 * 60  # 30 minutes
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_start_equals_end(self):
+        """Test that same start and end time returns 0."""
+        # Monday Jan 2, 2023: 9am to 9am
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 2, 9, 0)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 0
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_end_of_day_boundary(self):
+        """Test calculation ending at day boundary."""
+        # Monday Jan 2, 2023: 9am to 11:59pm = should cap at 8 hours
+        start = datetime(2023, 1, 2, 9, 0)  # Monday
+        end = datetime(2023, 1, 2, 23, 59)
+        result = business_time_spent_in_seconds(start, end)
+        expected = 8 * 3600  # 8 hours (capped)
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_partial_first_day_full_second_day(self):
+        """Test with partial first day and full second day."""
+        # Monday Jan 2, 2023 2pm to Tuesday Jan 3, 2023 11pm
+        # Monday: 2pm to end of day = min(10 hours, 8) = 8 hours
+        # Tuesday: all day = 8 hours
+        # Total = 16 hours
+        start = datetime(2023, 1, 2, 14, 0)  # Monday 2pm
+        end = datetime(2023, 1, 3, 23, 0)  # Tuesday 11pm
+        result = business_time_spent_in_seconds(start, end)
+        expected = 16 * 3600  # 16 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+    def test_three_weekdays_in_a_row(self):
+        """Test calculation spanning three consecutive weekdays."""
+        # Monday Jan 2 3pm to Wednesday Jan 4 1pm
+        # Monday: 3pm to end = min(9 hours, 8) = 8 hours
+        # Tuesday: full day = 8 hours
+        # Wednesday: start to 1pm = min(1pm, 8) = 8 hours
+        # Total = 24 hours
+        start = datetime(2023, 1, 2, 15, 0)  # Monday 3pm
+        end = datetime(2023, 1, 4, 13, 0)  # Wednesday 1pm
+        result = business_time_spent_in_seconds(start, end)
+        expected = 24 * 3600  # 24 hours
+        self.assertEqual(result, expected, f"Expected {expected}, got {result}")
 
 
 if __name__ == "__main__":
