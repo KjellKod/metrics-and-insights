@@ -118,7 +118,7 @@ class TestProcessChangelog(unittest.TestCase):
 
 class TestBusinessTimeCalculations(unittest.TestCase):
     """Tests for business_time_spent_in_seconds function.
-    
+
     This function calculates time spent during business hours (8 hours per weekday).
     Key behaviors:
     - Only counts Monday-Friday

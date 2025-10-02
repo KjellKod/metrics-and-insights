@@ -256,14 +256,9 @@ def main():
     # Print measurement configuration (start)
     review_statuses = sorted(get_code_review_statuses())
     completion_statuses = get_completion_statuses()
-    print(
-        "Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration)."
-    )
+    print("Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration).")
     print(f"Code review statuses: {review_statuses}")
-    print(
-        "Completion statuses: "
-        f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)"
-    )
+    print("Completion statuses: " f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)")
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
@@ -272,14 +267,9 @@ def main():
     cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
     show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
     # Print measurement configuration (end)
-    print(
-        "Completed cycle time measurement using: FIRST code review status and EARLIEST completion status."
-    )
+    print("Completed cycle time measurement using: FIRST code review status and EARLIEST completion status.")
     print(f"Code review statuses: {review_statuses}")
-    print(
-        "Completion statuses: "
-        f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)"
-    )
+    print("Completion statuses: " f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)")
 
 
 if __name__ == "__main__":
