@@ -273,7 +273,7 @@ def main():
     completion_statuses = get_completion_statuses()
     print("Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration).")
     print(f"Code review statuses: {review_statuses}")
-    print("Completion statuses: " f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)")
+    print(f"Completion statuses: {completion_statuses} (override via environment variable COMPLETION_STATUSES)")
     current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
