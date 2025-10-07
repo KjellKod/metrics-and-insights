@@ -11,6 +11,27 @@ import requests
 
 load_dotenv()
 
+# ==============================================================================
+# CONFIGURABLE COMPLETION AND EXCLUDED STATUSES
+# ==============================================================================
+# By default, tickets are considered "done" when they reach "released" or "done" status.
+# You can customize which statuses count as completion by setting the COMPLETION_STATUSES
+# environment variable in your .env file.
+#
+# Example in .env:
+#   COMPLETION_STATUSES=released,done,to release,staged release
+#
+# This affects cycle time calculations, individual metrics, and all other scripts
+# that use get_completion_statuses() or interpret_status_timestamps().
+#
+# Additionally, you can exclude certain statuses (like "closed", "cancelled") that shouldn't
+# count as either Done (no credit to team) or Open (not open work):
+#
+#   EXCLUDED_STATUSES=closed,cancelled,duplicate
+#
+# Status names are case-insensitive and whitespace is trimmed.
+# ==============================================================================
+
 # Access the custom field IDs
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
 CUSTOM_FIELD_WORK_TYPE = os.getenv("CUSTOM_FIELD_WORK_TYPE")
@@ -18,6 +39,10 @@ CUSTOM_FIELD_STORYPOINTS = os.getenv("CUSTOM_FIELD_STORYPOINTS")
 
 # Global variable for verbosity
 VERBOSE = False
+
+# Cache for completion statuses to avoid repeated prints
+_COMPLETION_STATUSES_CACHE = None
+_EXCLUDED_STATUSES_CACHE = None
 
 
 def verbose_print(message):
@@ -57,11 +82,49 @@ def get_completion_statuses():
 
     Defaults to ["released", "done"]. Teams can override via the COMPLETION_STATUSES
     environment variable with a comma-separated list, e.g. "closed,done,to release,released".
+
+    Prints configuration only on first call to avoid repetition.
     """
+    global _COMPLETION_STATUSES_CACHE
+
+    # Return cached value if available (no print on subsequent calls)
+    if _COMPLETION_STATUSES_CACHE is not None:
+        return _COMPLETION_STATUSES_CACHE
+
+    # First call: parse, cache, and print
     completion_statuses_str = os.getenv("COMPLETION_STATUSES", "released,done")
     completion_statuses = [s.strip().lower() for s in completion_statuses_str.split(",") if s.strip()]
-    verbose_print(f"Using completion statuses: {completion_statuses}")
+    _COMPLETION_STATUSES_CACHE = completion_statuses
+
+    print(f"✓ Tickets will be considered DONE when status is: {completion_statuses}")
     return completion_statuses
+
+
+def get_excluded_statuses():
+    """
+    Return the list of statuses to exclude from metrics (neither Done nor Open).
+
+    These are tickets that shouldn't count toward completion (no credit to team)
+    but also shouldn't be counted as open work. Examples: "closed", "cancelled", "duplicate".
+
+    Defaults to ["closed"]. Teams can override via the EXCLUDED_STATUSES
+    environment variable with a comma-separated list, e.g. "closed,cancelled,duplicate".
+
+    Prints configuration only on first call to avoid repetition.
+    """
+    global _EXCLUDED_STATUSES_CACHE
+
+    # Return cached value if available (no print on subsequent calls)
+    if _EXCLUDED_STATUSES_CACHE is not None:
+        return _EXCLUDED_STATUSES_CACHE
+
+    # First call: parse, cache, and print
+    excluded_statuses_str = os.getenv("EXCLUDED_STATUSES", "closed")
+    excluded_statuses = [s.strip().lower() for s in excluded_statuses_str.split(",") if s.strip()]
+    _EXCLUDED_STATUSES_CACHE = excluded_statuses
+
+    print(f"✓ Tickets will be EXCLUDED (not counted) when status is: {excluded_statuses}")
+    return excluded_statuses
 
 
 def get_code_review_statuses():

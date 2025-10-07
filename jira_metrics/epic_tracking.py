@@ -9,6 +9,12 @@ Env vars:
   JIRA_EPIC_LABELS     (optional) Comma-separated list of epic labels.
   JIRA_JQL_EPICS       (optional) JQL to select epics. Defaults to:
                        issuetype = Epic AND labels IN ("<LABELS>") AND status IN ("done", "released", "In Progress", "In Develop")
+  COMPLETION_STATUSES  (optional) Comma-separated list of statuses to consider as "done".
+                       Defaults to "released,done". Example: "released,done,to release,staged release"
+                       This affects which child tickets count as completed in the metrics.
+  EXCLUDED_STATUSES    (optional) Comma-separated list of statuses to exclude from metrics.
+                       Defaults to "closed". Example: "closed,cancelled,duplicate"
+                       These tickets don't count as Done (no credit) or Open (not open work).
 
 Usage:
   python epic_tracking.py [options]
@@ -53,6 +59,8 @@ try:
         get_children_for_epic,
         extract_status_timestamps,
         interpret_status_timestamps,
+        get_completion_statuses,
+        get_excluded_statuses,
         JiraStatus,
         get_team,
     )
@@ -68,6 +76,8 @@ except ImportError:
         get_children_for_epic,
         extract_status_timestamps,
         interpret_status_timestamps,
+        get_completion_statuses,
+        get_excluded_statuses,
         JiraStatus,
         get_team,
     )
@@ -82,11 +92,6 @@ API_TOKEN = os.environ.get("JIRA_API_TOKEN") or os.environ.get("JIRA_API_KEY")
 # All epic selection is command line based - no environment variables needed
 
 # We'll validate these in main() using a proper validation function
-
-
-# Buckets (lowercase status names compared against these sets)
-# These statuses indicate completed work
-DONE_STATUSES = {"done", "released", "closed"}
 
 
 def validate_env_variables():
@@ -231,18 +236,24 @@ def get_completion_date(child):
 
 
 def bucket_counts_and_points_with_periods(children, time_periods):
-    """Calculate ticket counts and story points for Done vs Other buckets, plus time period analysis."""
+    """Calculate ticket counts and story points for Done vs Open vs Excluded buckets, plus time period analysis."""
     total_tickets = len(children)
     done_tickets = 0
-    other_tickets = 0
+    open_tickets = 0
+    excluded_tickets = 0
     total_points = 0
     done_points = 0
-    other_points = 0
+    open_points = 0
+    excluded_points = 0
 
     # Initialize period tracking
     period_data = {}
     for period in time_periods:
         period_data[period["label"]] = {"tickets_completed": 0, "points_completed": 0}
+
+    # Get completion and excluded statuses from configuration
+    completion_statuses = get_completion_statuses()
+    excluded_statuses = get_excluded_statuses()
 
     for child in children:
         # Use the proper status name from the converted issue object
@@ -256,9 +267,14 @@ def bucket_counts_and_points_with_periods(children, time_periods):
             points = 0
         total_points += points
 
-        is_done = status_name in DONE_STATUSES
+        # Check if ticket should be excluded (closed, cancelled, etc.)
+        is_excluded = status_name in excluded_statuses
+        is_done = status_name in completion_statuses
 
-        if is_done:
+        if is_excluded:
+            excluded_tickets += 1
+            excluded_points += points
+        elif is_done:
             done_tickets += 1
             done_points += points
 
@@ -271,20 +287,26 @@ def bucket_counts_and_points_with_periods(children, time_periods):
                         period_data[period["label"]]["points_completed"] += points
                         break
         else:
-            other_tickets += 1
-            other_points += points
+            open_tickets += 1
+            open_points += points
 
-    tickets_pct_done = round((done_tickets / total_tickets) * 100, 1) if total_tickets else 0.0
-    points_pct_done = round((done_points / total_points) * 100, 1) if total_points else 0.0
+    # Calculate percentages excluding the excluded tickets
+    active_tickets = total_tickets - excluded_tickets
+    active_points = total_points - excluded_points
+
+    tickets_pct_done = round((done_tickets / active_tickets) * 100, 1) if active_tickets else 0.0
+    points_pct_done = round((done_points / active_points) * 100, 1) if active_points else 0.0
 
     return (
         total_tickets,
         done_tickets,
-        other_tickets,
+        open_tickets,
+        excluded_tickets,
         tickets_pct_done,
         total_points,
         done_points,
-        other_points,
+        open_points,
+        excluded_points,
         points_pct_done,
         period_data,
     )
@@ -297,8 +319,8 @@ def build_stdout_header(time_periods):
     on the same concept of dynamic period columns.
     """
     base_header = (
-        f"{'Epic':10}  {'Team':8}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Other':>5}  {'% Done':>7}  "
-        f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Other':>9}  {'Pts % Done':>11}"
+        f"{'Epic':10}  {'Team':8}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Open':>5}  {'Excl':>4}  {'% Done':>7}  "
+        f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Open':>9}  {'Pts Excl':>8}  {'Pts % Done':>11}"
     )
 
     period_header = ""
@@ -318,11 +340,13 @@ def build_csv_fieldnames(time_periods):
         "status",
         "tickets_total",
         "tickets_done",
-        "tickets_other",
+        "tickets_open",
+        "tickets_excluded",
         "tickets_percent_done",
         "points_total",
         "points_done",
-        "points_other",
+        "points_open",
+        "points_excluded",
         "points_percent_done",
     ]
 
@@ -537,6 +561,13 @@ def display_analysis_target(epic_jql, time_period, args):
         else:
             print(f"   ⚠️  {var_name}: (not set - {description})")
 
+    # Print completion statuses configuration early
+    print(f"\n📊 Completion Configuration:")
+    print(f"   ", end="")
+    get_completion_statuses()  # This will print the completion statuses
+    print(f"   ", end="")
+    get_excluded_statuses()  # This will print the excluded statuses
+
     print("\n" + "=" * 80 + "\n")
 
 
@@ -603,20 +634,22 @@ def main():
         (
             total_tickets,
             done_tickets,
-            other_tickets,
+            open_tickets,
+            excluded_tickets,
             tickets_pct_done,
             total_points,
             done_points,
-            other_points,
+            open_points,
+            excluded_points,
             points_pct_done,
             period_data,
         ) = bucket_counts_and_points_with_periods(children, time_periods)
 
         # Build base row output
         base_output = (
-            f"{epic_key:10}  {epic_team:8}  {epic_status:12}  {total_tickets:5d}  {done_tickets:4d}  {other_tickets:5d}  "
-            f"{tickets_pct_done:7.1f}  {total_points:9d}  {done_points:8d}  {other_points:9d}  "
-            f"{points_pct_done:11.1f}"
+            f"{epic_key:10}  {epic_team:8}  {epic_status:12}  {total_tickets:5d}  {done_tickets:4d}  {open_tickets:5d}  "
+            f"{excluded_tickets:4d}  {tickets_pct_done:7.1f}  {total_points:9d}  {done_points:8d}  {open_points:9d}  "
+            f"{excluded_points:8d}  {points_pct_done:11.1f}"
         )
 
         # Add period data to output
@@ -638,11 +671,13 @@ def main():
             "status": epic_status,
             "tickets_total": total_tickets,
             "tickets_done": done_tickets,
-            "tickets_other": other_tickets,
+            "tickets_open": open_tickets,
+            "tickets_excluded": excluded_tickets,
             "tickets_percent_done": tickets_pct_done,
             "points_total": total_points,
             "points_done": done_points,
-            "points_other": other_points,
+            "points_open": open_points,
+            "points_excluded": excluded_points,
             "points_percent_done": points_pct_done,
         }
 
