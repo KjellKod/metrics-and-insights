@@ -103,19 +103,37 @@ Scripts for extracting and analyzing Jira metrics:
 - `released_tickets.py`: Track monthly released ticket counts
 - `jira_utils.py`: Helper utility module
 
-#### Cycle Time configuration
-`cycle_time.py` measures time between the first entry into a code review state and the earliest
-completion state. Completion states are configurable via the environment variable `COMPLETION_STATUSES`.
+#### Completion Status Configuration (Applies to All Jira Scripts)
+All Jira metrics scripts use the `COMPLETION_STATUSES` environment variable to determine which ticket 
+statuses count as "done" or "completed". This affects cycle time calculations, epic tracking, individual 
+metrics, and all other completion-based analyses.
 
 Defaults:
 - Code review states: `{"code review", "in code review", "to review", "to code review", "in review", "in design review"}`
 - Completion states: `["released", "done"]`
+- Excluded states: `["closed"]` (not counted as Done or Other)
 
-Override completion states (example for mobile team):
+Override completion states in your `.env` file to match your workflow:
 ```bash
-export COMPLETION_STATUSES="closed,done,to release,released"
+# Example: Include "to release" and "staged release" as completion statuses
+COMPLETION_STATUSES=released,done,to release,staged release
+
+# Example: Exclude certain statuses from metrics (neither Done nor Other)
+EXCLUDED_STATUSES=closed,cancelled,duplicate
 ```
-The script prints the active code review and completion status sets at the start and end of execution.
+
+**Note**: Status names are case-insensitive and whitespace is trimmed. 
+
+**Excluded Statuses**: These are tickets that shouldn't count toward completion (no credit to team) but also 
+shouldn't be counted as open/active work. Examples include "closed", "cancelled", or "duplicate" tickets.
+
+This configuration affects:
+- `cycle_time.py` - Determines the end point of cycle time measurements
+- `epic_tracking.py` - Determines which child tickets count as completed vs excluded
+- `individual.py` - Determines which tickets count toward individual completion metrics
+- All other scripts that analyze ticket completion
+
+Scripts print the active completion statuses at the start of execution for verification.
 
 ## Environment Variables
 
