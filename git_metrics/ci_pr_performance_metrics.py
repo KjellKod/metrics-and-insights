@@ -7,7 +7,7 @@ import time
 import random
 import traceback
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import requests
 
@@ -336,7 +336,10 @@ def get_pull_requests(start_date):
 
             cache_timestamp_str = cache_data.get("timestamp")
             cache_timestamp = datetime.fromisoformat(cache_timestamp_str) if cache_timestamp_str else None
-            is_expired = cache_timestamp is None or datetime.utcnow() - cache_timestamp > timedelta(
+            # Normalize to timezone-aware UTC for robust comparisons
+            if cache_timestamp is not None and cache_timestamp.tzinfo is None:
+                cache_timestamp = cache_timestamp.replace(tzinfo=timezone.utc)
+            is_expired = cache_timestamp is None or datetime.now(timezone.utc) - cache_timestamp > timedelta(
                 hours=cache_ttl_hours
             )
 
@@ -391,7 +394,7 @@ def get_pull_requests(start_date):
 
             # Save progress to cache with timestamp
             with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump({"prs": prs, "cursor": cursor, "timestamp": datetime.utcnow().isoformat()}, f)
+                json.dump({"prs": prs, "cursor": cursor, "timestamp": datetime.now(timezone.utc).isoformat()}, f)
 
             if found_old_pr or not data["pageInfo"].get("hasNextPage"):
                 break
