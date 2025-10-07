@@ -7,7 +7,7 @@ import time
 import random
 import traceback
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import requests
 
@@ -19,6 +19,11 @@ GitHub PR Metrics Analysis Script
 Analyzes Pull Request (PR) metrics including merge times, CI performance, and review patterns.
 Data is cached by default to handle rate limits and allow resume capability.
 
+Cache behavior and environment variables:
+- Cache file: pr_cache.json in project root
+- PR_CACHE_TTL_HOURS: Cache time-to-live in hours (default: 8). Older cache is ignored and deleted.
+- PR_CACHE_FORCE_FRESH: If set to "1", ignore and delete cache regardless of age.
+
 An easy "sanity check" of the produced result can be to use Github's page and view the closed
 PRs. Use this filter to see if it corresponds to the results from this script for a given 
 time period: `is:pr is:closed is:merged closed:2025-02-01..2025-02-28` 
@@ -29,6 +34,12 @@ Examples:
 
   # Force fresh data fetch, ignoring cache
   python ci_pr_performance_metrics.py --force-fresh
+
+  # Or via env var (ignores and deletes cache)
+  PR_CACHE_FORCE_FRESH=1 python ci_pr_performance_metrics.py
+
+  # Override cache TTL to 4 hours
+  PR_CACHE_TTL_HOURS=4 python ci_pr_performance_metrics.py
 
   # Run with verbose output
   python ci_pr_performance_metrics.py -v
@@ -313,14 +324,35 @@ def get_pull_requests(start_date):
     cursor = None
     start_datetime = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ")
 
-    # Load cache if exists
+    # Load cache if exists and not expired; support --force-fresh via env flag
     cache_file = "pr_cache.json"
+    cache_ttl_hours = int(os.environ.get("PR_CACHE_TTL_HOURS", "8"))
+    force_fresh = os.environ.get("PR_CACHE_FORCE_FRESH", "0") == "1"
+
     if os.path.exists(cache_file):
-        with open(cache_file, "r", encoding="utf-8") as f:
-            cache_data = json.load(f)
-            prs = cache_data.get("prs", [])
-            cursor = cache_data.get("cursor", None)
-            print(f"Loaded {len(prs)} PRs from cache")
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            cache_timestamp_str = cache_data.get("timestamp")
+            cache_timestamp = datetime.fromisoformat(cache_timestamp_str) if cache_timestamp_str else None
+            is_expired = cache_timestamp is None or datetime.utcnow() - cache_timestamp > timedelta(
+                hours=cache_ttl_hours
+            )
+
+            if force_fresh or is_expired:
+                reason = "force-fresh flag" if force_fresh else f"expired ({cache_ttl_hours}h TTL)"
+                print(f"Ignoring and removing stale cache due to {reason}.")
+                try:
+                    os.remove(cache_file)
+                except OSError:
+                    pass
+            else:
+                prs = cache_data.get("prs", [])
+                cursor = cache_data.get("cursor", None)
+                print(f"Loaded {len(prs)} PRs from cache (timestamp {cache_timestamp_str})")
+        except Exception as e:
+            print(f"Warning: Failed to read cache file, starting fresh. Error: {e}")
 
     try:
         while True:
@@ -357,9 +389,9 @@ def get_pull_requests(start_date):
                     found_old_pr = True
                     break
 
-            # Save progress to cache
+            # Save progress to cache with timestamp
             with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump({"prs": prs, "cursor": cursor}, f)
+                json.dump({"prs": prs, "cursor": cursor, "timestamp": datetime.utcnow().isoformat()}, f)
 
             if found_old_pr or not data["pageInfo"].get("hasNextPage"):
                 break

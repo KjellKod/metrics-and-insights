@@ -293,7 +293,7 @@ def bucket_counts_and_points_with_periods(children, time_periods):
     # Calculate percentages excluding the excluded tickets
     active_tickets = total_tickets - excluded_tickets
     active_points = total_points - excluded_points
-    
+
     tickets_pct_done = round((done_tickets / active_tickets) * 100, 1) if active_tickets else 0.0
     points_pct_done = round((done_points / active_points) * 100, 1) if active_points else 0.0
 

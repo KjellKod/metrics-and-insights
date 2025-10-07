@@ -160,6 +160,12 @@ TEAM_<NAME>="team_name"  # Used when team field isn't available in project
 CUSTOM_FIELD_STORYPOINTS=10025
 CUSTOM_FIELD_TEAM=10075
 CUSTOM_FIELD_WORK_TYPE=10079
+
+# Cache Controls (Git metrics)
+# Time-to-live for PR cache file in hours (default: 8)
+PR_CACHE_TTL_HOURS=8
+# Force fresh fetch (ignore and delete cache when set to "1")
+PR_CACHE_FORCE_FRESH=0
 ```
 
 Note: The custom field IDs are examples. You'll need to find your actual field IDs in Jira under Settings → Issues → Custom Fields.
