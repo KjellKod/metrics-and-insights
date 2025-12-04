@@ -2,13 +2,13 @@
 repo_admins.py
 ----------------
 
-Discover who has admin access (users and teams) across repositories in a GitHub
-organization. The script talks directly to the GitHub GraphQL API, handles
-pagination automatically, and summarizes the results so you can quickly see
-which accounts have the most elevated access.
+Discover who has specific GitHub repository permissions (users and teams)
+across an organization. The script talks directly to the GitHub GraphQL and
+REST APIs, handles pagination automatically, and summarizes the results so you
+can quickly see which accounts have the requested access level.
 
 Example:
-    python git_metrics/repo_admins.py --org onfleet --token-env GITHUB_TOKEN_READONLY_WEB
+    python git_metrics/repo_admins.py --org myOrg --token-env GITHUB_TOKEN_READONLY_WEB
 """
 
 from __future__ import annotations
@@ -27,6 +27,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+GITHUB_REST_URL = "https://api.github.com"
+
+PERMISSION_ALIASES = {
+    "READ": "READ",
+    "PULL": "READ",
+    "TRIAGE": "TRIAGE",
+    "WRITE": "WRITE",
+    "PUSH": "WRITE",
+    "MAINTAIN": "MAINTAIN",
+    "ADMIN": "ADMIN",
+    "ALL": "ALL",
+}
+
+VALID_PERMISSIONS = {"READ", "TRIAGE", "WRITE", "MAINTAIN", "ADMIN"}
 
 REPOSITORY_LIST_QUERY = """
 query($org: String!, $cursor: String) {
@@ -49,7 +63,7 @@ query($org: String!, $cursor: String) {
 """
 
 REPOSITORY_PERMISSION_QUERY = """
-query($owner: String!, $name: String!, $collCursor: String, $teamCursor: String) {
+query($owner: String!, $name: String!, $collCursor: String) {
   repository(owner: $owner, name: $name) {
     collaborators(first: 100, after: $collCursor) {
       edges {
@@ -58,23 +72,6 @@ query($owner: String!, $name: String!, $collCursor: String, $teamCursor: String)
           login
           name
           url
-        }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-    teams(first: 100, after: $teamCursor) {
-      edges {
-        permission
-        node {
-          slug
-          name
-          url
-          organization {
-            login
-          }
         }
       }
       pageInfo {
@@ -109,13 +106,21 @@ class GitHubClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError as exc:  # pragma: no cover - pass through with context
-            raise RuntimeError(f"GitHub API request failed: {exc} -> {response.text}") from exc
+            raise RuntimeError(f"GitHub GraphQL request failed: {exc} -> {response.text}") from exc
 
         payload = response.json()
         if "errors" in payload:
             raise RuntimeError(f"GitHub GraphQL errors: {payload['errors']}")
 
         return payload.get("data", {})
+
+    def rest_get(self, url: str, params: Optional[Dict[str, int]] = None) -> requests.Response:
+        response = self.session.get(url, params=params, timeout=90)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:  # pragma: no cover - pass through with context
+            raise RuntimeError(f"GitHub REST request failed: {exc} -> {response.text}") from exc
+        return response
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -155,10 +160,19 @@ def parse_arguments() -> argparse.Namespace:
         help="Only print the aggregated summary (skip per-repository details).",
     )
     parser.add_argument(
+        "--permissions",
+        help="Comma separated permissions to include (e.g. 'admin,write,read'). Defaults to 'admin'.",
+        default="admin",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging.",
     )
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
 
     args = parser.parse_args()
 
@@ -166,6 +180,34 @@ def parse_arguments() -> argparse.Namespace:
         parser.error("GitHub organization missing. Provide --org or set GITHUB_METRIC_OWNER_OR_ORGANIZATION.")
 
     return args
+
+
+def parse_permissions(raw: str) -> set[str]:
+    if not raw:
+        return {"ADMIN"}
+
+    requested: set[str] = set()
+    for token in raw.split(","):
+        label = token.strip().upper()
+        if not label:
+            continue
+        alias = PERMISSION_ALIASES.get(label)
+        if alias is None:
+            raise ValueError(
+                f"Unknown permission '{token}'. Supported values: read/pull, triage, write/push, maintain, admin."
+            )
+        if alias == "ALL":
+            return set(VALID_PERMISSIONS)
+        requested.add(alias)
+
+    if not requested:
+        return {"ADMIN"}
+
+    unknown = requested - VALID_PERMISSIONS
+    if unknown:
+        raise ValueError(f"Unsupported permissions requested: {', '.join(sorted(unknown))}")
+
+    return requested
 
 
 def load_token(env_var: str) -> str:
@@ -237,21 +279,22 @@ def fetch_repositories(
     return repos
 
 
-def fetch_repo_admins(client: GitHubClient, owner: str, repo_name: str) -> Dict[str, List[Dict[str, str]]]:
+def fetch_repo_admins(
+    client: GitHubClient,
+    owner: str,
+    repo_name: str,
+    permissions: set[str],
+) -> Dict[str, List[Dict[str, str]]]:
     user_admins: Dict[str, Dict[str, str]] = {}
-    team_admins: Dict[str, Dict[str, str]] = {}
 
     coll_cursor: Optional[str] = None
-    team_cursor: Optional[str] = None
     more_collaborators = True
-    more_teams = True
 
-    while more_collaborators or more_teams:
+    while more_collaborators:
         variables = {
             "owner": owner,
             "name": repo_name,
             "collCursor": coll_cursor,
-            "teamCursor": team_cursor,
         }
         data = client.query(REPOSITORY_PERMISSION_QUERY, variables)
         repo_data = data.get("repository")
@@ -261,7 +304,8 @@ def fetch_repo_admins(client: GitHubClient, owner: str, repo_name: str) -> Dict[
         collaborators = repo_data.get("collaborators")
         if collaborators:
             for edge in collaborators.get("edges", []):
-                if edge.get("permission") != "ADMIN":
+                permission = (edge.get("permission") or "").upper()
+                if permission not in permissions:
                     continue
                 node = edge.get("node") or {}
                 login = node.get("login")
@@ -271,6 +315,7 @@ def fetch_repo_admins(client: GitHubClient, owner: str, repo_name: str) -> Dict[
                     "login": login,
                     "name": node.get("name") or "",
                     "url": node.get("url") or "",
+                    "permission": permission,
                 }
 
             coll_page_info = collaborators.get("pageInfo") or {}
@@ -280,36 +325,56 @@ def fetch_repo_admins(client: GitHubClient, owner: str, repo_name: str) -> Dict[
             more_collaborators = False
             coll_cursor = None
 
-        teams = repo_data.get("teams")
-        if teams:
-            for edge in teams.get("edges", []):
-                if edge.get("permission") != "ADMIN":
-                    continue
-                node = edge.get("node") or {}
-                slug = node.get("slug")
-                if not slug:
-                    continue
-                team_admins[slug] = {
-                    "slug": slug,
-                    "name": node.get("name") or "",
-                    "url": node.get("url") or "",
-                    "organization": (node.get("organization") or {}).get("login") or owner,
-                }
-
-            team_page_info = teams.get("pageInfo") or {}
-            more_teams = bool(team_page_info.get("hasNextPage"))
-            team_cursor = team_page_info.get("endCursor") if more_teams else None
-        else:
-            more_teams = False
-            team_cursor = None
-
-        if not more_collaborators and not more_teams:
-            break
+    team_admins = fetch_repo_teams(client, owner, repo_name, permissions)
 
     return {
         "users": sorted(user_admins.values(), key=lambda item: item["login"].lower()),
         "teams": sorted(team_admins.values(), key=lambda item: item["slug"].lower()),
     }
+
+
+def fetch_repo_teams(
+    client: GitHubClient,
+    owner: str,
+    repo_name: str,
+    permissions: set[str],
+) -> Dict[str, Dict[str, str]]:
+    logger = logging.getLogger(__name__)
+    teams: Dict[str, Dict[str, str]] = {}
+    url = f"{GITHUB_REST_URL}/repos/{owner}/{repo_name}/teams"
+    params: Optional[Dict[str, int]] = {"per_page": 100}
+
+    while url:
+        try:
+            response = client.rest_get(url, params=params)
+        except RuntimeError as exc:
+            logger.warning("Unable to fetch teams for %s/%s: %s", owner, repo_name, exc)
+            break
+
+        data = response.json()
+        for team in data:
+            slug = team.get("slug")
+            if not slug:
+                continue
+            permission_raw = (team.get("permission") or "").upper()
+            permission = PERMISSION_ALIASES.get(permission_raw, permission_raw)
+            if permission not in permissions:
+                continue
+            teams[slug] = {
+                "slug": slug,
+                "name": team.get("name") or "",
+                "url": team.get("html_url") or team.get("url") or "",
+                "organization": (team.get("organization") or {}).get("login") or owner,
+                "permission": permission,
+            }
+
+        if "next" in response.links:
+            url = response.links["next"]["url"]
+            params = None
+        else:
+            url = None
+
+    return teams
 
 
 def render_table(report: List[Dict], summary: Dict[str, List[Dict]]) -> None:
@@ -323,6 +388,9 @@ def render_table(report: List[Dict], summary: Dict[str, List[Dict]]) -> None:
             display = label
             if name and name.lower() != label.lower():
                 display = f"{label} ({name})"
+            permission = item.get("permission")
+            if permission:
+                display = f"{display} [{permission.lower()}]"
             formatted.append(display)
         return ", ".join(formatted)
 
@@ -335,30 +403,36 @@ def render_table(report: List[Dict], summary: Dict[str, List[Dict]]) -> None:
         qualifier_text = f" [{' | '.join(qualifiers)}]" if qualifiers else ""
 
         print(f"{repo['nameWithOwner']}{qualifier_text}")
-        print(f"  url          : {repo['url']}")
-        print(f"  user admins  : {format_people(repo['userAdmins'], 'login')}")
-        print(f"  team admins  : {format_people(repo['teamAdmins'], 'slug')}")
+        print(f"  url            : {repo['url']}")
+        print(f"  matching users : {format_people(repo['userAdmins'], 'login')}")
+        print(f"  matching teams : {format_people(repo['teamAdmins'], 'slug')}")
         print()
 
 
 def print_summary(summary: Dict[str, List[Dict]]) -> None:
-    print("== Aggregated admin coverage ==")
+    print("== Aggregated permission coverage ==")
     if summary["users"]:
-        print("User admins:")
+        print("Users:")
         for entry in summary["users"]:
-            repos = ", ".join(entry["repositories"])
+            repos = ", ".join(
+                f"{repo['name']} ({repo['permission'].lower()})" if repo["permission"] else repo["name"]
+                for repo in entry["repositories"]
+            )
             print(f"  {entry['login']} ({entry['repoCount']} repos): {repos}")
     else:
-        print("User admins: none found.")
+        print("Users: none found.")
 
     if summary["teams"]:
-        print("\nTeam admins:")
+        print("\nTeams:")
         for entry in summary["teams"]:
-            repos = ", ".join(entry["repositories"])
+            repos = ", ".join(
+                f"{repo['name']} ({repo['permission'].lower()})" if repo["permission"] else repo["name"]
+                for repo in entry["repositories"]
+            )
             label = f"{entry['organization']}/{entry['slug']}"
             print(f"  {label} ({entry['repoCount']} repos): {repos}")
     else:
-        print("\nTeam admins: none found.")
+        print("\nTeams: none found.")
 
 
 def build_summary(report: List[Dict]) -> Dict[str, List[Dict]]:
@@ -378,7 +452,7 @@ def build_summary(report: List[Dict]) -> Dict[str, List[Dict]]:
                     "repositories": [],
                 },
             )
-            user_entry["repositories"].append(repo_name)
+            user_entry["repositories"].append({"name": repo_name, "permission": user.get("permission", "")})
 
         for team in repo["teamAdmins"]:
             slug = team["slug"]
@@ -392,11 +466,11 @@ def build_summary(report: List[Dict]) -> Dict[str, List[Dict]]:
                     "repositories": [],
                 },
             )
-            team_entry["repositories"].append(repo_name)
+            team_entry["repositories"].append({"name": repo_name, "permission": team.get("permission", "")})
 
     def finalize(entries: Dict[str, Dict], id_key: str) -> List[Dict]:
         for item in entries.values():
-            item["repositories"] = sorted(item["repositories"])
+            item["repositories"] = sorted(item["repositories"], key=lambda repo: repo["name"])
             item["repoCount"] = len(item["repositories"])
         return sorted(entries.values(), key=lambda value: (-value["repoCount"], value[id_key]))
 
@@ -404,6 +478,46 @@ def build_summary(report: List[Dict]) -> Dict[str, List[Dict]]:
         "users": finalize(user_map, "login"),
         "teams": finalize(team_map, "slug"),
     }
+
+
+def collect_admin_entries(repo: Dict) -> List[Dict]:
+    admins: List[Dict] = []
+    for user in repo["userAdmins"]:
+        admins.append(
+            {
+                "type": "user",
+                "identifier": user.get("login"),
+                "name": user.get("name"),
+                "permission": user.get("permission"),
+                "url": user.get("url"),
+            }
+        )
+    for team in repo["teamAdmins"]:
+        admins.append(
+            {
+                "type": "team",
+                "identifier": team.get("slug"),
+                "name": team.get("name"),
+                "permission": team.get("permission"),
+                "url": team.get("url"),
+                "organization": team.get("organization"),
+            }
+        )
+    return admins
+
+
+def build_json_output(report: List[Dict], summary: Dict[str, List[Dict]]) -> Dict[str, Dict]:
+    repositories: Dict[str, Dict] = {}
+    for repo in report:
+        repositories[repo["nameWithOwner"]] = {
+            "url": repo["url"],
+            "isPrivate": repo["isPrivate"],
+            "isArchived": repo["isArchived"],
+            "users": repo["userAdmins"],
+            "teams": repo["teamAdmins"],
+            "admins": collect_admin_entries(repo),
+        }
+    return {"repositories": repositories, "summary": summary}
 
 
 def main() -> None:
@@ -419,6 +533,12 @@ def main() -> None:
     try:
         token = load_token(args.token_env)
     except RuntimeError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+
+    try:
+        permissions = parse_permissions(args.permissions)
+    except ValueError as exc:
         logger.error("%s", exc)
         sys.exit(1)
 
@@ -443,9 +563,9 @@ def main() -> None:
     report: List[Dict] = []
 
     for idx, repo in enumerate(repositories, start=1):
-        logger.info("Scanning admins for %s (%d/%d)", repo["nameWithOwner"], idx, len(repositories))
+        logger.info("Scanning permissions for %s (%d/%d)", repo["nameWithOwner"], idx, len(repositories))
         try:
-            admins = fetch_repo_admins(client, args.org, repo["name"])
+            admins = fetch_repo_admins(client, args.org, repo["name"], permissions)
         except RuntimeError as exc:
             logger.error("Failed to fetch collaborators for %s: %s", repo["nameWithOwner"], exc)
             continue
@@ -465,7 +585,7 @@ def main() -> None:
     summary = build_summary(report)
 
     if args.format == "json":
-        output = {"repositories": report, "summary": summary}
+        output = build_json_output(report, summary)
         print(json.dumps(output, indent=2))
         return
 

@@ -98,16 +98,17 @@ python3 active_repos_one_off.py
 ```
 
 ### repo_admins.py
-Enumerates every user and team with `ADMIN` permissions across repositories in a GitHub organization, summarizing who has elevated access.
+Enumerates every user and team with specific repository permissions (default: `ADMIN`) across repositories in a GitHub organization, summarizing who has elevated access.
 
 ```bash
-python3 git_metrics/repo_admins.py --org onfleet --token-env GITHUB_TOKEN_READONLY_WEB
+python3 git_metrics/repo_admins.py --org example-org --token-env GITHUB_TOKEN_READONLY_WEB
 ```
 
 Options:
 - `--repos repo1,repo2` Restrict the scan to specific repositories (accepts `owner/repo` or bare names)
 - `--include-archived` Include archived repositories in the scan
-- `--format json` Return machine-readable output instead of the default human-friendly table
-- `--summary-only` Print just the aggregated admin coverage without per-repository details
+- `--format json` Return machine-readable output keyed by repo name (includes combined `admins`, `users`, and `teams`)
+- `--summary-only` Print just the aggregated permission coverage without per-repository details
+- `--permissions admin,write,read` Control which permission levels are considered (also accepts `triage`, `maintain`, `all`)
 
-If `--org` is omitted the script falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION` from your `.env`.
+If `--org` is omitted the script falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION` from your `.env`. Team lookups require the token to include `read:org` scope because they call the GitHub REST `/repos/{owner}/{repo}/teams` endpoint.
