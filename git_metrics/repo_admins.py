@@ -480,44 +480,35 @@ def build_summary(report: List[Dict]) -> Dict[str, List[Dict]]:
     }
 
 
-def collect_admin_entries(repo: Dict) -> List[Dict]:
-    admins: List[Dict] = []
-    for user in repo["userAdmins"]:
-        admins.append(
-            {
-                "type": "user",
-                "identifier": user.get("login"),
-                "name": user.get("name"),
-                "permission": user.get("permission"),
-                "url": user.get("url"),
-            }
-        )
-    for team in repo["teamAdmins"]:
-        admins.append(
-            {
-                "type": "team",
-                "identifier": team.get("slug"),
-                "name": team.get("name"),
-                "permission": team.get("permission"),
-                "url": team.get("url"),
-                "organization": team.get("organization"),
-            }
-        )
-    return admins
-
-
-def build_json_output(report: List[Dict], summary: Dict[str, List[Dict]]) -> Dict[str, Dict]:
-    repositories: Dict[str, Dict] = {}
+def build_json_output(
+    report: List[Dict],
+    summary: Dict[str, List[Dict]],
+    requested_permissions: set[str],
+) -> Dict[str, Dict]:
+    repositories: List[Dict] = []
     for repo in report:
-        repositories[repo["nameWithOwner"]] = {
-            "url": repo["url"],
-            "isPrivate": repo["isPrivate"],
-            "isArchived": repo["isArchived"],
-            "users": repo["userAdmins"],
-            "teams": repo["teamAdmins"],
-            "admins": collect_admin_entries(repo),
-        }
-    return {"repositories": repositories, "summary": summary}
+        users = sorted({user["login"] for user in repo["userAdmins"]})
+        teams = sorted(
+            {
+                f"{team['organization']}/{team['slug']}"
+                if team.get("organization")
+                else team["slug"]
+                for team in repo["teamAdmins"]
+            }
+        )
+        repositories.append(
+            {
+                "name": repo["nameWithOwner"],
+                "users": users,
+                "teams": teams,
+            }
+        )
+
+    return {
+        "requestedPermissions": sorted(requested_permissions),
+        "repositories": repositories,
+        "summary": summary,
+    }
 
 
 def main() -> None:
@@ -585,7 +576,7 @@ def main() -> None:
     summary = build_summary(report)
 
     if args.format == "json":
-        output = build_json_output(report, summary)
+        output = build_json_output(report, summary, permissions)
         print(json.dumps(output, indent=2))
         return
 

@@ -107,7 +107,7 @@ python3 git_metrics/repo_admins.py --org example-org --token-env GITHUB_TOKEN_RE
 Options:
 - `--repos repo1,repo2` Restrict the scan to specific repositories (accepts `owner/repo` or bare names)
 - `--include-archived` Include archived repositories in the scan
-- `--format json` Return machine-readable output keyed by repo name (includes combined `admins`, `users`, and `teams`)
+- `--format json` Return machine-readable output listing each repository with the matching user logins and team slugs
 - `--summary-only` Print just the aggregated permission coverage without per-repository details
 - `--permissions admin,write,read` Control which permission levels are considered (also accepts `triage`, `maintain`, `all`)
 
