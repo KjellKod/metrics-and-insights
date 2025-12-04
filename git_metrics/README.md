@@ -96,3 +96,18 @@ One-time script to identify and analyze active repositories in the organization.
 ```bash
 python3 active_repos_one_off.py
 ```
+
+### repo_admins.py
+Enumerates every user and team with specific repository permissions (default: `ADMIN`) across repositories in a GitHub organization, summarizing who has elevated access.
+
+```bash
+python3 git_metrics/repo_admins.py --org example-org --token-env GITHUB_TOKEN_READONLY_WEB
+```
+
+Options:
+- `--repos repo1,repo2` Restrict the scan to specific repositories (accepts `owner/repo` or bare names)
+- `--format json` Return machine-readable output listing each repository with the matching user logins and team slugs
+- `--summary-only` Print just the aggregated permission coverage without per-repository details
+- `--permissions admin,write,read` Control which permission levels are considered (also accepts `triage`, `maintain`, `all`)
+
+If `--org` is omitted the script falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION` from your `.env`. Archived repositories are always ignored (even if explicitly requested) to keep the results focused on active codebases. Team lookups require the token to include `read:org` scope because they call the GitHub REST `/repos/{owner}/{repo}/teams` endpoint.
