@@ -96,3 +96,18 @@ One-time script to identify and analyze active repositories in the organization.
 ```bash
 python3 active_repos_one_off.py
 ```
+
+### repo_admins.py
+Enumerates every user and team with `ADMIN` permissions across repositories in a GitHub organization, summarizing who has elevated access.
+
+```bash
+python3 git_metrics/repo_admins.py --org onfleet --token-env GITHUB_TOKEN_READONLY_WEB
+```
+
+Options:
+- `--repos repo1,repo2` Restrict the scan to specific repositories (accepts `owner/repo` or bare names)
+- `--include-archived` Include archived repositories in the scan
+- `--format json` Return machine-readable output instead of the default human-friendly table
+- `--summary-only` Print just the aggregated admin coverage without per-repository details
+
+If `--org` is omitted the script falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION` from your `.env`.
