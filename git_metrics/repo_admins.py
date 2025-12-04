@@ -144,11 +144,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Optional comma separated list of repository names (or owner/name) to inspect.",
     )
     parser.add_argument(
-        "--include-archived",
-        action="store_true",
-        help="Include archived repositories.",
-    )
-    parser.add_argument(
         "--format",
         choices=["table", "json"],
         default="table",
@@ -243,13 +238,13 @@ def parse_repo_filters(raw_repos: Optional[str], owner: str) -> Optional[set[str
 def fetch_repositories(
     client: GitHubClient,
     owner: str,
-    include_archived: bool,
     repo_filter: Optional[set[str]],
 ) -> List[Dict]:
     logger = logging.getLogger(__name__)
     repos: List[Dict] = []
     cursor: Optional[str] = None
     has_next = True
+    archived_requested: set[str] = set()
 
     while has_next:
         data = client.query(REPOSITORY_LIST_QUERY, {"org": owner, "cursor": cursor})
@@ -259,9 +254,12 @@ def fetch_repositories(
 
         repo_nodes = org_data["repositories"]["nodes"]
         for node in repo_nodes:
-            if node["isArchived"] and not include_archived:
+            normalized_name = node["name"].lower()
+            if node["isArchived"]:
+                if repo_filter and normalized_name in repo_filter:
+                    archived_requested.add(normalized_name)
                 continue
-            if repo_filter and node["name"].lower() not in repo_filter:
+            if repo_filter and normalized_name not in repo_filter:
                 continue
             repos.append(node)
 
@@ -270,11 +268,16 @@ def fetch_repositories(
         cursor = page_info["endCursor"]
         logger.debug("Fetched %d repositories so far...", len(repos))
 
-        if repo_filter and not has_next:
-            # We either collected all filtered repos or the filter references unknown repos.
-            missing = repo_filter - {repo["name"].lower() for repo in repos}
-            if missing:
-                raise RuntimeError(f"Repositories not found inside '{owner}': {', '.join(sorted(missing))}")
+    if repo_filter:
+        collected = {repo["name"].lower() for repo in repos}
+        missing = repo_filter - collected - archived_requested
+        if missing:
+            raise RuntimeError(f"Repositories not found inside '{owner}': {', '.join(sorted(missing))}")
+        if archived_requested:
+            logger.warning(
+                "Skipping archived repositories: %s",
+                ", ".join(sorted(archived_requested)),
+            )
 
     return repos
 
@@ -542,7 +545,7 @@ def main() -> None:
     client = GitHubClient(token)
 
     try:
-        repositories = fetch_repositories(client, args.org, args.include_archived, repo_filter)
+        repositories = fetch_repositories(client, args.org, repo_filter)
     except RuntimeError as exc:
         logger.error("%s", exc)
         sys.exit(1)
