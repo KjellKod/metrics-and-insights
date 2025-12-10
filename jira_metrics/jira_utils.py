@@ -31,11 +31,7 @@ load_dotenv()
 #
 # Status names are case-insensitive and whitespace is trimmed.
 # # ==============================================================================
-# Easy validation query for open bugs at the end of the year
-# issuetype = Bug
-# AND created <= "2023-12-31"
-# AND status WAS NOT IN ("Done","Closed","Released") ON "2023-12-31"
-# # ==============================================================================
+
 
 # Access the custom field IDs
 CUSTOM_FIELD_TEAM = os.getenv("CUSTOM_FIELD_TEAM")
