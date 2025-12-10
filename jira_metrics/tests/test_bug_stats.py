@@ -21,18 +21,21 @@ class TestBugStats(unittest.TestCase):
     def test_validate_years(self):
         """Test year validation"""
         current_year = datetime.now().year
+        max_future_year = current_year + 10
 
         # Valid cases
         validate_years(2020, 2021)
         validate_years(current_year, current_year)
+        validate_years(current_year, 2025)  # Allow future years like 2025
+        validate_years(2024, max_future_year)  # Allow up to max future year
 
         # Invalid cases
         with self.assertRaises(ValueError):
-            validate_years(1899, 2020)
+            validate_years(1899, 2020)  # Start year too early
         with self.assertRaises(ValueError):
-            validate_years(2020, current_year + 1)
+            validate_years(2020, max_future_year + 1)  # End year too far in future
         with self.assertRaises(ValueError):
-            validate_years(2021, 2020)
+            validate_years(2021, 2020)  # Start year after end year
 
 
 def test_build_jql_queries():
