@@ -12,8 +12,14 @@ from dotenv import load_dotenv
 # pylint: disable=import-error
 from jira_utils import get_tickets_from_jira, print_env_variables
 
-
 load_dotenv()  # Add this after imports
+
+# # ==============================================================================
+# Easy validation query for open bugs at the end of the year
+# issuetype = Bug
+# AND created <= "2023-12-31"
+# AND status WAS NOT IN ("Done","Closed","Released") ON "2023-12-31"
+# # ==============================================================================
 
 
 def sanitize_projects(raw_projects):
@@ -39,17 +45,27 @@ def setup_logging():
     return logger
 
 
-def build_jql_queries(year, projects):
+def build_jql_queries(year, projects=None):
     """
     Build JQL queries for different bug metrics.
+    
+    Args:
+        year: The year to analyze
+        projects: Optional list of projects to filter by. If None, queries all projects.
     """
-    quoted_projects = [f"'{project}'" for project in projects]
-    project_clause = f"project in ({', '.join(quoted_projects)})"
+    if projects:
+        # Legacy mode: filter by specific projects
+        quoted_projects = [f"'{project}'" for project in projects]
+        project_clause = f"project in ({', '.join(quoted_projects)}) AND "
+    else:
+        # New mode: query all projects
+        project_clause = ""
+    
     return {
-        "created": f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
-        "closed": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution != \"Won't Do\"",
+        "created": f"{project_clause}issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
+        "closed": f"{project_clause}issuetype = Bug AND status IN (Done, Closed, Released) AND status CHANGED TO (Done, Closed, Released) DURING ('{year}-01-01', '{year}-12-31')",
         "open_eoy": (
-            f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' "
+            f"{project_clause}issuetype = Bug AND created <= '{year}-12-31' "
             f"AND status WAS NOT IN (Done, Closed, Released) ON '{year}-12-31'"
         ),
     }
@@ -62,7 +78,7 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
 
     Args:
         year: The year to analyze
-        projects: List of Jira project keys
+        projects: List of Jira project keys, or None to discover projects from data
         progress_callback: Optional callback function for progress reporting
 
     Returns:
@@ -70,26 +86,56 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
     """
     queries = build_jql_queries(year, projects)
     stats = defaultdict(lambda: defaultdict(dict))
+    all_discovered_projects = set()
 
+    # First pass: collect all data and discover all projects
+    metric_data = {}
     for metric, query in queries.items():
         tickets = get_tickets_from_jira(query)
         project_counts = defaultdict(int)
         project_tickets = defaultdict(list)
 
         for ticket in tickets:
+            # Defensive check - every ticket MUST have a project
+            if not hasattr(ticket.fields, 'project') or not ticket.fields.project:
+                logger = logging.getLogger(__name__)
+                logger.error("CRITICAL DATA INTEGRITY ERROR: Bug %s has no project! This should be impossible in Jira.", ticket.key)
+                logger.error("This indicates a serious problem with Jira data or API permissions.")
+                logger.error("Please investigate immediately. Exiting to prevent incorrect statistics.")
+                raise RuntimeError(f"Bug {ticket.key} has no project - data integrity violation")
+            
+            if not hasattr(ticket.fields.project, 'key') or not ticket.fields.project.key:
+                logger = logging.getLogger(__name__)
+                logger.error("CRITICAL DATA INTEGRITY ERROR: Bug %s project has no key! Project object: %s", ticket.key, ticket.fields.project)
+                logger.error("This indicates a serious problem with Jira data or API permissions.")
+                logger.error("Please investigate immediately. Exiting to prevent incorrect statistics.")
+                raise RuntimeError(f"Bug {ticket.key} project has no key - data integrity violation")
+            
             # Strip single quotes from the project key to ensure consistency
             project_key = ticket.fields.project.key.strip("'")
             project_counts[project_key] += 1
             project_tickets[project_key].append(ticket.key)
+            all_discovered_projects.add(project_key)
 
-        for project in projects:
+        metric_data[metric] = {
+            'project_counts': project_counts,
+            'project_tickets': project_tickets
+        }
+
+        if progress_callback:
+            progress_callback(year, metric, len(tickets))
+
+    # Second pass: populate stats for all projects across all metrics
+    projects_to_process = projects if projects is not None else sorted(all_discovered_projects)
+    
+    for project in projects_to_process:
+        for metric in queries.keys():
+            project_counts = metric_data[metric]['project_counts']
+            project_tickets = metric_data[metric]['project_tickets']
             stats[project][metric] = {
                 "count": project_counts.get(project, 0),  # Default to 0 if no tickets found
                 "tickets": project_tickets.get(project, []),  # Default to empty list if no tickets found
             }
-
-        if progress_callback:
-            progress_callback(year, metric, len(tickets))
 
     logger = logging.getLogger(__name__)
     if logger.isEnabledFor(logging.DEBUG):
@@ -170,6 +216,8 @@ def parse_arguments():
     parser.add_argument("--start-year", type=int, required=True, help="Start year (YYYY)")
     parser.add_argument("--end-year", type=int, required=True, help="End year (YYYY)")
     parser.add_argument("--csv", action="store_true", help="Export results to CSV")
+    parser.add_argument("--all-projects", action="store_true", 
+                       help="Analyze ALL projects in Jira (ignores JIRA_PROJECTS env var)")
     return parser.parse_args()
 
 
@@ -186,7 +234,7 @@ def generate_yearly_report(start_year, end_year, projects):
     Args:
         start_year: Starting year for analysis
         end_year: Ending year for analysis
-        projects: List of Jira project keys
+        projects: List of Jira project keys, or None to query all projects
 
     Returns:
         Dictionary containing bug statistics for all years, broken down by project
@@ -215,7 +263,7 @@ def display_results(stats, logger):
             logger.info("Net change in bugs: %d", net_change)
 
         totals = compute_year_totals(stats[year])
-        logger.info("\nAll Projects:")
+        logger.info("\nAll Projects (%d):", year)
         logger.info("Bugs created: %d", totals["created"])
         logger.info("Bugs closed: %d", totals["closed"])
         logger.info("Bugs open at end of year: %d", totals["open_eoy"])
@@ -235,22 +283,33 @@ def compute_year_totals(project_stats):
     }
 
 
-def validate_env_variables():
+def validate_env_variables(require_projects=True):
     """Validate required environment variables and return their values."""
     logger = logging.getLogger(__name__)
     required_vars = {
         "JIRA_API_KEY": "Jira API token",
         "USER_EMAIL": "Jira username",
         "JIRA_LINK": "Jira server URL",
+    }
+    
+    optional_vars = {
         "JIRA_PROJECTS": "Comma-separated list of Jira project keys",
     }
 
     missing_vars = []
     env_values = {}
 
+    # Check required variables
     for var, description in required_vars.items():
         value = os.environ.get(var)
         if not value:
+            missing_vars.append(f"{var} ({description})")
+        env_values[var] = value
+
+    # Check optional variables
+    for var, description in optional_vars.items():
+        value = os.environ.get(var)
+        if not value and require_projects and var == "JIRA_PROJECTS":
             missing_vars.append(f"{var} ({description})")
         env_values[var] = value
 
@@ -269,11 +328,15 @@ def main():
         logger.info("Starting bug statistics analysis...")
 
         args = parse_arguments()
-        env_vars = validate_env_variables()
+        env_vars = validate_env_variables(require_projects=not args.all_projects)
         print_env_variables()  # This will print all environment variables in a consistent way
 
-        projects = sanitize_projects(env_vars["JIRA_PROJECTS"])
-        logger.info("Analyzing bug statistics for projects: %s", projects)
+        if args.all_projects:
+            projects = None  # Query all projects
+            logger.info("Analyzing bug statistics for ALL projects in Jira")
+        else:
+            projects = sanitize_projects(env_vars["JIRA_PROJECTS"])
+            logger.info("Analyzing bug statistics for configured projects: %s", projects)
 
         stats = generate_yearly_report(args.start_year, args.end_year, projects)
         display_results(stats, logger)
