@@ -26,7 +26,7 @@ class TestBugStats(unittest.TestCase):
         # Valid cases
         validate_years(2020, 2021)
         validate_years(current_year, current_year)
-        validate_years(current_year, 2025)  # Allow future years like 2025
+        validate_years(current_year, current_year + 1)  # Allow future years (next year)
         validate_years(2024, max_future_year)  # Allow up to max future year
 
         # Invalid cases
@@ -75,7 +75,6 @@ def test_export_to_csv(tmp_path):
                 "created": {"count": 5, "tickets": []},
                 "closed": {"count": 3, "tickets": []},
                 "open_eoy": {"count": 2, "tickets": []},
-                "wont_do": {"count": 1, "tickets": []},
             }
         }
     }
@@ -93,11 +92,9 @@ def test_export_to_csv(tmp_path):
             "Year",
             "Total Bugs Created",
             "Total Bugs Closed",
-            "Total Won't Do",
             "Bugs Open End of Year",
             "PROJ1 Bugs Created",
             "PROJ1 Bugs Closed",
-            "PROJ1 Won't Do",
         ]
         # Check data row
         data = lines[1].strip().split(",")
@@ -105,11 +102,9 @@ def test_export_to_csv(tmp_path):
             "2023",  # Year
             "5",  # Total Bugs Created
             "3",  # Total Bugs Closed
-            "1",  # Total Won't Do
             "2",  # Bugs Open End of Year
             "5",  # PROJ1 Bugs Created
             "3",  # PROJ1 Bugs Closed
-            "1",  # PROJ1 Won't Do
         ]
 
 
