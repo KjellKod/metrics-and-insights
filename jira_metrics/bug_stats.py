@@ -16,6 +16,11 @@ from jira_utils import get_tickets_from_jira, print_env_variables
 load_dotenv()  # Add this after imports
 
 
+def sanitize_projects(raw_projects):
+    """Normalize project keys from environment configuration."""
+    return [proj.strip().strip("'") for proj in raw_projects.split(",") if proj.strip()]
+
+
 def setup_logging():
     """Configure logging settings."""
     print("Setting up logging...")  # Debug print
@@ -38,13 +43,15 @@ def build_jql_queries(year, projects):
     """
     Build JQL queries for different bug metrics.
     """
-    quoted_projects = [f"'{project.strip(chr(39))}'" for project in projects]
+    quoted_projects = [f"'{project}'" for project in projects]
     project_clause = f"project in ({', '.join(quoted_projects)})"
     return {
         "created": f"{project_clause} AND issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
         "closed": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution != \"Won't Do\"",
-        "open_eoy": f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' AND status not in (Done, Closed, Released)",
-        "wont_do": f"{project_clause} AND issuetype = Bug AND status in (Done, Closed, Released) AND updated >= '{year}-01-01' AND updated <= '{year}-12-31' AND resolution = \"Won't Do\"",
+        "open_eoy": (
+            f"{project_clause} AND issuetype = Bug AND created <= '{year}-12-31' "
+            f"AND status WAS NOT IN (Done, Closed, Released) ON '{year}-12-31'"
+        ),
     }
 
 
@@ -76,22 +83,26 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
             project_tickets[project_key].append(ticket.key)
 
         for project in projects:
-            # Strip single quotes from the project key to ensure consistency
-            stripped_project = project.strip("'")
-            stats[stripped_project][metric] = {
-                "count": project_counts.get(stripped_project, 0),  # Default to 0 if no tickets found
-                "tickets": project_tickets.get(stripped_project, []),  # Default to empty list if no tickets found
+            stats[project][metric] = {
+                "count": project_counts.get(project, 0),  # Default to 0 if no tickets found
+                "tickets": project_tickets.get(project, []),  # Default to empty list if no tickets found
             }
 
         if progress_callback:
             progress_callback(year, metric, len(tickets))
 
-    # Debug print
-    print("Stats dictionary after fetching data:")
-    for project, metrics in stats.items():
-        print(f"Project: {project}")
-        for metric, data in metrics.items():
-            print(f"  {metric}: {data}")
+    logger = logging.getLogger(__name__)
+    if logger.isEnabledFor(logging.DEBUG):
+        for project, metrics in stats.items():
+            for metric, data in metrics.items():
+                sample = ", ".join(data["tickets"][:5])
+                logger.debug(
+                    "Project %s metric %s count=%d sample=%s",
+                    project,
+                    metric,
+                    data["count"],
+                    sample if sample else "<none>",
+                )
 
     return stats
 
@@ -100,12 +111,13 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
 def validate_years(start_year, end_year):
     """Validate the provided year range."""
     current_year = datetime.now().year
+    max_future_year = current_year + 10  # Allow up to 10 years in the future
 
-    if not (1900 <= start_year <= current_year):
-        raise ValueError(f"Start year must be between 1900 and {current_year}")
+    if not (1900 <= start_year <= max_future_year):
+        raise ValueError(f"Start year must be between 1900 and {max_future_year}")
 
-    if not (1900 <= end_year <= current_year):
-        raise ValueError(f"End year must be between 1900 and {current_year}")
+    if not (1900 <= end_year <= max_future_year):
+        raise ValueError(f"End year must be between 1900 and {max_future_year}")
 
     if start_year > end_year:
         raise ValueError("Start year cannot be greater than end year")
@@ -123,35 +135,29 @@ def export_to_csv(stats, filename="bug_summary.csv"):
         projects = sorted(projects)  # Sort for consistent ordering
 
         # Write headers
-        headers = ["Year", "Total Bugs Created", "Total Bugs Closed", "Total Won't Do", "Bugs Open End of Year"]
+        headers = ["Year", "Total Bugs Created", "Total Bugs Closed", "Bugs Open End of Year"]
         for project in projects:
             headers.append(f"{project} Bugs Created")
         for project in projects:
             headers.append(f"{project} Bugs Closed")
-        for project in projects:
-            headers.append(f"{project} Won't Do")
         writer.writerow(headers)
 
         # Write data rows
         for year in sorted(stats.keys()):
             total_created = sum(stats[year][proj]["created"]["count"] for proj in stats[year])
             total_closed = sum(stats[year][proj]["closed"]["count"] for proj in stats[year])
-            total_wont_do = sum(stats[year][proj]["wont_do"]["count"] for proj in stats[year])
             open_eoy = sum(stats[year][proj]["open_eoy"]["count"] for proj in stats[year])
 
             # Initialize project-specific counts
             project_created = {proj: stats[year].get(proj, {}).get("created", {}).get("count", 0) for proj in projects}
             project_closed = {proj: stats[year].get(proj, {}).get("closed", {}).get("count", 0) for proj in projects}
-            project_wont_do = {proj: stats[year].get(proj, {}).get("wont_do", {}).get("count", 0) for proj in projects}
 
             # Write the row
-            row = [year, total_created, total_closed, total_wont_do, open_eoy]
+            row = [year, total_created, total_closed, open_eoy]
             for proj in projects:
                 row.append(project_created[proj])
             for proj in projects:
                 row.append(project_closed[proj])
-            for proj in projects:
-                row.append(project_wont_do[proj])
             writer.writerow(row)
 
     print(f"Bug summary exported successfully to {filename}")
@@ -202,14 +208,31 @@ def display_results(stats, logger):
             logger.info("\nProject: %s", project)
             logger.info("Bugs created: %d", stats[year][project]["created"]["count"])
             logger.info("Bugs closed: %d", stats[year][project]["closed"]["count"])
-            logger.info("Bugs marked as Won't Do: %d", stats[year][project]["wont_do"]["count"])
             logger.info("Bugs open at end of year: %d", stats[year][project]["open_eoy"]["count"])
 
             # Calculate net change excluding Won't Do
-            net_change = stats[year][project]["created"]["count"] - (
-                stats[year][project]["closed"]["count"] + stats[year][project]["wont_do"]["count"]
-            )
+            net_change = stats[year][project]["created"]["count"] - stats[year][project]["closed"]["count"]
             logger.info("Net change in bugs: %d", net_change)
+
+        totals = compute_year_totals(stats[year])
+        logger.info("\nAll Projects:")
+        logger.info("Bugs created: %d", totals["created"])
+        logger.info("Bugs closed: %d", totals["closed"])
+        logger.info("Bugs open at end of year: %d", totals["open_eoy"])
+        logger.info("Net change in bugs: %d", totals["net_change"])
+
+
+def compute_year_totals(project_stats):
+    """Aggregate metrics across all projects for display/export."""
+    created = sum(project_stats[proj]["created"]["count"] for proj in project_stats)
+    closed = sum(project_stats[proj]["closed"]["count"] for proj in project_stats)
+    open_eoy = sum(project_stats[proj]["open_eoy"]["count"] for proj in project_stats)
+    return {
+        "created": created,
+        "closed": closed,
+        "open_eoy": open_eoy,
+        "net_change": created - closed,
+    }
 
 
 def validate_env_variables():
@@ -249,7 +272,7 @@ def main():
         env_vars = validate_env_variables()
         print_env_variables()  # This will print all environment variables in a consistent way
 
-        projects = env_vars["JIRA_PROJECTS"].split(",")
+        projects = sanitize_projects(env_vars["JIRA_PROJECTS"])
         logger.info("Analyzing bug statistics for projects: %s", projects)
 
         stats = generate_yearly_report(args.start_year, args.end_year, projects)
