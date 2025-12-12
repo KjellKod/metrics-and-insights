@@ -48,7 +48,7 @@ def setup_logging():
 def build_jql_queries(year, projects=None):
     """
     Build JQL queries for different bug metrics.
-    
+
     Args:
         year: The year to analyze
         projects: Optional list of projects to filter by. If None, queries all projects.
@@ -60,7 +60,7 @@ def build_jql_queries(year, projects=None):
     else:
         # New mode: query all projects
         project_clause = ""
-    
+
     return {
         "created": f"{project_clause}issuetype = Bug AND created >= '{year}-01-01' AND created <= '{year}-12-31'",
         "closed": f"{project_clause}issuetype = Bug AND status IN (Done, Closed, Released) AND status CHANGED TO (Done, Closed, Released) DURING ('{year}-01-01', '{year}-12-31')",
@@ -97,41 +97,45 @@ def fetch_bug_statistics(year, projects, progress_callback=None):
 
         for ticket in tickets:
             # Defensive check - every ticket MUST have a project
-            if not hasattr(ticket.fields, 'project') or not ticket.fields.project:
+            if not hasattr(ticket.fields, "project") or not ticket.fields.project:
                 logger = logging.getLogger(__name__)
-                logger.error("CRITICAL DATA INTEGRITY ERROR: Bug %s has no project! This should be impossible in Jira.", ticket.key)
+                logger.error(
+                    "CRITICAL DATA INTEGRITY ERROR: Bug %s has no project! This should be impossible in Jira.",
+                    ticket.key,
+                )
                 logger.error("This indicates a serious problem with Jira data or API permissions.")
                 logger.error("Please investigate immediately. Exiting to prevent incorrect statistics.")
                 raise RuntimeError(f"Bug {ticket.key} has no project - data integrity violation")
-            
-            if not hasattr(ticket.fields.project, 'key') or not ticket.fields.project.key:
+
+            if not hasattr(ticket.fields.project, "key") or not ticket.fields.project.key:
                 logger = logging.getLogger(__name__)
-                logger.error("CRITICAL DATA INTEGRITY ERROR: Bug %s project has no key! Project object: %s", ticket.key, ticket.fields.project)
+                logger.error(
+                    "CRITICAL DATA INTEGRITY ERROR: Bug %s project has no key! Project object: %s",
+                    ticket.key,
+                    ticket.fields.project,
+                )
                 logger.error("This indicates a serious problem with Jira data or API permissions.")
                 logger.error("Please investigate immediately. Exiting to prevent incorrect statistics.")
                 raise RuntimeError(f"Bug {ticket.key} project has no key - data integrity violation")
-            
+
             # Strip single quotes from the project key to ensure consistency
             project_key = ticket.fields.project.key.strip("'")
             project_counts[project_key] += 1
             project_tickets[project_key].append(ticket.key)
             all_discovered_projects.add(project_key)
 
-        metric_data[metric] = {
-            'project_counts': project_counts,
-            'project_tickets': project_tickets
-        }
+        metric_data[metric] = {"project_counts": project_counts, "project_tickets": project_tickets}
 
         if progress_callback:
             progress_callback(year, metric, len(tickets))
 
     # Second pass: populate stats for all projects across all metrics
     projects_to_process = projects if projects is not None else sorted(all_discovered_projects)
-    
+
     for project in projects_to_process:
         for metric in queries.keys():
-            project_counts = metric_data[metric]['project_counts']
-            project_tickets = metric_data[metric]['project_tickets']
+            project_counts = metric_data[metric]["project_counts"]
+            project_tickets = metric_data[metric]["project_tickets"]
             stats[project][metric] = {
                 "count": project_counts.get(project, 0),  # Default to 0 if no tickets found
                 "tickets": project_tickets.get(project, []),  # Default to empty list if no tickets found
@@ -216,8 +220,9 @@ def parse_arguments():
     parser.add_argument("--start-year", type=int, required=True, help="Start year (YYYY)")
     parser.add_argument("--end-year", type=int, required=True, help="End year (YYYY)")
     parser.add_argument("--csv", action="store_true", help="Export results to CSV")
-    parser.add_argument("--all-projects", action="store_true", 
-                       help="Analyze ALL projects in Jira (ignores JIRA_PROJECTS env var)")
+    parser.add_argument(
+        "--all-projects", action="store_true", help="Analyze ALL projects in Jira (ignores JIRA_PROJECTS env var)"
+    )
     return parser.parse_args()
 
 
@@ -291,7 +296,7 @@ def validate_env_variables(require_projects=True):
         "USER_EMAIL": "Jira username",
         "JIRA_LINK": "Jira server URL",
     }
-    
+
     optional_vars = {
         "JIRA_PROJECTS": "Comma-separated list of Jira project keys",
     }
