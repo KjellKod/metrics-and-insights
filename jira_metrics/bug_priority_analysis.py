@@ -1,6 +1,6 @@
 # jira_metrics/bug_priority_analysis.py
 """
-Bug Priority Analysis Script - Company Specific - the custom fileds will differ. 
+Bug Priority Analysis Script - Company Specific
 
 Analyzes bugs by priority level, focusing on:
 1. Average time from creation to release/completion by priority
@@ -9,6 +9,14 @@ Analyzes bugs by priority level, focusing on:
 Only analyzes bugs that:
 - Have a "Bug Priority" field defined (not empty)
 - Are in completed status (Released/Done based on COMPLETION_STATUSES)
+
+Configuration (Environment Variables):
+- CUSTOM_FIELD_BUG_PRIORITY: Required - Bug Priority custom field ID
+- COMPLETION_STATUSES: Optional - Comma-separated completion statuses (default: "released,done")
+- JIRA_PROJECTS: Optional - Comma-separated project keys (ignored with --all-projects)
+
+This script uses changelog-based creation date detection as primary method,
+with standard Jira 'created' field as fallback.
 """
 
 import os
@@ -151,13 +159,11 @@ def calculate_time_to_completion(ticket):
                         f"Could not parse creation date from changelog for {ticket.key}: {creation_history.created} - {e}"
                     )
 
-        # Fallback: try standard fields if changelog method fails
+        # Fallback: use standard created field if changelog method fails
         if not created_date:
             created_str = None
             if hasattr(ticket.fields, "created") and ticket.fields.created:
                 created_str = ticket.fields.created
-            elif hasattr(ticket.fields, "customfield_10018") and ticket.fields.customfield_10018:
-                created_str = ticket.fields.customfield_10018
 
             if created_str:
                 try:
