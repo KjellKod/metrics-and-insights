@@ -493,9 +493,7 @@ def build_json_output(
         users = sorted({user["login"] for user in repo["userAdmins"]})
         teams = sorted(
             {
-                f"{team['organization']}/{team['slug']}"
-                if team.get("organization")
-                else team["slug"]
+                f"{team['organization']}/{team['slug']}" if team.get("organization") else team["slug"]
                 for team in repo["teamAdmins"]
             }
         )
