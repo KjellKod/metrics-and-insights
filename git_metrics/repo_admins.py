@@ -23,7 +23,6 @@ from typing import Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"

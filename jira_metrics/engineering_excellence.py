@@ -1,19 +1,13 @@
-import os
-from datetime import datetime
-from collections import defaultdict
 import csv
-from dotenv import load_dotenv
+import os
+from collections import defaultdict
+from datetime import datetime
 
+from dotenv import load_dotenv
 # pylint: disable=import-error
-from jira_utils import (
-    get_tickets_from_jira,
-    get_team,
-    extract_status_timestamps,
-    interpret_status_timestamps,
-    parse_common_arguments,
-    JiraStatus,
-    verbose_print,
-)
+from jira_utils import (JiraStatus, extract_status_timestamps, get_team,
+                        get_tickets_from_jira, interpret_status_timestamps,
+                        parse_common_arguments, verbose_print)
 
 load_dotenv()
 

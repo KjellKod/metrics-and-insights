@@ -1,14 +1,14 @@
 # jira_metrics/bug_stats.py
 
+import argparse
+import csv
+import logging
 import os
 import sys
 from collections import defaultdict
 from datetime import datetime
-import argparse
-import logging
-import csv
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 # pylint: disable=import-error
 from jira_utils import get_tickets_from_jira, print_env_variables
 

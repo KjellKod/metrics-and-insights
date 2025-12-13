@@ -7,14 +7,13 @@ temporary working directory so the cache file does not interfere with
 other tests or local runs.
 """
 
+import json
 import os
 import sys
-import json
-import unittest
 import tempfile
+import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
-
 
 # Add git_metrics directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

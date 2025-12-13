@@ -1,26 +1,21 @@
+import csv
 import os
 import sys
+import traceback
 from calendar import month_abbr
 from collections import defaultdict
 from datetime import datetime
-import traceback
-import csv
+
 from dotenv import load_dotenv
 
 # Global variable for verbose mode
 VERBOSE = False
 
 # pylint: disable=import-error
-from jira_utils import (
-    get_tickets_from_jira,
-    get_common_parser,
-    verbose_print,
-    JiraStatus,
-    interpret_status_timestamps,
-    extract_status_timestamps,
-    get_ticket_points,
-    get_team,
-)
+from jira_utils import (JiraStatus, extract_status_timestamps,
+                        get_common_parser, get_team, get_ticket_points,
+                        get_tickets_from_jira, interpret_status_timestamps,
+                        verbose_print)
 
 load_dotenv()
 
