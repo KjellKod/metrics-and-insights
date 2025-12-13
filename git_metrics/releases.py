@@ -1,8 +1,9 @@
 # pylint: disable=missing-timeout
-import os
-from collections import defaultdict
 import argparse
 import csv
+import os
+from collections import defaultdict
+
 import requests
 from dotenv import load_dotenv
 

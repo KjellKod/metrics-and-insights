@@ -19,23 +19,18 @@ This script uses changelog-based creation date detection as primary method,
 with standard Jira 'created' field as fallback.
 """
 
-import os
-import sys
 import argparse
 import csv
-from datetime import datetime
+import os
+import sys
 from collections import defaultdict
-from dotenv import load_dotenv
+from datetime import datetime
 
+from dotenv import load_dotenv
 # Import utilities from the generic jira_utils
-from jira_utils import (
-    get_tickets_from_jira,
-    get_completion_statuses,
-    verbose_print,
-    print_env_variables,
-    parse_common_arguments,
-    get_common_parser,
-)
+from jira_utils import (get_common_parser, get_completion_statuses,
+                        get_tickets_from_jira, parse_common_arguments,
+                        print_env_variables, verbose_print)
 
 load_dotenv()
 

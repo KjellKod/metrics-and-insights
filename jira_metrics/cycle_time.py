@@ -1,25 +1,19 @@
+import csv
 import os
+import statistics
 from collections import defaultdict
 from datetime import datetime, timedelta
-import statistics
-import csv
+
 import pytz
+# pylint: disable=import-error
+from jira_utils import (JiraStatus, extract_status_timestamps,
+                        get_code_review_statuses, get_completion_statuses,
+                        get_team, get_tickets_from_jira,
+                        interpret_status_timestamps, parse_common_arguments,
+                        print_env_variables, verbose_print)
 
 # Note: Using direct v3 API calls with simple object conversion
 
-# pylint: disable=import-error
-from jira_utils import (
-    get_tickets_from_jira,
-    parse_common_arguments,
-    get_team,
-    extract_status_timestamps,
-    interpret_status_timestamps,
-    JiraStatus,
-    print_env_variables,
-    verbose_print,
-    get_completion_statuses,
-    get_code_review_statuses,
-)
 
 HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600

@@ -1,19 +1,16 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
 from collections import defaultdict
 from io import StringIO
+from unittest.mock import MagicMock, patch
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from release_failure import (
-    extract_linked_tickets,
-    count_failed_releases,
-    process_release_tickets,
-    print_total_failure_percentage,
-)
+from release_failure import (count_failed_releases, extract_linked_tickets,
+                             print_total_failure_percentage,
+                             process_release_tickets)
 
 
 class TestReleaseFailure(unittest.TestCase):

@@ -6,9 +6,9 @@ Following python-standards: prefer tests without mocks when possible.
 Only mock external dependencies (get_ticket_points, get_completion_date).
 """
 
-import unittest
 import os
 import sys
+import unittest
 from datetime import datetime
 from unittest.mock import patch
 

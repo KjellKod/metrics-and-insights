@@ -1,16 +1,15 @@
-import os
-
-import statistics
-import json
 import argparse
-import time
+import json
+import os
 import random
+import statistics
+import time
 import traceback
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
-import requests
 
+import requests
+from dotenv import load_dotenv
 
 # pylint: disable=pointless-string-statement
 """

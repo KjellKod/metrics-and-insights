@@ -1,8 +1,9 @@
+import logging
 import os
 import sys
-import logging
-import requests
 from datetime import datetime, timedelta
+
+import requests
 from dotenv import load_dotenv
 
 """

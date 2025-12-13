@@ -1,6 +1,6 @@
+import os
 from collections import defaultdict
 from datetime import datetime
-import os
 
 # pylint: disable=import-error
 from jira_utils import get_tickets_from_jira, verbose_print

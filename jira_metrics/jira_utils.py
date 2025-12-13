@@ -1,13 +1,14 @@
+import argparse
 import os
 import time
-from enum import Enum
 from datetime import datetime
-import argparse
-from dotenv import load_dotenv
-from jira import JIRA
-from gql import gql, Client
-from gql.transport.requests import RequestsHTTPTransport
+from enum import Enum
+
 import requests
+from dotenv import load_dotenv
+from gql import Client, gql
+from gql.transport.requests import RequestsHTTPTransport
+from jira import JIRA
 
 load_dotenv()
 

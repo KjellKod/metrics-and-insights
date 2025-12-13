@@ -1,19 +1,14 @@
+import csv
 import os
 from collections import defaultdict
 from datetime import datetime
-import csv
-import pytz
 
+import pytz
 # pylint: disable=import-error
-from jira_utils import (
-    get_tickets_from_jira,
-    parse_common_arguments,
-    verbose_print,
-    JiraStatus,
-    extract_status_timestamps,
-    interpret_status_timestamps,
-    get_ticket_points,
-)
+from jira_utils import (JiraStatus, extract_status_timestamps,
+                        get_ticket_points, get_tickets_from_jira,
+                        interpret_status_timestamps, parse_common_arguments,
+                        verbose_print)
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 

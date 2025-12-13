@@ -1,8 +1,9 @@
-import sys
-import logging
 import argparse
+import logging
 import os
+import sys
 from datetime import datetime, timedelta, timezone
+
 import requests
 
 # pylint: disable=pointless-string-statement

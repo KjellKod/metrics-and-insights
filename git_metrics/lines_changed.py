@@ -1,12 +1,11 @@
+import argparse
+import logging
 import os
 import sys
 from datetime import datetime
-import argparse
-import logging
 
 import requests
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
