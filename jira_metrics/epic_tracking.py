@@ -39,48 +39,36 @@ Output:
   and a summary printed to stdout.
 """
 
+import argparse
 import csv
 import os
 import sys
-import argparse
-from datetime import datetime, timedelta
 from collections import defaultdict
+from datetime import datetime, timedelta
+
 from dotenv import load_dotenv
 
 # Import common utilities from jira_metrics
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "jira_metrics"))
 try:
-    from jira_utils import (
-        get_common_parser,
-        parse_common_arguments,
-        verbose_print,
-        get_ticket_points,
-        get_tickets_from_jira,
-        get_children_for_epic,
-        extract_status_timestamps,
-        interpret_status_timestamps,
-        get_completion_statuses,
-        get_excluded_statuses,
-        JiraStatus,
-        get_team,
-    )
+    from jira_utils import (JiraStatus, extract_status_timestamps,
+                            get_children_for_epic, get_common_parser,
+                            get_completion_statuses, get_excluded_statuses,
+                            get_team, get_ticket_points, get_tickets_from_jira,
+                            interpret_status_timestamps,
+                            parse_common_arguments, verbose_print)
 except ImportError:
     # Fallback for when running from different directory
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from jira_metrics.jira_utils import (
-        get_common_parser,
-        parse_common_arguments,
-        verbose_print,
-        get_ticket_points,
-        get_tickets_from_jira,
-        get_children_for_epic,
-        extract_status_timestamps,
-        interpret_status_timestamps,
-        get_completion_statuses,
-        get_excluded_statuses,
-        JiraStatus,
-        get_team,
-    )
+    from jira_metrics.jira_utils import (JiraStatus, extract_status_timestamps,
+                                         get_children_for_epic,
+                                         get_common_parser,
+                                         get_completion_statuses,
+                                         get_excluded_statuses, get_team,
+                                         get_ticket_points,
+                                         get_tickets_from_jira,
+                                         interpret_status_timestamps,
+                                         parse_common_arguments, verbose_print)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -315,20 +303,128 @@ def bucket_counts_and_points_with_periods(children, time_periods):
 def build_stdout_header(time_periods):
     """Construct the human-friendly stdout header, including optional period columns.
 
-    Keeping this in a helper reduces duplication and ensures stdout and CSV stay aligned
-    on the same concept of dynamic period columns.
+    Note: the main output uses `build_stdout_table_lines()` to compute column widths
+    from both headers and data so long Status values don't shift numeric columns.
+    This header helper remains for compatibility with any external usage.
     """
-    base_header = (
-        f"{'Epic':10}  {'Team':8}  {'Status':12}  {'Total':>5}  {'Done':>4}  {'Open':>5}  {'Excl':>4}  {'% Done':>7}  "
-        f"{'Pts Total':>9}  {'Pts Done':>8}  {'Pts Open':>9}  {'Pts Excl':>8}  {'Pts % Done':>11}"
-    )
+    lines = build_stdout_table_lines([], time_periods)
+    return lines[0] if lines else ""
 
-    period_header = ""
+
+def _underscoreize_header_label(label: str) -> str:
+    return label.replace(" ", "_")
+
+
+def build_stdout_table_lines(
+    rows,
+    time_periods,
+    *,
+    column_gap: int = 2,
+    summary_gap: int = 4,
+    underscore_headers: bool = True,
+):
+    """Build aligned stdout table lines (header, separator, rows).
+
+    Column widths are computed from the max cell width across all rows so the
+    numeric columns stay aligned even when Status/Team/Epic values are long.
+    """
+
+    def format_cell(value, formatter):
+        if value is None:
+            return ""
+        if formatter is None:
+            return str(value)
+        return formatter(value)
+
+    columns = [
+        {"key": "epic_key", "label": "Epic", "align": "left", "min_width": 10, "fmt": None},
+        {"key": "team", "label": "Team", "align": "left", "min_width": 8, "fmt": None},
+        {"key": "status", "label": "Status", "align": "left", "min_width": 12, "fmt": None},
+        {"key": "tickets_total", "label": "Total", "align": "right", "min_width": 5, "fmt": None},
+        {"key": "tickets_done", "label": "Done", "align": "right", "min_width": 4, "fmt": None},
+        {"key": "tickets_open", "label": "Open", "align": "right", "min_width": 5, "fmt": None},
+        {"key": "tickets_excluded", "label": "Excl", "align": "right", "min_width": 4, "fmt": None},
+        {
+            "key": "tickets_percent_done",
+            "label": "% Done",
+            "align": "right",
+            "min_width": 7,
+            "fmt": lambda v: f"{v:.1f}",
+        },
+        {"key": "points_total", "label": "Pts Total", "align": "right", "min_width": 9, "fmt": None},
+        {"key": "points_done", "label": "Pts Done", "align": "right", "min_width": 8, "fmt": None},
+        {"key": "points_open", "label": "Pts Open", "align": "right", "min_width": 9, "fmt": None},
+        {"key": "points_excluded", "label": "Pts Excl", "align": "right", "min_width": 8, "fmt": None},
+        {
+            "key": "points_percent_done",
+            "label": "Pts % Done",
+            "align": "right",
+            "min_width": 11,
+            "fmt": lambda v: f"{v:.1f}",
+        },
+    ]
+
     if len(time_periods) > 1:
-        for period in reversed(time_periods):  # Show most recent first
-            period_header += f"  {period['label']+' Tix':>8}  {period['label']+' Pts':>8}"
+        for period in reversed(time_periods):
+            label = period["label"]
+            columns.append(
+                {
+                    "key": f"{label}_tickets_completed",
+                    "label": f"{label} Tix",
+                    "align": "right",
+                    "min_width": 8,
+                    "fmt": None,
+                }
+            )
+            columns.append(
+                {
+                    "key": f"{label}_points_completed",
+                    "label": f"{label} Pts",
+                    "align": "right",
+                    "min_width": 8,
+                    "fmt": None,
+                }
+            )
 
-    return base_header + period_header + "  Summary"
+    gap = " " * max(1, column_gap)
+    summary_separator = " " * max(1, summary_gap)
+
+    header_labels = []
+    for col in columns:
+        label = col["label"]
+        header_labels.append(_underscoreize_header_label(label) if underscore_headers else label)
+
+    widths = []
+    for col, header_label in zip(columns, header_labels):
+        width = max(col.get("min_width", 0), len(header_label))
+        for row in rows:
+            cell = format_cell(row.get(col["key"]), col.get("fmt"))
+            width = max(width, len(cell))
+        widths.append(width)
+
+    def format_row(values):
+        formatted = []
+        for col, width in zip(columns, widths):
+            cell = values.get(col["key"], "")
+            if col["align"] == "right":
+                formatted.append(cell.rjust(width))
+            else:
+                formatted.append(cell.ljust(width))
+        return gap.join(formatted)
+
+    header_values = {col["key"]: label for col, label in zip(columns, header_labels)}
+    header_line = format_row(header_values) + summary_separator + "Summary"
+
+    body_lines = []
+    for row in rows:
+        values = {}
+        for col in columns:
+            values[col["key"]] = format_cell(row.get(col["key"]), col.get("fmt"))
+        summary = row.get("epic_description", "") or ""
+        body_lines.append(format_row(values) + summary_separator + summary)
+
+    separator_line = "-" * len(header_line)
+    return [header_line, separator_line, *body_lines]
 
 
 def build_csv_fieldnames(time_periods):
@@ -615,11 +711,6 @@ def main():
     rows = []
     print(f"Found {len(epics)} epics. Computing completion metrics...\n")
 
-    # Build dynamic header based on time periods
-    header = build_stdout_header(time_periods)
-    print(header)
-    print("-" * len(header))
-
     for epic in epics:
         epic_key = epic.key
         epic_summary = getattr(epic.fields, "summary", "") or ""
@@ -644,24 +735,6 @@ def main():
             points_pct_done,
             period_data,
         ) = bucket_counts_and_points_with_periods(children, time_periods)
-
-        # Build base row output
-        base_output = (
-            f"{epic_key:10}  {epic_team:8}  {epic_status:12}  {total_tickets:5d}  {done_tickets:4d}  {open_tickets:5d}  "
-            f"{excluded_tickets:4d}  {tickets_pct_done:7.1f}  {total_points:9d}  {done_points:8d}  {open_points:9d}  "
-            f"{excluded_points:8d}  {points_pct_done:11.1f}"
-        )
-
-        # Add period data to output
-        period_output = ""
-        if len(time_periods) > 1:
-            for period in reversed(time_periods):  # Show most recent first
-                tix = period_data[period["label"]]["tickets_completed"]
-                pts = period_data[period["label"]]["points_completed"]
-                period_output += f"  {tix:8d}  {pts:8d}"
-
-        full_output = base_output + period_output + f"  {epic_summary}"
-        print(full_output)
 
         # Build row data for CSV
         row_data = {
@@ -688,6 +761,9 @@ def main():
             row_data[f"{period_label}_points_completed"] = period_data[period_label]["points_completed"]
 
         rows.append(row_data)
+
+    for line in build_stdout_table_lines(rows, time_periods):
+        print(line)
 
     # Export to CSV if requested or by default
     out_path = os.path.abspath("epic_completion.csv")
