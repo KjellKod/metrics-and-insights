@@ -1528,6 +1528,36 @@ class PRMetricsWriter(MetricsWriter):
 
             self._write_metric_section(
                 writer,
+                "Total Lines Added",
+                months,
+                authors,
+                lambda m, a: (
+                    sum(pr.additions for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Total Lines Removed",
+                months,
+                authors,
+                lambda m, a: (
+                    sum(pr.deletions for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
+                "Total Files Changed",
+                months,
+                authors,
+                lambda m, a: (
+                    sum(pr.changed_files for pr in pr_data if self._matches_month_and_author(pr, m, a))
+                ),
+            )
+
+            self._write_metric_section(
+                writer,
                 "Average Review Response Time (h) (as requested reviewer)",
                 months,
                 authors,

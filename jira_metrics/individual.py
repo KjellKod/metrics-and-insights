@@ -13,7 +13,8 @@ VERBOSE = False
 
 # pylint: disable=import-error
 from jira_utils import (JiraStatus, extract_status_timestamps,
-                        get_common_parser, get_team, get_ticket_points,
+                        get_common_parser, get_completion_statuses,
+                        get_team, get_ticket_points,
                         get_tickets_from_jira, interpret_status_timestamps,
                         verbose_print)
 
@@ -73,7 +74,7 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
     print(f"Period: {start_date} to {end_date}\n")
 
     jql_query = construct_jql(team_name, project_key, start_date, end_date)
-    verbose_print(f"Using JQL: {jql_query}")
+    print(f"JQL Query: {jql_query}\n")
 
     tickets = get_tickets_from_jira(jql_query)
     if not tickets:
@@ -240,13 +241,24 @@ def calculate_rolling_top_contributors(assignee_metrics, end_date):
 
 # pylint: disable=too-many-locals
 def construct_jql(team_name=None, project_key=None, start_date=None, end_date=None):
-    base_jql = f'status in (Released, Done) AND status changed to (Released, Done) during ("{start_date}", "{end_date}") AND issueType in (Task, Bug, Story, Spike)'
+    # Use configured completion statuses instead of hardcoding
+    # Status names with spaces or special words need quotes
+    completion_statuses = get_completion_statuses()
+    status_list = ", ".join(f'"{status.title()}"' for status in completion_statuses)
+    
+    # Use uppercase keywords like bug_stats.py does (IN, CHANGED TO, DURING)
+    # Use single quotes for dates like bug_stats.py does
+    base_jql = f'status IN ({status_list}) AND status CHANGED TO ({status_list}) DURING (\'{start_date}\', \'{end_date}\') AND issueType IN (Task, Bug, Story, Spike)'
 
     if project_key:
-        return f"project = {project_key} AND {base_jql} ORDER BY updated ASC"
+        # Use single quotes around project key like bug_stats.py
+        return f"project = '{project_key}' AND {base_jql} ORDER BY updated ASC"
 
     if team_name:
-        return f'project in ({", ".join(projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'
+        # Use single quotes around projects like bug_stats.py
+        cleaned_projects = [p.strip().strip("'") for p in projects]
+        quoted_projects = [f"'{p}'" for p in cleaned_projects]
+        return f'project IN ({", ".join(quoted_projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'
 
     raise ValueError("Either team_name or project_key must be provided")
 
@@ -302,9 +314,45 @@ def write_csv(assignee_metrics, output_file):
     print(f"Writing individual metrics to {output_file}")
 
 
+def print_year_summary(assignee_metrics):
+    """Print year-end summary: total completed tickets and per-person totals."""
+    # Aggregate all tickets and points across all months and teams
+    total_tickets_year = 0
+    total_points_year = 0
+    tickets_per_person = defaultdict(int)
+    points_per_person = defaultdict(int)
+
+    for month_data in assignee_metrics.values():
+        for team_data in month_data.values():
+            for assignee, metrics in team_data.items():
+                ticket_count = metrics.get("tickets", 0)
+                points_count = metrics.get("points", 0)
+                total_tickets_year += ticket_count
+                total_points_year += points_count
+                tickets_per_person[assignee] += ticket_count
+                points_per_person[assignee] += points_count
+
+    # Print summary
+    print("\n" + "=" * 80)
+    print("YEAR-END SUMMARY")
+    print("=" * 80)
+    print(f"\nTotal Completed Tickets (Year): {total_tickets_year}")
+    print(f"Total Completed Points (Year): {total_points_year}")
+
+    if tickets_per_person:
+        print(f"\nTotal Completed Tickets per Person:")
+        # Sort by ticket count descending
+        sorted_persons = sorted(tickets_per_person.items(), key=lambda x: x[1], reverse=True)
+        for assignee, ticket_count in sorted_persons:
+            points_count = points_per_person[assignee]
+            print(f"  {assignee}: {ticket_count} tickets, {points_count} points")
+    else:
+        print("\nNo tickets found for any person.")
+
+
 def main():
     args = parse_arguments()
-    current_year = datetime.now().year
+    current_year = "2025" #datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
 
@@ -345,6 +393,9 @@ def main():
         print("\nBased on Total Number of Tickets:")
         for i, (contributor, total_tickets) in enumerate(top_contributors["tickets_total"], 1):
             print(f"{i}. {contributor}: {total_tickets} tickets")
+
+        # Print year-end summary
+        print_year_summary(assignee_metrics)
 
         if args.csv:
             csv_output_file = f"{identifier}_individual_metrics.csv"
