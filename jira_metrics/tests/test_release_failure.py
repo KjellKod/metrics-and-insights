@@ -8,9 +8,12 @@ from unittest.mock import MagicMock, patch
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from release_failure import (count_failed_releases, extract_linked_tickets,
-                             print_total_failure_percentage,
-                             process_release_tickets)
+from release_failure import (
+    count_failed_releases,
+    extract_linked_tickets,
+    print_total_failure_percentage,
+    process_release_tickets,
+)
 
 
 class TestReleaseFailure(unittest.TestCase):

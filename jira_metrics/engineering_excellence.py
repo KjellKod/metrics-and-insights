@@ -4,10 +4,17 @@ from collections import defaultdict
 from datetime import datetime
 
 from dotenv import load_dotenv
+
 # pylint: disable=import-error
-from jira_utils import (JiraStatus, extract_status_timestamps, get_team,
-                        get_tickets_from_jira, interpret_status_timestamps,
-                        parse_common_arguments, verbose_print)
+from jira_utils import (
+    JiraStatus,
+    extract_status_timestamps,
+    get_team,
+    get_tickets_from_jira,
+    interpret_status_timestamps,
+    parse_common_arguments,
+    verbose_print,
+)
 
 load_dotenv()
 

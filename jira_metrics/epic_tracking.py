@@ -51,24 +51,37 @@ from dotenv import load_dotenv
 # Import common utilities from jira_metrics
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "jira_metrics"))
 try:
-    from jira_utils import (JiraStatus, extract_status_timestamps,
-                            get_children_for_epic, get_common_parser,
-                            get_completion_statuses, get_excluded_statuses,
-                            get_team, get_ticket_points, get_tickets_from_jira,
-                            interpret_status_timestamps,
-                            parse_common_arguments, verbose_print)
+    from jira_utils import (
+        JiraStatus,
+        extract_status_timestamps,
+        get_children_for_epic,
+        get_common_parser,
+        get_completion_statuses,
+        get_excluded_statuses,
+        get_team,
+        get_ticket_points,
+        get_tickets_from_jira,
+        interpret_status_timestamps,
+        parse_common_arguments,
+        verbose_print,
+    )
 except ImportError:
     # Fallback for when running from different directory
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from jira_metrics.jira_utils import (JiraStatus, extract_status_timestamps,
-                                         get_children_for_epic,
-                                         get_common_parser,
-                                         get_completion_statuses,
-                                         get_excluded_statuses, get_team,
-                                         get_ticket_points,
-                                         get_tickets_from_jira,
-                                         interpret_status_timestamps,
-                                         parse_common_arguments, verbose_print)
+    from jira_metrics.jira_utils import (
+        JiraStatus,
+        extract_status_timestamps,
+        get_children_for_epic,
+        get_common_parser,
+        get_completion_statuses,
+        get_excluded_statuses,
+        get_team,
+        get_ticket_points,
+        get_tickets_from_jira,
+        interpret_status_timestamps,
+        parse_common_arguments,
+        verbose_print,
+    )
 
 # Load environment variables from .env file
 load_dotenv()

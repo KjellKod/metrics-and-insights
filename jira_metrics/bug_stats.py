@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from dotenv import load_dotenv
+
 # pylint: disable=import-error
 from jira_utils import get_tickets_from_jira, print_env_variables
 

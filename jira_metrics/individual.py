@@ -12,11 +12,17 @@ from dotenv import load_dotenv
 VERBOSE = False
 
 # pylint: disable=import-error
-from jira_utils import (JiraStatus, extract_status_timestamps,
-                        get_common_parser, get_completion_statuses,
-                        get_team, get_ticket_points,
-                        get_tickets_from_jira, interpret_status_timestamps,
-                        verbose_print)
+from jira_utils import (
+    JiraStatus,
+    extract_status_timestamps,
+    get_common_parser,
+    get_completion_statuses,
+    get_team,
+    get_ticket_points,
+    get_tickets_from_jira,
+    interpret_status_timestamps,
+    verbose_print,
+)
 
 load_dotenv()
 
@@ -245,10 +251,10 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
     # Status names with spaces or special words need quotes
     completion_statuses = get_completion_statuses()
     status_list = ", ".join(f'"{status.title()}"' for status in completion_statuses)
-    
+
     # Use uppercase keywords like bug_stats.py does (IN, CHANGED TO, DURING)
     # Use single quotes for dates like bug_stats.py does
-    base_jql = f'status IN ({status_list}) AND status CHANGED TO ({status_list}) DURING (\'{start_date}\', \'{end_date}\') AND issueType IN (Task, Bug, Story, Spike)'
+    base_jql = f"status IN ({status_list}) AND status CHANGED TO ({status_list}) DURING ('{start_date}', '{end_date}') AND issueType IN (Task, Bug, Story, Spike)"
 
     if project_key:
         # Use single quotes around project key like bug_stats.py
@@ -352,7 +358,7 @@ def print_year_summary(assignee_metrics):
 
 def main():
     args = parse_arguments()
-    current_year = "2025" #datetime.now().year
+    current_year = "2025"  # datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
 

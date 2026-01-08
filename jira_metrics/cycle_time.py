@@ -5,12 +5,20 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 import pytz
+
 # pylint: disable=import-error
-from jira_utils import (JiraStatus, extract_status_timestamps,
-                        get_code_review_statuses, get_completion_statuses,
-                        get_team, get_tickets_from_jira,
-                        interpret_status_timestamps, parse_common_arguments,
-                        print_env_variables, verbose_print)
+from jira_utils import (
+    JiraStatus,
+    extract_status_timestamps,
+    get_code_review_statuses,
+    get_completion_statuses,
+    get_team,
+    get_tickets_from_jira,
+    interpret_status_timestamps,
+    parse_common_arguments,
+    print_env_variables,
+    verbose_print,
+)
 
 # Note: Using direct v3 API calls with simple object conversion
 

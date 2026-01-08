@@ -4,11 +4,17 @@ from collections import defaultdict
 from datetime import datetime
 
 import pytz
+
 # pylint: disable=import-error
-from jira_utils import (JiraStatus, extract_status_timestamps,
-                        get_ticket_points, get_tickets_from_jira,
-                        interpret_status_timestamps, parse_common_arguments,
-                        verbose_print)
+from jira_utils import (
+    JiraStatus,
+    extract_status_timestamps,
+    get_ticket_points,
+    get_tickets_from_jira,
+    interpret_status_timestamps,
+    parse_common_arguments,
+    verbose_print,
+)
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
 

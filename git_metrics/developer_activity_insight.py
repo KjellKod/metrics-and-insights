@@ -60,6 +60,7 @@ from statistics import median
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pytz
+
 # Third-party imports
 import requests
 from dotenv import load_dotenv
@@ -1531,9 +1532,7 @@ class PRMetricsWriter(MetricsWriter):
                 "Total Lines Added",
                 months,
                 authors,
-                lambda m, a: (
-                    sum(pr.additions for pr in pr_data if self._matches_month_and_author(pr, m, a))
-                ),
+                lambda m, a: (sum(pr.additions for pr in pr_data if self._matches_month_and_author(pr, m, a))),
             )
 
             self._write_metric_section(
@@ -1541,9 +1540,7 @@ class PRMetricsWriter(MetricsWriter):
                 "Total Lines Removed",
                 months,
                 authors,
-                lambda m, a: (
-                    sum(pr.deletions for pr in pr_data if self._matches_month_and_author(pr, m, a))
-                ),
+                lambda m, a: (sum(pr.deletions for pr in pr_data if self._matches_month_and_author(pr, m, a))),
             )
 
             self._write_metric_section(
@@ -1551,9 +1548,7 @@ class PRMetricsWriter(MetricsWriter):
                 "Total Files Changed",
                 months,
                 authors,
-                lambda m, a: (
-                    sum(pr.changed_files for pr in pr_data if self._matches_month_and_author(pr, m, a))
-                ),
+                lambda m, a: (sum(pr.changed_files for pr in pr_data if self._matches_month_and_author(pr, m, a))),
             )
 
             self._write_metric_section(

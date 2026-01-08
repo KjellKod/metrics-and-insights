@@ -7,10 +7,14 @@ from unittest.mock import MagicMock, patch
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from jira_metrics.bug_stats import (build_jql_queries, export_to_csv,
-                                    fetch_bug_statistics,
-                                    generate_yearly_report, setup_logging,
-                                    validate_years)
+from jira_metrics.bug_stats import (
+    build_jql_queries,
+    export_to_csv,
+    fetch_bug_statistics,
+    generate_yearly_report,
+    setup_logging,
+    validate_years,
+)
 
 
 class TestBugStats(unittest.TestCase):
