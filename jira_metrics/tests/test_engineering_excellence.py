@@ -9,8 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # import functions to test- execute with
 #  python3 -m unittest discover -s test -p "test_engineering_excellence.py"
 # pylint: disable=wrong-import-position,import-error
-from engineering_excellence import (categorize_ticket, get_resolution_date,
-                                    get_team, get_work_type, update_team_data)
+from engineering_excellence import categorize_ticket, get_resolution_date, get_team, get_work_type, update_team_data
 
 
 class TestGetResolutionDate(unittest.TestCase):

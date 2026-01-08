@@ -27,10 +27,16 @@ from collections import defaultdict
 from datetime import datetime
 
 from dotenv import load_dotenv
+
 # Import utilities from the generic jira_utils
-from jira_utils import (get_common_parser, get_completion_statuses,
-                        get_tickets_from_jira, parse_common_arguments,
-                        print_env_variables, verbose_print)
+from jira_utils import (
+    get_common_parser,
+    get_completion_statuses,
+    get_tickets_from_jira,
+    parse_common_arguments,
+    print_env_variables,
+    verbose_print,
+)
 
 load_dotenv()
 
