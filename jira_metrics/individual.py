@@ -358,7 +358,7 @@ def print_year_summary(assignee_metrics):
 
 def main():
     args = parse_arguments()
-    current_year = "2025"  # datetime.now().year
+    current_year = datetime.now().year
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year}-12-31"
 
