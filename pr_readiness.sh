@@ -86,8 +86,8 @@ def main() -> None:
 
     ensure_project_root()
     apply_ci_env_defaults()
-    run_pytest()
     run_pylint()
+    run_pytest()
 
     print("===================")
     print("🎉 All checks passed!")

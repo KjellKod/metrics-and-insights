@@ -1,8 +1,9 @@
+import argparse
 import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytz
 from jira.resources import Issue
@@ -10,7 +11,12 @@ from jira.resources import Issue
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
-from cycle_time import business_time_spent_in_seconds, process_changelog
+from cycle_time import (
+    business_time_spent_in_seconds,
+    calculate_monthly_cycle_time,
+    parse_month,
+    process_changelog,
+)
 
 # Define the PST timezone
 PST = timezone(timedelta(hours=-8))
@@ -276,6 +282,59 @@ class TestBusinessTimeCalculations(unittest.TestCase):
         result = business_time_spent_in_seconds(start, end)
         expected = 24 * 3600  # 24 hours
         self.assertEqual(result, expected, f"Expected {expected}, got {result}")
+
+
+class TestParseMonth(unittest.TestCase):
+    def test_valid_month(self):
+        self.assertEqual(parse_month("1"), 1)
+        self.assertEqual(parse_month("12"), 12)
+
+    def test_invalid_month(self):
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_month("0")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_month("13")
+        with self.assertRaises(argparse.ArgumentTypeError):
+            parse_month("not-a-month")
+
+
+class TestAssigneeCycleTimeAggregation(unittest.TestCase):
+    def create_issue(self, key, assignee_name):
+        issue = MagicMock()
+        issue.key = key
+        issue.fields.assignee.displayName = assignee_name
+        return issue
+
+    @patch("cycle_time.get_team")
+    @patch("cycle_time.calculate_cycle_time_seconds")
+    @patch("cycle_time.get_tickets_from_jira")
+    def test_assignee_metrics_for_selected_month(
+        self, mock_get_tickets, mock_calc_cycle_time, mock_get_team
+    ):
+        issue1 = self.create_issue("ISSUE-1", "Alice")
+        issue2 = self.create_issue("ISSUE-2", "Bob")
+        issue3 = self.create_issue("ISSUE-3", "Alice")
+
+        mock_get_tickets.return_value = [issue1, issue2, issue3]
+        mock_get_team.return_value = "alpha"
+        mock_calc_cycle_time.side_effect = [
+            (100, "2024-02", None),
+            (200, "2024-02", None),
+            (150, "2024-03", None),
+        ]
+
+        cycle_times, assignee_times = calculate_monthly_cycle_time(
+            ["PROJ"], "2024-01-01", "2024-12-31", "2024-02"
+        )
+
+        self.assertIn("alpha", cycle_times)
+        self.assertIn("all", cycle_times)
+        self.assertIsNotNone(assignee_times)
+        self.assertIn("alpha", assignee_times)
+
+        team_assignees = assignee_times["alpha"]
+        self.assertEqual(len(team_assignees["Alice"]), 1)
+        self.assertEqual(len(team_assignees["Bob"]), 1)
 
 
 if __name__ == "__main__":

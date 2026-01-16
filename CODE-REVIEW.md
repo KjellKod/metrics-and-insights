@@ -36,6 +36,7 @@ Strongly prefer:
 - **SRP** (Single Responsibility Principle)
 - **DRY** (Do not repeat yourself)
 - **YAGNI** (Avoid speculative abstractions)
+- **KISS** (Code should be simple, not complex. Code readability is important)
 
 Drive with quality, but **avoid mocking hell**.
 Tests should exist and be meaningful, but do not recommend fragile or over-mocked unit tests when simpler integration coverage is better.
