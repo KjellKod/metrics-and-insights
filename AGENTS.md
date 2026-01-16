@@ -15,4 +15,7 @@ Follow these guidelines when working in this repository.
 ## Testing
 - Logic-only changes should be unit testable when practical.
 - Avoid complex test setups and avoid heavy mocking.
-- If tests are skipped, say why.
+- If tests are skipped, say why.i
+
+## Code Review
+Follow the principles laid out in CODE-REVIEW.md
