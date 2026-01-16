@@ -64,6 +64,9 @@ cover/
 # csv output
 *.csv
 
+# Test artifacts
+junit.xml
+
 # Django stuff:
 *.log
 local_settings.py
