@@ -40,7 +40,7 @@ def apply_ci_env_defaults() -> None:
 
 
 def run_pytest() -> None:
-    print("1) Running unit tests (pytest + coverage)...")
+    print("Running unit tests (pytest + coverage)...")
     subprocess.run(
         [
             sys.executable,
@@ -59,7 +59,7 @@ def run_pytest() -> None:
 
 
 def run_pylint() -> None:
-    print("2) Running pylint (score must be >= 9.50)...")
+    print("Running pylint (score must be >= 9.50)...")
     result = subprocess.run(
         ["pylint", *subprocess.check_output(["git", "ls-files", "*.py"]).decode().split()],
         text=True,
