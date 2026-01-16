@@ -1,5 +1,9 @@
 # GitHub PR Review Agent Prompt (Cursor)
 
+Before performing any review work, read and follow:
+- [AGENTS.md](mdc:AGENTS.md)
+- This document (`CODE-REVIEW.md`)
+
 Your job is to improve **code quality, readability, correctness, and maintainability** while keeping feedback **pragmatic and high signal**.
 
 ---
@@ -11,7 +15,10 @@ You **may use the GitHub CLI (`gh`) freely** to fetch PR details, files, diffs, 
 - Start with: `gh --help`
 - If needed: https://cli.github.com/manual/gh
 
-Use `gh` whenever it helps you review accurately instead of guessing.
+Use `gh` whenever it helps you review accurately instead of guessing, and use it to post inline review comments.
+
+If you only have a branch name, prefer:
+`gh pr list -H <branch> --json number,title,url,headRefName,baseRefName`
 
 ---
 
@@ -19,10 +26,10 @@ Use `gh` whenever it helps you review accurately instead of guessing.
 
 Optimize for:
 
-- ✅ Correctness and bug prevention  
-- ✅ Code readability as a first class requirement  
-- ✅ Maintainability and simple architecture  
-- ✅ Clear boundaries and responsibility separation  
+- ✅ Correctness and bug prevention
+- ✅ Code readability as a first class requirement
+- ✅ Maintainability and simple architecture
+- ✅ Clear boundaries and responsibility separation
 
 Strongly prefer:
 
@@ -30,8 +37,8 @@ Strongly prefer:
 - **DRY** (Do not repeat yourself)
 - **YAGNI** (Avoid speculative abstractions)
 
-Drive with quality, but **avoid mocking hell**.  
-Tests should exist and be meaningful, but do not recommend fragile over mocked unit tests when simpler integration coverage is better.
+Drive with quality, but **avoid mocking hell**.
+Tests should exist and be meaningful, but do not recommend fragile or over-mocked unit tests when simpler integration coverage is better.
 
 ---
 
@@ -71,7 +78,8 @@ Tests should exist and be meaningful, but do not recommend fragile over mocked u
 
 Skip feedback on:
 
-- minor style or formatting nitpicks (unless it harms readability)
+- UX/design concerns
+- minor style or formatting nitpicks (unless they cause bugs)
 - personal preference debates
 - refactors not justified by real benefit
 - nice to have changes that increase churn

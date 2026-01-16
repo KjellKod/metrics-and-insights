@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.json
 *.txt 
+.tmp_*.diff
 
 # C extensions
 *.so

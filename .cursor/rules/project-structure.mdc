@@ -4,6 +4,10 @@ alwaysApply: true
 
 # Engineering Metrics and Insights Project Structure
 
+Review workflow and expectations:
+- [AGENTS.md](mdc:AGENTS.md)
+- [CODE-REVIEW.md](mdc:CODE-REVIEW.md)
+
 This repository contains scripts for gathering and analyzing engineering metrics from Jira and GitHub to help engineering teams identify process improvement areas.
 
 ## Core Architecture
