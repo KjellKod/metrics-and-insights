@@ -12,7 +12,6 @@ from jira_utils import (
     JiraStatus,
     extract_status_timestamps,
     get_code_review_statuses,
-    developer_throughput
     get_common_parser,
     get_completion_statuses,
     get_team,
