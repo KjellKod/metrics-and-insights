@@ -47,6 +47,13 @@ _COMPLETION_STATUSES_CACHE = None
 _EXCLUDED_STATUSES_CACHE = None
 
 
+def reset_status_caches():
+    """Reset cached completion and excluded statuses (useful for tests)."""
+    global _COMPLETION_STATUSES_CACHE, _EXCLUDED_STATUSES_CACHE
+    _COMPLETION_STATUSES_CACHE = None
+    _EXCLUDED_STATUSES_CACHE = None
+
+
 def verbose_print(message):
     if VERBOSE:
         print(message)

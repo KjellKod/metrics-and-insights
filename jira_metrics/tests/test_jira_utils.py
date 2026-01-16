@@ -12,8 +12,7 @@ from jira_utils import SimpleNamespace, convert_raw_issue_to_simple_object, get_
 
 class TestCompletionStatuses(unittest.TestCase):
     def setUp(self):
-        jira_utils._COMPLETION_STATUSES_CACHE = None
-        jira_utils._EXCLUDED_STATUSES_CACHE = None
+        jira_utils.reset_status_caches()
 
     @patch.dict(os.environ, {"COMPLETION_STATUSES": "released, done, To Release"}, clear=False)
     def test_get_completion_statuses_parses_and_caches(self):
