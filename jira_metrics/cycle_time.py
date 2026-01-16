@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 import statistics
@@ -11,6 +12,7 @@ from jira_utils import (
     JiraStatus,
     extract_status_timestamps,
     get_code_review_statuses,
+    get_common_parser,
     get_completion_statuses,
     get_team,
     get_tickets_from_jira,
@@ -35,6 +37,16 @@ def validate_issue(issue):
     return True
 
 
+def parse_month(value):
+    try:
+        month = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Expected a month number (1-12)") from exc
+    if not 1 <= month <= 12:
+        raise argparse.ArgumentTypeError("Expected a month number (1-12)")
+    return month
+
+
 def print_skip_issue(issue, team, month_display, reason):
     """Print a standardized skip line with helpful context."""
     issue_id = issue.key
@@ -50,6 +62,15 @@ def print_skip_issue(issue, team, month_display, reason):
         f"[SKIP] {issue_id}: <{assignee_str}>, <{summary_str}>  — "
         f"Team: {team}, Month: {month_display} — No cycle time ({reason})"
     )
+
+
+def get_assignee_name(issue):
+    assignee = getattr(issue.fields, "assignee", None)
+    if assignee:
+        assignee_name = getattr(assignee, "displayName", None)
+        if assignee_name:
+            return assignee_name
+    return "Unassigned"
 
 
 def business_time_spent_in_seconds(start, end):
@@ -169,7 +190,7 @@ def calculate_cycle_time_seconds(start_date_str, end_date_str, issue):
     return None, None, "unknown error"
 
 
-def calculate_monthly_cycle_time(projects, start_date, end_date):
+def calculate_monthly_cycle_time(projects, start_date, end_date, individuals_month_key=None):
     """
     Calculate cycle time metrics for tickets released within the date range.
     Uses JIRA REST API v3 via jira_utils for efficient server-side date filtering.
@@ -178,6 +199,7 @@ def calculate_monthly_cycle_time(projects, start_date, end_date):
     tickets = get_tickets_from_jira(jql_query)
     verbose_print(f"Retrieved {len(tickets)} total tickets from API")
     cycle_times_per_month = defaultdict(lambda: defaultdict(list))
+    assignee_cycle_times = defaultdict(lambda: defaultdict(list)) if individuals_month_key else None
 
     for _, issue in enumerate(tickets):
         cycle_time, month_key, reason = calculate_cycle_time_seconds(start_date, end_date, issue)
@@ -186,10 +208,13 @@ def calculate_monthly_cycle_time(projects, start_date, end_date):
         if cycle_time:
             cycle_times_per_month[team][month_key].append((cycle_time, issue_id))
             cycle_times_per_month["all"][month_key].append((cycle_time, issue_id))
+            if assignee_cycle_times is not None and month_key == individuals_month_key:
+                assignee_name = get_assignee_name(issue)
+                assignee_cycle_times[team][assignee_name].append((cycle_time, issue_id))
         else:
             month_display = month_key if month_key else "unknown"
             print_skip_issue(issue, team, month_display, reason)
-    return cycle_times_per_month
+    return cycle_times_per_month, assignee_cycle_times
 
 
 def calculate_average_cycle_time(cycle_times):
@@ -206,7 +231,20 @@ def calculate_median_cycle_time(cycle_times):
     return 0
 
 
-def process_cycle_time_metrics(team, months):
+def print_assignee_cycle_time_metrics(assignee_cycle_times):
+    for assignee, cycle_times in sorted(assignee_cycle_times.items(), key=lambda item: item[0].lower()):
+        average_cycle_time_s = calculate_average_cycle_time(cycle_times)
+        median_cycle_time_s = calculate_median_cycle_time(cycle_times)
+        median_cycle_time_days = median_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
+        average_cycle_time_days = average_cycle_time_s / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
+        total_tickets = len(cycle_times)
+        print(
+            f"{assignee}, Median Cycle Time: {median_cycle_time_days:.2f} days, "
+            f"Average Cycle Time: {average_cycle_time_days:.2f} days, Total tickets: {total_tickets}"
+        )
+
+
+def process_cycle_time_metrics(team, months, individuals_month_key=None, assignee_cycle_times=None):
     metrics = []
     for month, cycle_times in sorted(months.items()):
         average_cycle_time_s = calculate_average_cycle_time(cycle_times)
@@ -229,10 +267,16 @@ def process_cycle_time_metrics(team, months):
         print(
             f"Month: {month}, Median Cycle Time: {median_cycle_time_days:.2f} days, Average Cycle Time: {average_cycle_time_days:.2f} days {total_ticket_amount}"
         )
+        if individuals_month_key and month == individuals_month_key and assignee_cycle_times:
+            team_assignees = assignee_cycle_times.get(team)
+            if team_assignees:
+                print_assignee_cycle_time_metrics(team_assignees)
     return metrics
 
 
-def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pylint: disable=unused-argument
+def show_cycle_time_metrics(  # pylint: disable=unused-argument
+    csv_output, cycle_times_per_month, verbose, individuals_month_key=None, assignee_cycle_times=None
+):
     # Separate the "all" team from other teams
     all_team = cycle_times_per_month.pop("all", None)
 
@@ -241,13 +285,13 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pyli
     # Process metrics for all other teams
     for team, months in sorted(cycle_times_per_month.items()):
         print(f"Team: {team.capitalize()}")
-        metrics = process_cycle_time_metrics(team, months)
+        metrics = process_cycle_time_metrics(team, months, individuals_month_key, assignee_cycle_times)
         all_metrics.extend(metrics)
 
     # Process metrics for the "all" team
     if all_team:
         print("Team: All")
-        metrics = process_cycle_time_metrics("All", all_team)
+        metrics = process_cycle_time_metrics("All", all_team, None, None)
         all_metrics.extend(metrics)
 
     if csv_output:
@@ -268,7 +312,18 @@ def show_cycle_time_metrics(csv_output, cycle_times_per_month, verbose):  # pyli
 
 
 def main():
-    args = parse_common_arguments()
+    parser = get_common_parser()
+    parser.add_argument(
+        "--year",
+        type=int,
+        help="Year (YYYY) for cycle time metrics; defaults to the current year.",
+    )
+    parser.add_argument(
+        "--individuals-month",
+        type=parse_month,
+        help="Show per-assignee cycle time stats for a specific month (1-12).",
+    )
+    args = parse_common_arguments(parser)
     print_env_variables()
     # Print measurement configuration (start)
     review_statuses = sorted(get_code_review_statuses())
@@ -276,17 +331,33 @@ def main():
     print("Measuring cycle time between: FIRST code review entry and EARLIEST completion status (per configuration).")
     print(f"Code review statuses: {review_statuses}")
     print(f"Completion statuses: {completion_statuses} (override via environment variable COMPLETION_STATUSES)")
-    current_year = datetime.now().year
-    start_date = f"{current_year}-01-01"
-    end_date = f"{current_year}-12-31"
+    target_year = args.year or datetime.now().year
+    start_date = f"{target_year}-01-01"
+    end_date = f"{target_year}-12-31"
+    individuals_month_key = (
+        f"{target_year}-{args.individuals_month:02d}" if args.individuals_month else None
+    )
     projects = os.environ.get("JIRA_PROJECTS").split(",")
     print(f"Projects: {projects}")
-    cycle_times_per_month = calculate_monthly_cycle_time(projects, start_date, end_date)
-    show_cycle_time_metrics(args.csv, cycle_times_per_month, args.verbose)
+    cycle_times_per_month, assignee_cycle_times = calculate_monthly_cycle_time(
+        projects, start_date, end_date, individuals_month_key
+    )
+    show_cycle_time_metrics(
+        args.csv,
+        cycle_times_per_month,
+        args.verbose,
+        individuals_month_key,
+        assignee_cycle_times,
+    )
     # Print measurement configuration (end)
     print("Completed cycle time measurement using: FIRST code review status and EARLIEST completion status.")
     print(f"Code review statuses: {review_statuses}")
     print("Completion statuses: " f"{completion_statuses} (override via environment variable COMPLETION_STATUSES)")
+    if not args.individuals_month:
+        print(
+            "Tip: add per-assignee stats for a month with "
+            "--individuals-month 12 (optionally set --year)."
+        )
 
 
 if __name__ == "__main__":
