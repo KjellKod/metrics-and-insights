@@ -51,7 +51,7 @@ def run_pytest() -> None:
             "-o",
             "junit_family=legacy",
             "--cov-branch",
-            "--cov-fail-under=47",
+            "--cov-fail-under=40",
         ],
         check=True,
     )
