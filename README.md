@@ -1,238 +1,268 @@
-# Engineering Metrics and Insights
+Agentic Engineering Adoption Guide
 
-This repository contains a collection of scripts for gathering and analyzing engineering metrics from Jira and GitHub. The goal is to help engineering teams identify areas for process improvement, track progress, and make data-driven decisions.
+Audience: Engineering Managers, AI-Mentor Group
+Purpose: Establish a shared, enforceable, and teachable workflow for AI-augmented software engineering across a team with mixed AI fluency.
 
-# Purpose and Usage
+⸻
 
-These tools are designed to provide insights into various aspects of the software development lifecycle:
+1. What This Document Is (and Is Not)
 
-- **Delivery Performance**: Track cycle times, release frequencies, and release failures
-- **Engineering Excellence**: Monitor balance between product work and technical improvements
-- **Code Review Process**: Analyze PR review times and patterns
-- **Team Workload**: Understand ticket distribution and completion patterns
+This document is:
+	•	A governing standard for how engineering work is planned, implemented, reviewed, and validated in an AI-augmented environment.
+	•	A teaching guide for engineering managers and AI mentors to onboard developers safely and consistently.
+	•	A system description, not a set of tips.
 
-### Important Note on Metrics
-**These metrics should be used as conversation starters and indicators, not as absolute measures of performance**. They are most valuable when:
-- Used to identify trends over time
-- Combined with qualitative feedback
-- Discussed openly with teams
-- Used to find areas needing support or improvement
+This document is not:
+	•	A tool-specific guide.
+	•	A collection of prompt hacks.
+	•	Optional best practices.
 
-### Data Export and Visualization
-Most scripts include a `-csv` flag that exports data to CSV files, making it easy to:
-- Import into spreadsheet tools (Google Sheets, Excel)
-- Create custom dashboards
-- Combine with other data sources
-- Share insights with stakeholders
-- Track trends over time
+⸻
 
-Example workflow:
-1. Run scripts regularly (e.g., monthly)
-2. Export to CSV
-3. Import into shared spreadsheet
-4. Create visualizations
-5. Discuss trends with team
+2. Core Principle
 
-## Repository Structure
+Planning is authoritative.
+The plan is the code before the code exists.
 
-```
-├── git_metrics/                        # Scripts for analyzing GitHub repository metrics
-│   ├── README.md                      # Documentation for git metrics scripts
-│   ├── developer_activity_insight.py   # Comprehensive PR metrics and developer activity analysis
-│   ├── releases.py                     # Analyze release patterns
-│   ├── lines_changed.py                # Track code volume changes
-│   ├── repo_commit_report.sh           # Generate commit reports for multiple repos
-│   ├── code_review_metrics.py          # Analyze code review patterns and timing
-│   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
-│   ├── active_devs_one_off.py          # Track active developers
-│   ├── active_repositories_in_organization.py  # Identify active repositories
-│
-├── jira_metrics/                       # Scripts for extracting metrics from Jira
-│   ├── epic_tracking.py                # Track epic completion metrics with time-based analysis
-│   ├── engineering_excellence.py       # Track engineering excellence vs product work
-│   ├── cycle_time.py                   # Analyze time from code review to release
-│   ├── release_failure.py              # Analyze release failures and impact
-│   ├── individual.py                   # Individual contributor metrics analysis
-│   ├── released_tickets.py             # Track monthly released ticket counts
-│   ├── jira_utils.py                   # Helper utility 
-│
-├── tests/                              # Test suite
-│   ├── __init__.py       
-│   ├── test_engineering_excellence.py
-│ 
-├── .gitignore                          # Git ignore file
-├── requirements.txt                    # Python dependencies
-└── README.md                           # This file
-```
+	•	Code does not define intent.
+	•	Plans define intent.
+	•	Reviews validate against plans.
+	•	Humans approve state transitions.
 
-## Requirements
+⸻
 
-Install the necessary python frameworks with: 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip3 install --upgrade -r requirements.txt
-```
+3. The Canonical Engineering Workflow
 
-If you make python dependency changes, please update requirements.txt with:
-```bash
-pip3 freeze > requirements.txt
-```
+This workflow is invariant. It does not change by seniority, experience, or AI skill level.
 
-## Key Components
+flowchart LR
+    subgraph Ideation
+        A[Validate Idea]
+        A --> B[Model Check Against Docs]
+    end
 
-### Git Metrics
-Scripts for analyzing GitHub repository metrics and developer activity. For detailed documentation of each script and its usage, see [git_metrics/README.md](git_metrics/README.md).
+    subgraph Planning
+        B --> C[Create High-Level Plan]
+        C --> D[AI Writer + AI Reviewer Iterate]
+    end
 
-- `developer_activity_insight.py`: Comprehensive PR metrics including monthly aggregations, review metrics, and volume metrics per author
-- `releases.py`: Analyze release patterns and frequencies
-- `lines_changed.py`: Track code volume changes between dates
-- `repo_commit_report.sh`: Generate detailed commit reports for multiple repositories
-- `code_review_metrics.py`: Analyze code review patterns and timing
-- `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
-- `active_devs_one_off.py`: Identify and analyze active developers
-- `active_repositories_in_organization.py`: Identify and analyze active repositories
+    subgraph Implementation
+        D --> E[Create Stepwise Implementation Plan]
+        E --> F[AI Writer + AI Reviewer Iterate]
+    end
 
-### Jira Metrics
-Scripts for extracting and analyzing Jira metrics:
-- `epic_tracking.py`: Track epic completion metrics with time-based analysis
-- `engineering_excellence.py`: Track engineering excellence vs product work
-- `cycle_time.py`: Calculate cycle time metrics
-- `release_failure.py`: Analyze release failures and impact
-- `individual.py`: Individual contributor metrics analysis
-- `released_tickets.py`: Track monthly released ticket counts
-- `jira_utils.py`: Helper utility module
+    subgraph Completion
+        F --> G[Code & Validate]
+        G --> H[AI Writer + AI Reviewer + Human Review]
+    end
 
-#### Completion Status Configuration (Applies to All Jira Scripts)
-All Jira metrics scripts use the `COMPLETION_STATUSES` environment variable to determine which ticket 
-statuses count as "done" or "completed". This affects cycle time calculations, epic tracking, individual 
-metrics, and all other completion-based analyses.
+    I((Human Answers Questions
+and Makes Decisions))
+    D -.-> I
+    F -.-> I
+    H -.-> I
 
-Defaults:
-- Code review states: `{"code review", "in code review", "to review", "to code review", "in review", "in design review"}`
-- Completion states: `["released", "done"]`
-- Excluded states: `["closed"]` (not counted as Done or Other)
+    G <---> H
 
-Override completion states in your `.env` file to match your workflow:
-```bash
-# Example: Include "to release" and "staged release" as completion statuses
-COMPLETION_STATUSES=released,done,to release,staged release
+Rules:
+	•	Every phase validates against existing documentation (architecture, plans, backlog).
+	•	Humans are the gatekeepers between phases.
+	•	Ambiguity stops progress.
 
-# Example: Exclude certain statuses from metrics (neither Done nor Other)
-EXCLUDED_STATUSES=closed,cancelled,duplicate
-```
+⸻
 
-**Note**: Status names are case-insensitive and whitespace is trimmed. 
+4. Track A: Phases for the Team (System Maturity)
 
-**Excluded Statuses**: These are tickets that shouldn't count toward completion (no credit to team) but also 
-shouldn't be counted as open/active work. Examples include "closed", "cancelled", or "duplicate" tickets.
+This track describes what the team has in place, not what any individual can do.
 
-This configuration affects:
-- `cycle_time.py` - Determines the end point of cycle time measurements
-- `epic_tracking.py` - Determines which child tickets count as completed vs excluded
-- `individual.py` - Determines which tickets count toward individual completion metrics
-- All other scripts that analyze ticket completion
+Team Phase 1: Structural Foundation
 
-Scripts print the active completion statuses at the start of execution for verification.
+Goal: Make the right behavior the default.
 
-## Environment Variables
+Required Artifacts:
+	•	docs/ai/
+	•	docs/plans/
+	•	docs/history/
+	•	AGENTS.md
+	•	DOCUMENTATION_STRUCTURE.md
+	•	docs/ai/workflow/context-bootstrap.md
 
-Create an `.env` file in the root directory with the following variables:
+Required Behavior:
+	•	Plans exist as files.
+	•	Acceptance criteria are written.
+	•	Reviews reference documents, not chat history.
 
-```
-# GitHub Configuration
-GITHUB_TOKEN_READONLY_WEB="your_github_token"
-GITHUB_METRIC_OWNER_OR_ORGANIZATION="your_github_org"
-GITHUB_REPO_FOR_RELEASE_TRACKING="your_repo_name"
-GITHUB_REPO_FOR_PR_TRACKING="your_repo_name"
+⸻
 
-# Jira Configuration
-USER_EMAIL="your_email@example.com"
-JIRA_API_KEY="your_jira_api_key"
-JIRA_LINK="https://your_jira_instance.atlassian.net"
-JIRA_GRAPHQL_URL="https://your_jira_instance.atlassian.net/gateway/api/graphql"
-JIRA_PROJECTS="PROJECT1,PROJECT2,PROJECT3"
+Team Phase 2: Enforced Planning and Review
 
-# Team Configuration
-TEAM_<NAME>="team_name"  # Used when team field isn't available in project
+Goal: Block unsafe work automatically.
 
-# Jira Custom Fields (example values - replace with your actual field IDs)
-CUSTOM_FIELD_STORYPOINTS=10025
-CUSTOM_FIELD_TEAM=10075
-CUSTOM_FIELD_WORK_TYPE=10079
+Additions:
+	•	High-level plan template.
+	•	Plan review before implementation.
+	•	Agentic code review that requires acceptance criteria.
 
-# Cache Controls (Git metrics)
-# Time-to-live for PR cache file in hours (default: 8)
-PR_CACHE_TTL_HOURS=8
-# Force fresh fetch (ignore and delete cache when set to "1")
-PR_CACHE_FORCE_FRESH=0
-```
+Enforcement:
+	•	PRs without plans are blocked.
+	•	Reviews must validate against plans.
 
-Note: The custom field IDs are examples. You'll need to find your actual field IDs in Jira under Settings → Issues → Custom Fields.
+⸻
 
-## Example Usage
+Team Phase 3: Executable Planning and Clean Context
 
-### GitHub Metrics
-To analyze developer activity and PR metrics:
-```bash
-python3 git_metrics/developer_activity_insight.py \
-  --owner myorg \
-  --repos 'repo1,repo2' \
-  --users 'user1,user2' \
-  --date_start '2024-01-01' \
-  --date_end '2024-03-31' \
-  [--output pr_metrics.csv] [--debug] [--dry-run]
-```
+Goal: Scale senior decision-making.
 
-To analyze release patterns:
-```bash
-python3 git_metrics/releases.py
-```
+Additions:
+	•	Detailed implementation plans for complex work.
+	•	Explicit role separation (Planner, Implementer, Reviewer).
+	•	Fresh context per phase is expected.
 
-### Jira Metrics
-To track epic completion with time-based analysis:
-```bash
-# Epic Tracking with Time-Based Analysis
+⸻
 
-The epic_tracking.py script provides detailed completion metrics for epics, including a powerful time-based analysis feature through the --periods option. This option shows when tickets were actually completed (marked as Done/Released) during specific time periods.
+Team Phase 4: Stewardship
 
-Key Features of --periods:
-- Shows completion timeline data backwards from your specified time period
-- Helps track when work was actually completed over time
-- Default periods vary by time unit:
-  - Quarters: 4 periods (1 year of data)
-  - Months: 6 periods (half year of data)
-  - Years: 1 period (full year)
+Goal: The system evolves intentionally.
 
-Examples:
+Additions:
+	•	Dedicated plan reviewers.
+	•	Curated skills library.
+	•	Regular updates to rules and architecture docs.
 
-# Analyze specific epic with quarterly completion timeline (last 4 quarters)
-python3 jira_metrics/epic_tracking.py --epic PROJ-123 --quarter 2024-Q4 --periods 4
-# Shows completion data for: 2024-Q1, Q2, Q3, Q4
+⸻
 
-# Analyze epics by label with monthly completion timeline (last 6 months)
-python3 jira_metrics/epic_tracking.py --label 2025-Q3 --month 2024-06 --periods 6
-# Shows completion data for: Jan, Feb, Mar, Apr, May, Jun 2024
+5. Track B: Phases for the Engineer (Learning & Fluency)
 
-# Multiple epics with custom yearly periods
-python3 jira_metrics/epic_tracking.py --epics PROJ-123,PROJ-456 --year 2024 --periods 2
-# Shows completion data for: 2023, 2024
+This track describes how an individual learns to operate inside the same workflow.
 
-The output includes:
-- Total tickets and story points for each epic
-- Current completion status (Done vs Other)
-- Completion timeline showing:
-  - Number of tickets completed in each period
-  - Story points completed in each period
-  - Helps identify completion patterns and velocity
-```
+Engineer Phase 1: Catch Up on the Mental Model
 
-To analyze engineering excellence:
-```bash
-python3 jira_metrics/engineering_excellence.py
-```
+Goal: Remove fear and confusion.
+	•	Read core docs.
+	•	Walk through the lifecycle diagram.
+	•	Understand why context resets exist.
+	•	Review examples of good plans and reviews.
 
-To analyze cycle times:
-```bash
-python3 jira_metrics/cycle_time.py
-```
+⸻
+
+Engineer Phase 2: Practice the Full Loop (Solo)
+
+Goal: Experience the entire workflow safely.
+	•	Run the full cycle on a small task:
+	•	High-level plan
+	•	Implementation plan
+	•	Implementation
+	•	Validation
+	•	Restart context between phases.
+	•	Observe where ambiguity arises.
+
+⸻
+
+Engineer Phase 3: Paired Apprenticeship (Critical Phase)
+
+Goal: Transfer judgment, not syntax.
+
+Structure:
+	•	One real task.
+	•	Apprentice drives.
+	•	Senior AI-fluent engineer mentors.
+	•	Collaborate on:
+	•	What goes into plans
+	•	How prompts are written
+	•	When to stop and escalate
+	•	Explicit context resets between phases.
+
+Important:
+	•	Planning, implementation, and validation happen as one learning unit.
+
+⸻
+
+Engineer Phase 4: Independent Operation
+
+Goal: Reliable, safe autonomy.
+	•	Engineer runs the loop independently.
+	•	Knows when ambiguity blocks progress.
+	•	Uses skills and reviews intentionally.
+
+⸻
+
+Engineer Phase 5: Teaching and Shaping
+
+Goal: Scale fluency across the team.
+	•	Acts as reviewer or mentor.
+	•	Improves templates and skills.
+	•	Feeds lessons back into documentation.
+
+⸻
+
+6. Human Gates (Non-Negotiable)
+
+Humans approve state transitions, not keystrokes.
+
+flowchart TB
+    P[Plan Created] -->|Human Approves| I[Implementation]
+    I -->|Human Reviews| V[Validation]
+    V -->|Human Accepts| M[Merge]
+
+    P -.->|Ambiguity| S[STOP]
+    I -.->|Unexpected Change| S
+    V -.->|AC Not Met| S
+
+
+⸻
+
+7. Document Taxonomy (Required in Every Doc Footer)
+
+Each document must declare:
+	•	What it is
+	•	Typical location
+	•	Purpose
+	•	Relationships
+
+Example:
+
+Document Type: High-Level Plan
+Location: docs/plans/<slug>.md
+Purpose: Define intent, scope, and acceptance criteria
+Consumes: Architecture docs, backlog
+Produces: Approved intent for implementation planning
+
+⸻
+
+8. Prompting Examples (Scaffolding Only)
+
+Prompt examples are provided to show shape, not content.
+
+Example: High-Level Plan Prompt
+
+Create a high-level plan for this ticket.
+
+Constraints:
+- Do not assume requirements.
+- Extract and list acceptance criteria explicitly.
+- If any criteria are ambiguous, stop and ask questions.
+
+Output only a plan draft. Do not write code.
+
+All examples must include explicit stop conditions.
+
+⸻
+
+9. Enforcement Mechanisms
+	•	PR template requires links to:
+	•	High-level plan
+	•	Implementation plan (if required)
+	•	Agent review output
+	•	Review checklist includes:
+	•	Plan present and approved
+	•	Acceptance criteria validated
+	•	No guessing detected
+
+⸻
+
+10. Final Note
+
+You are not typing faster.
+You are thinking better.
+
+This system exists to make correct thinking scalable, auditable, and teachable.
