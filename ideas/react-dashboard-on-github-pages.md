@@ -1301,6 +1301,233 @@ function ChartGradients() {
 
 ---
 
+## Raw Data Tabs: Designing for Dashboard Consumption
+
+Currently the scripts output CSV and the data lands in Google Sheets with
+chart-oriented tabs (one tab per visual). For the dashboard, it's better to
+have **raw data tabs** that the dashboard can parse predictably — and let the
+React app handle all the chart logic, grouping, and formatting.
+
+### Design Principles
+
+1. **One tab per domain** — not per chart. A single "Cycle Time" raw tab feeds
+   both the median and average charts.
+2. **Row-per-observation** — the most granular level your scripts produce.
+   Aggregation (monthly averages, YoY grouping) happens in the React app.
+3. **Consistent date column** — always `YYYY-MM` in a column called `month`.
+   The dashboard can parse this reliably.
+4. **Year column** — explicit `year` column for easy YoY filtering without
+   date parsing.
+5. **No formulas, no merged cells** — pure flat data. Sheets formulas break
+   API reads.
+6. **Headers in row 1** — snake_case, no spaces. Makes JSON key mapping trivial.
+7. **Append-friendly** — new months get appended as rows. No need to restructure.
+
+### Recommended Raw Data Tabs
+
+#### Tab: `raw_released_work`
+
+Feeds: Released Tickets YoY, Released Points YoY, KPI cards
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-02` | `released_tickets.py` |
+| `year` | int | `2026` | derived |
+| `ticket_count` | int | `135` | `released_tickets.py` |
+| `total_points` | int | `300` | `released_tickets.py` |
+
+```
+month     | year | ticket_count | total_points
+2023-01   | 2023 | 78           | 120
+2023-02   | 2023 | 52           | 95
+...
+2026-01   | 2026 | 135          | 300
+2026-02   | 2026 | 142          | 310
+```
+
+#### Tab: `raw_cycle_time`
+
+Feeds: Cycle Time Median chart, Cycle Time Average chart
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-02` | `cycle_time.py` |
+| `year` | int | `2026` | derived |
+| `team` | text | `Panda` | `cycle_time.py` |
+| `assignee` | text | `jane.doe` | `cycle_time.py` |
+| `cycle_time_hours` | float | `48.5` | `cycle_time.py` |
+| `cycle_time_days` | float | `6.1` | `cycle_time.py` |
+
+Keep it at the **individual ticket level** (or assignee/month level, whatever
+`cycle_time.py` currently produces). The dashboard computes median and average
+from this raw data — much more flexible than pre-aggregating.
+
+```
+month     | year | team  | assignee  | cycle_time_hours | cycle_time_days
+2025-01   | 2025 | Panda | jane.doe  | 48.5             | 6.1
+2025-01   | 2025 | Spork | bob.smith | 72.0             | 9.0
+...
+```
+
+#### Tab: `raw_releases`
+
+Feeds: Releases & Rollbacks chart, Web Releases YoY, KPI cards
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-01` | `releases.py` |
+| `year` | int | `2026` | derived |
+| `repository` | text | `web-app` | `releases.py` |
+| `release_count` | int | `14` | `releases.py` |
+| `reverted_count` | int | `3` | `release_failure.py` |
+
+```
+month     | year | repository | release_count | reverted_count
+2023-01   | 2023 | web-app    | 4             | 0
+2023-01   | 2023 | api        | 3             | 1
+...
+2026-01   | 2026 | web-app    | 15            | 0
+2026-01   | 2026 | api        | 14            | 3
+```
+
+The dashboard sums across repos for the total chart or filters to `web-app`
+for the Web Releases chart.
+
+#### Tab: `raw_work_focus`
+
+Feeds: R&D Work Focus stacked bar chart
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-01` | `engineering_excellence.py` |
+| `year` | int | `2026` | derived |
+| `team` | text | `All` | `engineering_excellence.py` |
+| `product_pct` | float | `70.5` | `engineering_excellence.py` |
+| `critical_pct` | float | `15.2` | derived (from work type) |
+| `debt_reduction_pct` | float | `10.1` | derived |
+| `operational_pct` | float | `4.2` | derived |
+
+```
+month     | year | team  | product_pct | critical_pct | debt_reduction_pct | operational_pct
+2026-01   | 2026 | All   | 70.5        | 15.2         | 10.1               | 4.2
+2026-01   | 2026 | Panda | 65.0        | 20.0         | 10.0               | 5.0
+...
+```
+
+#### Tab: `raw_sla_compliance`
+
+Feeds: Completed Work & SLAs chart, Vulnerability Look-Ahead chart, KPI cards
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-03` | Apps Script / manual |
+| `year` | int | `2026` | derived |
+| `team` | text | `Panda` | Apps Script |
+| `category` | text | `vulnerability` | Apps Script |
+| `estimated_sla` | int | `170` | SLA target |
+| `completed` | int | `145` | actual |
+| `remaining` | int | `25` | estimated - completed |
+
+```
+month     | year | team  | category      | estimated_sla | completed | remaining
+2026-01   | 2026 | All   | all_sla       | 5             | 2         | 3
+2026-02   | 2026 | All   | all_sla       | 50            | 30        | 20
+2026-03   | 2026 | All   | all_sla       | 170           | 145       | 25
+2026-01   | 2026 | Panda | vulnerability | 3             | 1         | 2
+...
+```
+
+#### Tab: `raw_bug_stats`
+
+Feeds: potential bug trend chart (not in current catalog but useful to have)
+
+| Column | Type | Example | Source Script |
+|--------|------|---------|---------------|
+| `month` | text | `2026-01` | `bug_stats.py` |
+| `year` | int | `2026` | derived |
+| `project` | text | `WEB` | `bug_stats.py` |
+| `bugs_created` | int | `12` | `bug_stats.py` |
+| `bugs_closed` | int | `15` | `bug_stats.py` |
+| `bugs_open` | int | `8` | `bug_stats.py` |
+
+```
+month     | year | project | bugs_created | bugs_closed | bugs_open
+2026-01   | 2026 | WEB     | 12           | 15          | 8
+2026-01   | 2026 | API     | 5            | 7           | 3
+...
+```
+
+---
+
+### What About the Existing Chart Tabs?
+
+Keep them. They're useful for people who open the spreadsheet directly. The
+raw data tabs are an **addition**, not a replacement. The chart tabs can even
+reference the raw tabs with formulas if you want to consolidate.
+
+### How the Fetcher Uses These Tabs
+
+The GitHub Action (or Apps Script `doGet()`) reads only the `raw_*` tabs:
+
+```python
+# In fetch_sheet_data.py
+ranges = {
+    "released_work":   "raw_released_work!A1:Z5000",
+    "cycle_time":      "raw_cycle_time!A1:Z50000",
+    "releases":        "raw_releases!A1:Z5000",
+    "work_focus":      "raw_work_focus!A1:Z5000",
+    "sla_compliance":  "raw_sla_compliance!A1:Z5000",
+    "bug_stats":       "raw_bug_stats!A1:Z5000",
+}
+```
+
+The resulting `metrics.json` mirrors this structure:
+
+```json
+{
+  "released_work": [
+    { "month": "2023-01", "year": 2023, "ticket_count": 78, "total_points": 120 },
+    ...
+  ],
+  "cycle_time": [
+    { "month": "2025-01", "year": 2025, "team": "Panda", "cycle_time_days": 6.1 },
+    ...
+  ],
+  ...
+}
+```
+
+The React app then does all the grouping, filtering, and math:
+
+```javascript
+// Example: compute median cycle time per month for a given year
+function medianByMonth(cycleData, year) {
+  const byMonth = groupBy(
+    cycleData.filter((r) => r.year === year),
+    "month"
+  );
+  return Object.entries(byMonth).map(([month, rows]) => ({
+    month,
+    median: median(rows.map((r) => r.cycle_time_days)),
+  }));
+}
+```
+
+### Future-Proofing
+
+This design handles new years automatically — 2027 data just gets appended
+as new rows with `year: 2027`. No tab restructuring, no new columns. The
+YoY charts pick it up automatically because they group by the `year` column.
+
+Adding a new metric (e.g., "code review turnaround time") means:
+1. Add a `raw_code_review` tab with the same conventions
+2. Add one entry to the fetcher's `ranges` dict
+3. Build a new chart component
+
+Nothing else changes.
+
+---
+
 ## Recommended Implementation Order
 
 1. **Set up the `dashboard/` directory** with Vite + React + Recharts
