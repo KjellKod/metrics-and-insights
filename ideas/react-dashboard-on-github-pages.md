@@ -766,15 +766,383 @@ Then cards become: `bg-surface-0 border border-slate-700/20 rounded-2xl p-6 shad
 
 ---
 
+## Chart Catalog: From Google Sheets to Recharts
+
+Every chart currently in the spreadsheet maps directly to a Recharts component.
+Below is the full catalog with the Recharts component type, design upgrades over
+the spreadsheet version, and example JSX.
+
+### Dashboard Layout
+
+The charts are organized into themed sections, each inside a dark card panel.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ENGINEERING METRICS DASHBOARD              Data: Feb 2026  │
+├──────────┬──────────┬──────────┬──────────┬─────────────────┤
+│ Releases │ Rollbacks│ Tickets  │ Points   │ SLA % Met       │
+│    14    │    0     │   135    │   300    │   92%           │
+├──────────┴──────────┴──────────┴──────────┴─────────────────┤
+│                                                             │
+│  ┌─────────────────────────┐ ┌─────────────────────────┐   │
+│  │ Completed Work & SLAs   │ │ Vulnerability Look-Ahead│   │
+│  │ (stacked area)          │ │ (stacked area)          │   │
+│  └─────────────────────────┘ └─────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────┐ ┌─────────────────────────┐   │
+│  │ R&D Work Focus          │ │ Releases & Rollbacks    │   │
+│  │ (stacked bar 100%)      │ │ (combo bar + line)      │   │
+│  └─────────────────────────┘ └─────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────┐ ┌─────────────────────────┐   │
+│  │ Released Tickets YoY    │ │ Released Points YoY     │   │
+│  │ (multi-line)            │ │ (multi-line)            │   │
+│  └─────────────────────────┘ └─────────────────────────┘   │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ Web Releases YoY (multi-line, full width)             │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Chart 1: Completed Work and All SLAs
+
+**Type**: `<AreaChart>` — stacked area with transparency
+
+**What it shows**: Estimated work (SLA), completed work, and remaining work
+over time. The overlap between estimated and completed tells the story at a
+glance.
+
+**Dark theme upgrades**:
+- Semi-transparent fills with `fillOpacity={0.3}` so layers blend beautifully
+  against the dark background
+- Glowing stroke on the "Completed" line (`filter: drop-shadow(0 0 4px #34d399)`)
+- Subtle dashed grid lines instead of the heavy gray Google Sheets grid
+
+```jsx
+<ResponsiveContainer width="100%" height={320}>
+  <AreaChart data={slaData}>
+    <defs>
+      <linearGradient id="gradEstimated" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.4} />
+        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.05} />
+      </linearGradient>
+      <linearGradient id="gradCompleted" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f87171" stopOpacity={0.4} />
+        <stop offset="100%" stopColor="#f87171" stopOpacity={0.05} />
+      </linearGradient>
+      <linearGradient id="gradRemaining" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4} />
+        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.05} />
+      </linearGradient>
+    </defs>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <Tooltip contentStyle={tooltipStyle} />
+    <Area
+      type="monotone"
+      dataKey="estimated"
+      stroke="#60a5fa"
+      strokeWidth={2}
+      fill="url(#gradEstimated)"
+      name="Estimated Work (SLA)"
+    />
+    <Area
+      type="monotone"
+      dataKey="completed"
+      stroke="#f87171"
+      strokeWidth={2}
+      fill="url(#gradCompleted)"
+      name="Completed"
+    />
+    <Area
+      type="monotone"
+      dataKey="remaining"
+      stroke="#f59e0b"
+      strokeWidth={2}
+      fill="url(#gradRemaining)"
+      name="Remaining"
+    />
+  </AreaChart>
+</ResponsiveContainer>
+```
+
+---
+
+### Chart 2: Vulnerability Look-Ahead (by Team)
+
+**Type**: `<AreaChart>` — stacked area, one series per team
+
+**What it shows**: Remaining vulnerability SLA work per team over time.
+Helps leadership see which teams carry the load.
+
+**Dark theme upgrades**:
+- Each team gets a distinct accent color from the palette
+- Stacked fills create a layered mountain effect that looks stunning on dark
+- Team legend with colored dots instead of the flat Google Sheets boxes
+
+```jsx
+const teamColors = {
+  panda: "#60a5fa",   // blue
+  spork: "#f87171",   // red
+  mint: "#f59e0b",    // amber
+  other: "#34d399",   // green
+};
+
+<ResponsiveContainer width="100%" height={320}>
+  <AreaChart data={vulnData}>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <Tooltip contentStyle={tooltipStyle} />
+    <Legend />
+    {Object.entries(teamColors).map(([team, color]) => (
+      <Area
+        key={team}
+        type="monotone"
+        dataKey={team}
+        stackId="teams"
+        stroke={color}
+        fill={color}
+        fillOpacity={0.25}
+        name={`${team.charAt(0).toUpperCase() + team.slice(1)} SLAs`}
+      />
+    ))}
+  </AreaChart>
+</ResponsiveContainer>
+```
+
+---
+
+### Chart 3: R&D Work Focus (Stacked Percentage Bar)
+
+**Type**: `<BarChart>` — stacked bars, normalized to 100%
+
+**What it shows**: Monthly breakdown of where engineering effort goes:
+Product vs Critical vs Debt Reduction vs Operational.
+
+**Dark theme upgrades**:
+- Vibrant stacked segments pop against the dark card
+- Rounded bar corners (`radius={[4, 4, 0, 0]}` on top segment)
+- Percentage labels inside bars for months with data
+- Hover reveals exact breakdown in a styled tooltip
+
+```jsx
+const focusColors = {
+  product: "#60a5fa",        // blue — the main investment
+  critical: "#f87171",       // red — fires
+  debtReduction: "#f59e0b",  // amber — paying it down
+  operational: "#34d399",    // green — keeping the lights on
+};
+
+<ResponsiveContainer width="100%" height={320}>
+  <BarChart data={focusData}>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+      tickFormatter={(v) => `${v}%`}
+      domain={[0, 100]}
+    />
+    <Tooltip
+      contentStyle={tooltipStyle}
+      formatter={(value) => `${value.toFixed(1)}%`}
+    />
+    <Legend />
+    <Bar dataKey="product" stackId="focus" fill="#60a5fa" name="Product %" />
+    <Bar dataKey="critical" stackId="focus" fill="#f87171" name="Critical %" />
+    <Bar dataKey="debtReduction" stackId="focus" fill="#f59e0b" name="Debt Reduction %" />
+    <Bar
+      dataKey="operational"
+      stackId="focus"
+      fill="#34d399"
+      name="Operational %"
+      radius={[4, 4, 0, 0]}
+    />
+  </BarChart>
+</ResponsiveContainer>
+```
+
+---
+
+### Chart 4: Releases and Rollbacks (Combo Chart)
+
+**Type**: `<ComposedChart>` — bars for releases + line for rollbacks
+
+**What it shows**: Monthly release count with rollback trend overlaid.
+The combination makes it easy to spot months where rollbacks spike relative
+to releases.
+
+**Dark theme upgrades**:
+- Releases as solid blue bars with subtle glow
+- Rollback line in red with animated dots at data points
+- Zero-rollback months feel celebratory against the dark background
+- Bar hover with a cyan highlight border
+
+```jsx
+<ResponsiveContainer width="100%" height={320}>
+  <ComposedChart data={releaseData}>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <Tooltip contentStyle={tooltipStyle} />
+    <Legend />
+    <Bar
+      dataKey="releases"
+      fill="#60a5fa"
+      name="Releases"
+      radius={[6, 6, 0, 0]}
+      barSize={40}
+    />
+    <Line
+      type="monotone"
+      dataKey="reverted"
+      stroke="#f87171"
+      strokeWidth={3}
+      name="Reverted"
+      dot={{ fill: "#f87171", r: 5, strokeWidth: 2, stroke: "#0a0f1d" }}
+    />
+  </ComposedChart>
+</ResponsiveContainer>
+```
+
+---
+
+### Chart 5: Year-over-Year Comparison Lines (Tickets, Points, Releases)
+
+**Type**: `<LineChart>` — multiple lines, one per year
+
+**What it shows**: The same metric (tickets released, points released, or
+web releases) plotted by month, with one line per year (2023-2026). Makes
+trends and growth immediately visible.
+
+**Dark theme upgrades**:
+- Each year gets a distinct color with decreasing opacity for older years
+- Current year (2026) is bold and bright, older years fade into the background
+- Animated line drawing on load (Recharts `isAnimationActive`)
+- Glowing dot on the current month to show "you are here"
+
+```jsx
+const yearColors = {
+  2023: { stroke: "#94a3b8", opacity: 0.5 },  // gray, faded
+  2024: { stroke: "#a78bfa", opacity: 0.7 },  // purple, medium
+  2025: { stroke: "#34d399", opacity: 0.85 },  // green, prominent
+  2026: { stroke: "#60a5fa", opacity: 1.0 },   // blue, bold current year
+};
+
+<ResponsiveContainer width="100%" height={320}>
+  <LineChart data={monthlyData}>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <Tooltip contentStyle={tooltipStyle} />
+    <Legend />
+    {Object.entries(yearColors).map(([year, style]) => (
+      <Line
+        key={year}
+        type="monotone"
+        dataKey={`y${year}`}
+        stroke={style.stroke}
+        strokeWidth={year === "2026" ? 3 : 1.5}
+        strokeOpacity={style.opacity}
+        dot={year === "2026" ? { fill: style.stroke, r: 5 } : false}
+        name={`${year}`}
+        connectNulls
+      />
+    ))}
+  </LineChart>
+</ResponsiveContainer>
+```
+
+This pattern is reused for three chart instances:
+1. **Engineering #Released Tickets (2023-2026)**
+2. **Engineering #Released Points (2023-2026)**
+3. **[Web] Releases (2023-2026)**
+
+Each uses the same `<YearOverYearChart>` component, just with different data
+keys and titles. Build it once, use it three times.
+
+---
+
+### Shared Utilities
+
+#### Tooltip Style (reused across all charts)
+
+```javascript
+const tooltipStyle = {
+  background: "rgba(15, 23, 42, 0.95)",
+  border: "1px solid rgba(148, 163, 184, 0.3)",
+  borderRadius: "10px",
+  color: "#f8fafc",
+  fontSize: "13px",
+  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+};
+```
+
+#### Gradient Definitions (reused for area fills)
+
+Create a shared `<ChartGradients>` component with all gradient `<defs>` so
+they're consistent across charts:
+
+```jsx
+function ChartGradients() {
+  const gradients = [
+    { id: "blue", color: "#60a5fa" },
+    { id: "green", color: "#34d399" },
+    { id: "amber", color: "#f59e0b" },
+    { id: "red", color: "#f87171" },
+    { id: "purple", color: "#a78bfa" },
+  ];
+
+  return (
+    <defs>
+      {gradients.map(({ id, color }) => (
+        <linearGradient key={id} id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.05} />
+        </linearGradient>
+      ))}
+    </defs>
+  );
+}
+```
+
+---
+
+### Before & After: What Changes
+
+| Aspect | Google Sheets | React Dashboard |
+|--------|--------------|-----------------|
+| Background | White/gray | Deep dark blue `#05070f` |
+| Grid lines | Heavy black borders | Faint `rgba(148,163,184,0.08)` dashes |
+| Colors | Default Google palette | Curated accent palette with glow |
+| Tooltips | Yellow sticky note | Glass-effect dark panel |
+| Legend | Flat colored boxes | Rounded pills with subtle borders |
+| Typography | Default sans-serif | System stack, tracked uppercase labels |
+| Area fills | Solid opaque | Gradient fade from 40% to 5% opacity |
+| Bars | Flat solid fill | Rounded corners, hover highlight |
+| Lines | 2px solid | 2-3px with optional drop-shadow glow |
+| Layout | One chart per sheet tab | All charts in a scrollable dashboard |
+| Responsiveness | None (spreadsheet) | Fully responsive 4-tier breakpoints |
+| Load time | Google Sheets lag | Static JSON, instant render |
+
+---
+
 ## Recommended Implementation Order
 
 1. **Set up the `dashboard/` directory** with Vite + React + Recharts
 2. **Create a sample `metrics.json`** with realistic data to develop against
-3. **Build 2-3 chart components** to prove out the visualization approach
-4. **Set up the GitHub Action** for deploying to Pages
-5. **Add the data-fetching Action** (Approach 1) or Apps Script endpoint (Approach 2)
-6. **Configure GitHub Pages** in repo settings (Settings > Pages > Source: GitHub Actions)
-7. **Iterate** on the dashboard design with real data
+3. **Build the `YearOverYearChart` component** first — it covers 3 charts at once
+4. **Build the stacked area, stacked bar, and combo chart** — one each
+5. **Add the KPI summary cards** at the top
+6. **Set up the GitHub Action** for deploying to Pages
+7. **Add the data-fetching Action** (Approach 1) or Apps Script endpoint (Approach 2)
+8. **Configure GitHub Pages** in repo settings (Settings > Pages > Source: GitHub Actions)
+9. **Iterate** on the dashboard design with real data
 
 ---
 
