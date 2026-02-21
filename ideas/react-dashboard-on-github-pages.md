@@ -462,6 +462,310 @@ If private Pages aren't available, alternatives:
 
 ---
 
+## Visual Design: "Quest Intelligence" Dark Theme
+
+The dashboard should match the polished dark aesthetic of the
+[Quest Portfolio Dashboard](https://kjellkod.github.io/quest/) — a dark blue
+base with subtle ambient glows, semi-transparent glass-like cards, and clean
+typography. Here is the complete design system extracted from that reference.
+
+### Color Palette
+
+#### Backgrounds
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--bg-primary` | `#05070f` | Page background |
+| `--bg-secondary` | `#0a0f1d` | Slightly lighter layer |
+| `--bg-tertiary` | `#0f172a` | Gradient endpoint |
+
+#### Surfaces (Cards & Panels)
+
+Cards use **semi-transparent** backgrounds with a subtle border, creating a
+frosted-glass depth effect against the ambient glows behind them.
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--surface-0` | `rgba(17, 24, 39, 0.78)` | Default card fill |
+| `--surface-1` | `rgba(15, 23, 42, 0.84)` | Darker panels |
+| `--surface-2` | `rgba(30, 41, 59, 0.75)` | Elevated elements |
+| `--border` | `rgba(148, 163, 184, 0.22)` | Subtle card borders |
+
+#### Text
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--text-primary` | `#f8fafc` | Headings, key numbers |
+| `--text-secondary` | `#cbd5e1` | Body text, descriptions |
+| `--text-tertiary` | `#94a3b8` | Labels, metadata |
+
+#### Status / Accent Colors
+
+| Status | Color | Hex |
+|--------|-------|-----|
+| Finished / Success | Emerald green | `#34d399` |
+| In Progress | Sky blue | `#60a5fa` |
+| Blocked / Warning | Amber | `#f59e0b` |
+| Abandoned / Error | Red | `#f87171` |
+| Unknown / Neutral | Purple | `#a78bfa` |
+
+These same accents should be used for chart series — cycle time trends in blue,
+bug counts in red, release success in green, etc.
+
+### Ambient Glow Effect
+
+The signature "shiny" look comes from two large radial gradients positioned
+behind all content, creating soft light pools that bleed through the
+semi-transparent cards:
+
+```css
+/* Apply to body or a full-screen wrapper */
+.dashboard-bg {
+  background-color: #05070f;
+  position: relative;
+}
+
+.dashboard-bg::before,
+.dashboard-bg::after {
+  content: "";
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Cyan glow — top left */
+.dashboard-bg::before {
+  width: 1200px;
+  height: 1200px;
+  top: -5%;
+  left: 8%;
+  background: radial-gradient(
+    circle,
+    rgba(56, 189, 248, 0.18) 0%,
+    transparent 70%
+  );
+  filter: blur(95px);
+}
+
+/* Teal glow — bottom right */
+.dashboard-bg::after {
+  width: 1000px;
+  height: 1000px;
+  bottom: -10%;
+  right: 5%;
+  background: radial-gradient(
+    circle,
+    rgba(20, 184, 166, 0.12) 0%,
+    transparent 70%
+  );
+  filter: blur(95px);
+}
+```
+
+All page content sits at `z-index: 1` or higher so the glows shine through the
+semi-transparent card backgrounds.
+
+### Card Styling
+
+```css
+.card {
+  background: rgba(17, 24, 39, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 25px 60px rgba(2, 6, 23, 0.45);
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+```
+
+### KPI Summary Cards (Top Row)
+
+The top row shows 4-6 key numbers in a grid. Each card has:
+- An uppercase label in `--text-tertiary` (small, tracked)
+- A large number in `--text-primary` (36-48px, bold)
+- Colored accent matching the metric meaning (green for positive, red for issues)
+
+```css
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  text-align: center;
+  padding: 20px 16px;
+}
+
+.kpi-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.kpi-value {
+  font-size: 42px;
+  font-weight: 700;
+  margin-top: 8px;
+  color: #f8fafc;
+}
+```
+
+### Typography
+
+```css
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+h1 {
+  color: #f8fafc;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h2 {
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* Section eyebrow label (e.g. "ENGINEERING METRICS") */
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #34d399; /* accent green */
+}
+```
+
+### Layout Grid
+
+```css
+.dashboard-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Two-column chart row */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 780px) {
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+### Chart Styling with Recharts
+
+Configure Recharts to match the dark theme:
+
+```jsx
+// Consistent chart theme props
+const chartTheme = {
+  axisStroke: "#94a3b8",
+  gridStroke: "rgba(148, 163, 184, 0.12)",
+  tooltipBg: "rgba(15, 23, 42, 0.95)",
+  tooltipBorder: "rgba(148, 163, 184, 0.3)",
+  colors: ["#60a5fa", "#34d399", "#f59e0b", "#f87171", "#a78bfa"],
+};
+
+// Example usage in a Recharts component
+<ResponsiveContainer width="100%" height={300}>
+  <LineChart data={data}>
+    <CartesianGrid stroke={chartTheme.gridStroke} strokeDasharray="3 3" />
+    <XAxis
+      dataKey="month"
+      stroke={chartTheme.axisStroke}
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+    />
+    <YAxis
+      stroke={chartTheme.axisStroke}
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+    />
+    <Tooltip
+      contentStyle={{
+        background: chartTheme.tooltipBg,
+        border: `1px solid ${chartTheme.tooltipBorder}`,
+        borderRadius: "8px",
+        color: "#f8fafc",
+      }}
+    />
+    <Line
+      type="monotone"
+      dataKey="cycleTime"
+      stroke="#60a5fa"
+      strokeWidth={2}
+      dot={{ fill: "#60a5fa", r: 4 }}
+    />
+  </LineChart>
+</ResponsiveContainer>
+```
+
+### Responsive Breakpoints
+
+| Breakpoint | Behavior |
+|------------|----------|
+| > 1120px | Full layout, 5-column KPI grid, 2-column charts |
+| 780-1120px | KPI grid wraps to 3 columns, charts stack partially |
+| 460-780px | Single column layout, charts full width |
+| < 460px | Compact mobile layout, smaller font sizes |
+
+### Tailwind CSS Shortcut
+
+If using Tailwind, most of this maps directly to the `slate` color scale:
+
+```javascript
+// tailwind.config.js
+export default {
+  content: ["./src/**/*.{js,jsx}"],
+  theme: {
+    extend: {
+      colors: {
+        surface: {
+          0: "rgba(17, 24, 39, 0.78)",
+          1: "rgba(15, 23, 42, 0.84)",
+          2: "rgba(30, 41, 59, 0.75)",
+        },
+        accent: {
+          green: "#34d399",
+          blue: "#60a5fa",
+          amber: "#f59e0b",
+          red: "#f87171",
+          purple: "#a78bfa",
+        },
+      },
+    },
+  },
+};
+```
+
+Then cards become: `bg-surface-0 border border-slate-700/20 rounded-2xl p-6 shadow-2xl`
+
+---
+
 ## Recommended Implementation Order
 
 1. **Set up the `dashboard/` directory** with Vite + React + Recharts
