@@ -799,6 +799,11 @@ The charts are organized into themed sections, each inside a dark card panel.
 │  │ (multi-line)            │ │ (multi-line)            │   │
 │  └─────────────────────────┘ └─────────────────────────┘   │
 │                                                             │
+│  ┌─────────────────────────┐ ┌─────────────────────────┐   │
+│  │ Cycle Time: Median YoY  │ │ Cycle Time: Average YoY │   │
+│  │ (multi-line, purple)    │ │ (multi-line, amber)     │   │
+│  └─────────────────────────┘ └─────────────────────────┘   │
+│                                                             │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ Web Releases YoY (multi-line, full width)             │  │
 │  └───────────────────────────────────────────────────────┘  │
@@ -1065,6 +1070,170 @@ This pattern is reused for three chart instances:
 
 Each uses the same `<YearOverYearChart>` component, just with different data
 keys and titles. Build it once, use it three times.
+
+---
+
+### Chart 6: Cycle Time — Median (Year-over-Year)
+
+**Type**: `<LineChart>` — multi-year comparison
+
+**What it shows**: Median cycle time (days from code review to release) per
+month, with one line per year. Median is the better stat here — it's not
+skewed by outlier tickets that sit for weeks. A downward trend year-over-year
+means the team is shipping faster.
+
+**Dark theme upgrades**:
+- Progressive year styling: older years thin and faded, recent years bold
+- Current year gets a subtle area fill underneath to emphasize the trend
+- A horizontal reference line at your SLA target (e.g., 7 days) adds context
+- Tooltip shows "days" unit with year-over-year delta
+
+```jsx
+const cycleTimeYearColors = {
+  2023: { stroke: "#94a3b8", width: 1.5, opacity: 0.45 },  // gray, faded
+  2024: { stroke: "#a78bfa", width: 2.5, opacity: 0.75 },  // purple, medium
+  2025: { stroke: "#c084fc", width: 3,   opacity: 1.0 },   // bright purple, bold
+};
+
+<ResponsiveContainer width="100%" height={320}>
+  <LineChart data={medianCycleData}>
+    <defs>
+      {/* Subtle fill under the most recent year */}
+      <linearGradient id="gradCycleCurrent" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#c084fc" stopOpacity={0.2} />
+        <stop offset="100%" stopColor="#c084fc" stopOpacity={0} />
+      </linearGradient>
+    </defs>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+      label={{
+        value: "Days (Median)",
+        angle: -90,
+        position: "insideLeft",
+        fill: "#94a3b8",
+        fontSize: 12,
+      }}
+    />
+    {/* Optional SLA target reference line */}
+    <ReferenceLine
+      y={7}
+      stroke="#34d399"
+      strokeDasharray="6 4"
+      strokeOpacity={0.5}
+      label={{ value: "SLA Target", fill: "#34d399", fontSize: 11 }}
+    />
+    <Tooltip
+      contentStyle={tooltipStyle}
+      formatter={(value) => [`${value} days`, null]}
+    />
+    <Legend />
+    {Object.entries(cycleTimeYearColors).map(([year, style]) => (
+      <Line
+        key={year}
+        type="monotone"
+        dataKey={`median_${year}`}
+        stroke={style.stroke}
+        strokeWidth={style.width}
+        strokeOpacity={style.opacity}
+        dot={year === "2025" ? { fill: style.stroke, r: 4 } : false}
+        name={`${year} Median`}
+        connectNulls
+      />
+    ))}
+  </LineChart>
+</ResponsiveContainer>
+```
+
+---
+
+### Chart 7: Cycle Time — Average (Year-over-Year)
+
+**Type**: `<LineChart>` — multi-year comparison (same pattern as median)
+
+**What it shows**: Average cycle time per month, year-over-year. Average is
+more sensitive to spikes — a single ticket stuck for 30 days pulls the
+average up, which is useful for spotting systemic slowdowns. Show it alongside
+the median chart so viewers can compare the two.
+
+**Dark theme upgrades**:
+- Same progressive year styling as the median chart
+- Different color family (gold/amber) to visually distinguish from the
+  median chart (purple) at a glance
+- Area fill under the current year line
+- Tooltip shows the average alongside a "vs median" delta if both datasets
+  are available
+
+```jsx
+const avgYearColors = {
+  2023: { stroke: "#94a3b8", width: 1.5, opacity: 0.45 },  // gray, faded
+  2024: { stroke: "#a78bfa", width: 2.5, opacity: 0.75 },  // purple, medium
+  2025: { stroke: "#f59e0b", width: 3,   opacity: 1.0 },   // amber, bold current
+};
+
+<ResponsiveContainer width="100%" height={320}>
+  <LineChart data={avgCycleData}>
+    <defs>
+      <linearGradient id="gradCycleAvg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2} />
+        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+      </linearGradient>
+    </defs>
+    <CartesianGrid stroke="rgba(148,163,184,0.08)" strokeDasharray="3 3" />
+    <XAxis dataKey="month" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+    <YAxis
+      tick={{ fill: "#94a3b8", fontSize: 12 }}
+      label={{
+        value: "Days (Average)",
+        angle: -90,
+        position: "insideLeft",
+        fill: "#94a3b8",
+        fontSize: 12,
+      }}
+    />
+    <ReferenceLine
+      y={7}
+      stroke="#34d399"
+      strokeDasharray="6 4"
+      strokeOpacity={0.5}
+      label={{ value: "SLA Target", fill: "#34d399", fontSize: 11 }}
+    />
+    <Tooltip
+      contentStyle={tooltipStyle}
+      formatter={(value) => [`${value} days`, null]}
+    />
+    <Legend />
+    {Object.entries(avgYearColors).map(([year, style]) => (
+      <Line
+        key={year}
+        type="monotone"
+        dataKey={`avg_${year}`}
+        stroke={style.stroke}
+        strokeWidth={style.width}
+        strokeOpacity={style.opacity}
+        dot={year === "2025" ? { fill: style.stroke, r: 5 } : false}
+        name={`${year} Average`}
+        connectNulls
+      />
+    ))}
+  </LineChart>
+</ResponsiveContainer>
+```
+
+**Layout note**: These two cycle time charts should sit side-by-side in a
+`chart-row` under a "CYCLE TIME" section eyebrow. Median on the left, average
+on the right. The pairing lets viewers immediately see if a spike in average
+is driven by a few outliers (median stays flat) or a systemic slowdown
+(both spike).
+
+```
+┌─────────────────────────────┐ ┌─────────────────────────────┐
+│ Cycle Time: Median (YoY)    │ │ Cycle Time: Average (YoY)   │
+│ Purple tones, lower values  │ │ Amber tones, higher values  │
+│ Shows the "typical" ticket  │ │ Shows impact of outliers    │
+└─────────────────────────────┘ └─────────────────────────────┘
+```
 
 ---
 
