@@ -122,7 +122,7 @@ def calculate_business_time(code_review_timestamp, released_timestamp):
 
 
 def localize_date(date_str):
-    pst = pytz.timezone("America/Los_Angeles")
+    pst = pytz.timezone("America/Denver")
     return pst.localize(datetime.strptime(date_str, "%Y-%m-%d"))
 
 
