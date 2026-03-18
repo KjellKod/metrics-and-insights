@@ -48,6 +48,9 @@ EXPECTED_PATTERNS=(
   ".claude/agents/*.md"
   ".claude/hooks/*.sh"
   ".claude/skills/*/*.md"
+  "scripts/claude_cli_bridge.py"
+  "scripts/quest_claude_probe.py"
+  "scripts/quest_claude_runner.py"
   "scripts/validate-quest-config.sh"
 )
 
@@ -90,7 +93,7 @@ if [ $ERRORS -gt 0 ]; then
   echo ""
   echo "Sections:"
   echo "  [copy-as-is]       - Files replaced with upstream (most files)"
-  echo "  [user-customized]  - Files never overwritten (allowlist, context_digest)"
+  echo "  [user-customized]  - Files never overwritten (allowlist)"
   echo "  [merge-carefully]  - Files that prompt for merge (settings.json)"
   echo "  [directories]      - Directories to create"
   exit 1

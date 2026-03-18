@@ -120,6 +120,7 @@ EXECUTABLE_FILES=(
   ".claude/hooks/enforce-allowlist.sh"
   "scripts/validate-quest-config.sh"
   "scripts/quest_installer.sh"
+  "scripts/quest_celebrate/quest-celebrate.sh"
 )
 
 ###############################################################################
@@ -335,7 +336,7 @@ prompt_file_action() {
   fi
 
   while true; do
-    echo -n -e "${YELLOW}${filepath}${NC} has local modifications. [O]verwrite / [S]kip / [D]iff? "
+    echo -n -e "${YELLOW}${filepath}${NC} has local modifications. [O]verwrite / [S]kip / [D]iff? " >&2
     read -r response
 
     case "$response" in
@@ -352,7 +353,7 @@ prompt_file_action() {
         return
         ;;
       *)
-        echo "Please enter O, S, or D"
+        echo "Please enter O, S, or D" >&2
         ;;
     esac
   done
@@ -1319,8 +1320,7 @@ print_next_steps() {
     echo ""
     echo "Next steps:"
     echo "  1. Review and customize .ai/allowlist.json for your project"
-    echo "  2. Review and customize .ai/context_digest.md"
-    echo "  3. Commit the Quest files to your repository"
+    echo "  2. Commit the Quest files to your repository"
     echo ""
     echo "Optional: Install pre-commit hook to validate Quest config on each commit:"
     echo "  ./scripts/validate-quest-config.sh --install"
@@ -1410,8 +1410,12 @@ run_install() {
 
   # Check if already up to date
   if $HAS_QUEST && [ "$LOCAL_VERSION" = "$UPSTREAM_SHA" ]; then
-    log_success "Quest is already up to date (${UPSTREAM_SHA:0:8})"
-    exit 0
+    if $FORCE_MODE; then
+      log_warn "Quest version stamp matches upstream (${UPSTREAM_SHA:0:8}) — reinstalling anyway (--force)"
+    else
+      log_success "Quest is already up to date (${UPSTREAM_SHA:0:8})"
+      exit 0
+    fi
   fi
 
   # Show what we're doing

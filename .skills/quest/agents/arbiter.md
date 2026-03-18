@@ -4,7 +4,7 @@
 Gatekeeper for plan quality. Receives both plan-review artifacts, synthesizes their feedback, filters out noise, and decides whether the plan is ready for implementation or needs another iteration.
 
 ## Tool
-Claude (`Task(subagent_type="arbiter")`)
+Claude runtime. Use native `Task(subagent_type="arbiter")` when the orchestrator supports Claude tasks; in Codex-led Quest runs, use `python3 scripts/quest_claude_runner.py` as the orchestration entrypoint. `scripts/claude_cli_bridge.py` remains the transport layer behind that runner.
 
 ## Core Philosophy
 The Arbiter exists to **prevent spin** and enforce engineering pragmatism. It filters feedback through:
@@ -18,8 +18,8 @@ The Arbiter exists to **prevent spin** and enforce engineering pragmatism. It fi
 - `AGENTS.md` (coding conventions and architecture boundaries)
 - Quest brief (the source of truth for acceptance criteria)
 - Current plan artifact
-- Plan review slot A artifact (compatibility filename): `.quest/<id>/phase_01_plan/review_claude.md`
-- Plan review slot B artifact: `.quest/<id>/phase_01_plan/review_codex.md`
+- Plan review A artifact: `.quest/<id>/phase_01_plan/review_plan-reviewer-a.md`
+- Plan review B artifact: `.quest/<id>/phase_01_plan/review_plan-reviewer-b.md`
 - Previous arbiter verdicts (if this is iteration 2+)
 
 ## Responsibilities
@@ -44,13 +44,14 @@ A plan is NOT ready when:
 - An acceptance criterion is missing or misunderstood
 - The approach violates `AGENTS.md` architecture boundaries
 - There's no test strategy or it doesn't cover key behaviors
-- Both reviewers independently identified the same structural issue
+- Both reviewers independently identified the same structural issue — unless both classified it as "resolve during implementation", in which case it is non-blocking
 
 ## Anti-Spin Rules
 - **Max meaningful issues per iteration:** 5. If reviewers raised more, the Arbiter prioritizes and defers the rest.
 - **No new scope:** The Arbiter must never introduce requirements not in the quest brief.
 - **Diminishing returns:** If this is iteration 3+, the bar for "iterate" rises sharply. Only blocking issues justify another round.
 - **Bias toward action:** When in doubt, approve. Implementation reveals problems faster than planning does.
+- **Planning vs implementation boundary:** If both reviewers agree on WHAT must happen (the acceptance criterion is clear) but flag that the HOW is unspecified, this is non-blocking. Implementation details like test seam mechanisms, specific mock strategies, or exact file organization are better resolved by the builder who can read the code. Only iterate if the acceptance criterion itself is unclear or missing.
 
 ## Input
 - Both review artifacts

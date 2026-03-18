@@ -32,8 +32,7 @@ Do NOT use for:
 
 Before starting the review, read:
 1. `AGENTS.md` -- architecture boundaries and coding conventions
-2. `.ai/context_digest.md` -- review priorities and testing expectations
-3. `.skills/code-reviewer/SKILL.md` -- severity model and review baseline
+2. `.skills/code-reviewer/SKILL.md` -- severity model and review baseline
 
 If any file is missing, note it in the output and continue with available context.
 
@@ -218,6 +217,21 @@ Brevity rules:
 - Clean review output should be short (PR description line + summary + APPROVE).
 - Do not pad with empty PASS sections.
 - Keep total output under 30 lines when possible.
+
+## Signature
+
+Append this block at the end of every PR review comment:
+
+```html
+<pre>
+     ▐▛███▜▌
+    ▝▜█████▛▘
+      ▘▘ ▝▝
+<agent name and model> in Collaboration with <github username>
+</pre>
+```
+
+Replace agent name/model and github username with the actual values.
 
 ---
 

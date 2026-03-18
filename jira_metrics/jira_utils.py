@@ -731,8 +731,9 @@ def get_children_for_epic(epic_key: str):
 
 
 def extract_status_timestamps(issue):
-    # Extract the status change timestamps. Most recent first.
-    # To see the oldest first, reverse the order of histories (reverse(extract_status_timestamps(issue)))
+    # Extract the status change timestamps and normalize them to newest-first.
+    # This makes the downstream interpretation deterministic even if the API
+    # returns changelog histories in a different order.
     status_timestamps = []
     for history in issue.changelog.histories:
         for item in history.items:
@@ -744,6 +745,7 @@ def extract_status_timestamps(issue):
                         "timestamp": datetime.strptime(history.created, "%Y-%m-%dT%H:%M:%S.%f%z"),
                     }
                 )
+    status_timestamps.sort(key=lambda entry: entry["timestamp"], reverse=True)
     return status_timestamps
 
 
@@ -758,7 +760,8 @@ def interpret_status_timestamps(status_timestamps):
         JiraStatus.DONE.value: None,
     }
 
-    # we look at in chronological order and the FIRST time we go into code-review
+    # status_timestamps is normalized to newest-first; reverse it to inspect
+    # the earliest transitions first and capture the first code review entry.
     for entry in reversed(status_timestamps):
         status = entry["status"]
         timestamp = entry["timestamp"]
@@ -772,8 +775,8 @@ def interpret_status_timestamps(status_timestamps):
     most_recent_completion_timestamp = None
     most_recent_completion_name = None
 
-    # status_timestamps is most-recent-first; iterate forward to get most-recent-first
-    # DO NOT reverse - we want the most recent completion, not the earliest
+    # status_timestamps is normalized to newest-first; iterate forward and stop
+    # on the first match to capture the most recent completion.
     for entry in status_timestamps:
         status = entry["status"].lower()
         timestamp = entry["timestamp"]

@@ -37,26 +37,60 @@ Use this format:
 
 ```
 ## Summary
-- 1-3 bullet points explaining what this PR does and why.
+<Single sentence capturing the full intent — what this PR does and why.>
+- Supporting bullet with additional context if needed.
+- Supporting bullet with additional context if needed.
+
+> [!WARNING or !IMPORTANT or !NOTE — only if applicable]
+> Alert content here. Most PRs should have NO callouts.
 
 ## Changes
 - **<Category>**:
-  - Description of change
+  - Description of change referencing `specific_file.js` or `functionName()` where helpful
   - Description of change
 - **<Category>**:
   - Description of change
 
-## Test Plan
-- [ ] Checklist of how to verify the changes.
+## Validation
+- [ ] Concrete verification step describing what to do and what to expect
+- [ ] Another verification step
+Watch for: <known risk or edge case, if any>
+
+## Notes (optional — include only if there is non-obvious context)
+- Important implementation/deployment/reviewer context that is not obvious from the diff.
+- Do not repeat the Summary; only include unique, high-signal details reviewers should know.
 ```
+
+### Summary section
+
+- Start with a single sentence that captures the full "what + why" of the PR. This is the line a reviewer reads to decide how deeply to engage.
+- Follow with 1-2 supporting bullets if needed for additional context.
+
+### Callouts (optional — use sparingly)
+
+Use GitHub callout syntax **only when something needs to jump out** before a reviewer digs into the details. Most PRs should have zero callouts.
+
+| Callout | Use when... |
+|---------|-------------|
+| `> [!WARNING]` | Breaking change, data migration, or irreversible action |
+| `> [!IMPORTANT]` | Reviewer must do something specific (e.g. "needs env var set before deploy") |
+| `> [!NOTE]` | Non-obvious context that prevents confusion (e.g. "intentionally duplicates X because...") |
+
+Rules:
+- Place callouts between `## Summary` and `## Changes`.
+- If every PR has a callout, reviewers start ignoring them. Reserve them for exceptions.
+- Do not use callouts as decoration or to repeat what the summary already says.
 
 ### Changes section formatting
 
 Group changes by domain or concern, not by git operation (add/modify/remove).
 Choose category names that reflect what area of the system is affected.
 
+Reference specific file names, function names, config keys, and constants inline with backticks where they help a reviewer understand or locate the change.
+
 Common categories (use what fits, invent others as needed):
 - **Behavior** — user-facing or system behavior changes
+- **API / Functions** — new, changed, or removed function signatures
 - **Skills** — skill definitions and skill catalog
 - **Config** — configuration, schemas, allowlist
 - **Manifest** — `.quest-manifest` updates
@@ -70,6 +104,36 @@ Rules:
 - Keep descriptions concise — one line per change, focus on what and why.
 - Omit categories with no changes. Only include what is relevant.
 - If the PR is very small (1-2 files), a flat bullet list is fine — do not force categories.
+
+### Validation section
+
+Each checkbox should be a concrete verification step — what to do and what result to expect. A reviewer reading the list should be able to pull the branch and verify without guessing.
+
+Rules:
+- Use checkboxes (`- [ ]`) for every verification step.
+- Describe the action and the expected outcome in one line (e.g. "Run X, confirm Y").
+- Only include steps that a human needs to perform. Skip anything CI already covers (linting, syntax checks, type checks).
+- If there is a known risk or edge case worth watching, add a `Watch for:` line at the end — no checkbox, just a heads-up.
+- Keep it short. 2-5 steps is typical. If you need more, the PR may be too large.
+
+### Notes section (optional)
+
+Use `## Notes` for important context reviewers should know before merge or rollout. Omit the section entirely if there is nothing non-obvious to add.
+
+Rules:
+- Include only non-obvious, high-value context (e.g., follow-up work, rollout caveats, compatibility constraints, temporary limitations).
+- Do not duplicate the Summary section.
+- Keep it concise.
+
+### Bot-generated content
+
+If a bot appends an auto-generated summary to the PR, leave it in place. Do not duplicate or conflict with its content in the human-written sections.
+
+When updating an existing PR body, preserve bot-managed sections exactly:
+
+- If the body contains bot-managed sections or hidden anchors/comments, keep those blocks unchanged.
+- Regenerate only the human-authored section.
+- Never remove, rewrite, or reorder bot-managed blocks, badges, or hidden anchors/comments.
 
 ### Draft mode (required)
 
@@ -92,16 +156,22 @@ Rules:
 
 ## Trailer
 
-Append this line at the end of the PR body:
+Append this block at the end of the PR body:
 
-```
----
-Quest/Co-Authored by Claude Opus 4.6, GPT-5.3 Codex in Collaboration with <github username>
+```html
+<pre>
+     ▐▛███▜▌
+    ▝▜█████▛▘
+      ▘▘ ▝▝
+Quest/Co-Authored by <claude label>, <codex label> in Collaboration with <github username>
+</pre>
 ```
 
 Replace:
 
-- **github username** with the repository author's GitHub username (infer from git config, remote URL, or ask if unknown).
+- **claude label** with the current Claude model label when it is known from the active session or quest artifacts; otherwise use `Claude`.
+- **codex label** with the current Codex model label when it is known from the active session, CLI invocation, or quest artifacts; otherwise use `Codex`.
+- **github username** with the actual GitHub username.
 
 Never omit the trailer.
 
