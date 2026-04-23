@@ -1,0 +1,141 @@
+.skills/engineering-throughput-spreadsheet/SKILL.md
+  da277b1cf866947b 1-188
+scripts/quest_backfill_journal.py
+  da277b1cf866947b 1-326
+.skills/review-decisions/SKILL.md
+  da277b1cf866947b 1-66
+tests/unit/test_review_intelligence.py
+  da277b1cf866947b 1-365
+.skills/implementer/SKILL.md
+  da277b1cf866947b 87-91,123-137,165-173
+.skills/quest/agents/planner.md
+  da277b1cf866947b 7-13,21,28-32
+.skills/plan-maker/SKILL.md
+  da277b1cf866947b 197-205,245-264
+scripts/quest_complete.py
+  da277b1cf866947b 1-376
+.skills/quest/agents/code-reviewer.md
+  da277b1cf866947b 4,11,17,25-28,32,36-44,47-49,61-64,74-77,83
+scripts/quest_runtime/__init__.py
+  da277b1cf866947b 1-21
+scripts/quest_validate-handoff-contracts.sh
+  da277b1cf866947b 1-140
+scripts/quest_runtime/pr_review_cycle.py
+  da277b1cf866947b 1-719
+tests/integration/test-enforce-allowlist.sh
+  da277b1cf866947b 1-23,25-65
+scripts/quest_allowlist_matcher.py
+  da277b1cf866947b 1-153
+.skills/pr-assistant/SKILL.md
+  da277b1cf866947b 110-123,126-127,131-151,181,200-202,206-213,215-229
+.agents/skills/README.md
+  da277b1cf866947b 3
+scripts/quest_checks/__init__.py
+  da277b1cf866947b 1
+AGENTS.md.quest_updated
+  da277b1cf866947b 1-98
+.agents/skills/pr-assistant/SKILL.md
+  da277b1cf866947b 1-6
+.skills/pr-shepherd/SKILL.md
+  da277b1cf866947b 21-23,40-67,110-115,130-137
+jira_metrics/individual.py
+  da277b1cf866947b 1,47,53-77,87,139-145,396
+scripts/quest_celebrate/animations.py
+  da277b1cf866947b 186-257,322-325,482-485,628-630
+.skills/git-commit-assistant/SKILL.md
+  da277b1cf866947b 14,75-79,81,83-85,88-104
+scripts/quest_preflight.sh
+  da277b1cf866947b 1-404
+scripts/quest_runtime/claude_runner.py
+  da277b1cf866947b 1-613
+.claude/hooks/enforce-allowlist.sh
+  da277b1cf866947b 13,66-67,69-71,73-76,78-79,100-102
+scripts/quest_select_tests.py
+  da277b1cf866947b 1-64
+scripts/quest_celebrate/quest_data.py
+  da277b1cf866947b 9-10,39-46,65-66,77-80,87-89,136-139,191-192,195,199,212-262,264-271,274-275,277,279,466-540,773,860,872-878,902-926,976-978,984-990,1017,1080,1084-1085,1095-1098
+scripts/quest_runtime/artifacts.py
+  da277b1cf866947b 1-149
+.skills/SKILLS.md
+  da277b1cf866947b 29-35
+scripts/quest_runtime/state.py
+  da277b1cf866947b 1-38
+.skills/quest/agents/fixer.md
+  da277b1cf866947b 7,22-23,29-31,36-37
+.quest-manifest
+  da277b1cf866947b 1-78
+.quest-version
+  da277b1cf866947b 1
+tests/unit/test_allowlist_matcher.py
+  da277b1cf866947b 1-335
+.agents/skills/git-commit-assistant/SKILL.md
+  da277b1cf866947b 1-6
+.skills/quest/agents/builder.md
+  da277b1cf866947b 7,27-28
+scripts/quest_review_intelligence.py
+  da277b1cf866947b 1-424
+scripts/quest_claude_runner.py
+  da277b1cf866947b 9-10,22-25,27,35-51,60,64-65
+.agents/skills/pr-shepherd/SKILL.md
+  da277b1cf866947b 1-6
+scripts/quest_state.py
+  da277b1cf866947b 1-159
+scripts/quest_installer.sh
+  da277b1cf866947b 36,122,125-137,406-407,535-551,659-686,1069-1071,1082,1087,1093-1096,1100-1113,1119-1120,1201,1236,1264-1320,1360,1365-1366,1370,1375,1429-1570,1608,1614-1623,1742-1743,1760-1761
+tests/unit/test_codex_skill_wrappers.py
+  da277b1cf866947b 1-41
+scripts/quest_validate-manifest.sh
+  da277b1cf866947b 1-142
+.skills/quest/agents/arbiter.md
+  da277b1cf866947b 4,7,19,25-27,38-42,77-81,91,108
+scripts/quest_checks/cli.py
+  da277b1cf866947b 1-31
+.skills/celebrate/SKILL.md
+  da277b1cf866947b 42,47,51,54,56-72,90-98,110-111,114,118-120,125
+scripts/quest_validate-quest-state.sh
+  da277b1cf866947b 1-689
+.skills/quest/SKILL.md
+  da277b1cf866947b 37-71,163-181,183,187-188,196-199,207-208
+scripts/quest_runtime/review_intelligence.py
+  da277b1cf866947b 1-469
+scripts/quest_startup_branch.py
+  da277b1cf866947b 1-408
+.skills/quest/delegation/workflow.md
+  da277b1cf866947b 7,26,28-30,32,34-41,50,54-55,58-60,63,65,71,128-172,190,198-204,206,261-272,307-314,316,318,321,325-329,332,355,357,371-374,391-395,407-408,419-422,431-432,441-445,457-459,478-483,495-500,504,506,512-513,525,541,590,623,625,627,629-630,636-641,647-654,659,661,671,675,679-685,701-704,706,719,724-731,746,751-752,754-759,771-772,782,787-794,803-804,811,816-817,819-824,830,837-839,849-875,895,897,901-902,905-906,909-914,919-926,933,937-940,942-948,966,968-970,974-975,1031-1054,1057,1059-1060,1065,1070,1156-1159,1245
+.skills/code-reviewer/SKILL.md
+  da277b1cf866947b 55-66,73,236-244
+.skills/ci-code-reviewer/SKILL.md
+  da277b1cf866947b 74,160-161
+.quest-checksums
+  da277b1cf866947b 6-8,10-11,13,26,45-48,50-51,53-58,60,64-65,67,69-70,72,77,80-105
+scripts/quest_validate-quest-config.sh
+  da277b1cf866947b 1-250
+.ai/quest.md
+  da277b1cf866947b 80-115,120
+scripts/quest_claude_bridge.py
+  da277b1cf866947b 1-225
+jira_metrics/tests/test_individual.py
+  da277b1cf866947b 77-102
+scripts/quest_claude_probe.py
+  da277b1cf866947b 9,13-15,18,20,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "1aa1ff515f8fa6c3285ac62d7028f4c7a7121c33",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 8598,
+      "total_deletions": 454,
+      "accepted_lines": 8598,
+      "overriden_lines": 0
+    }
+  }
+}
