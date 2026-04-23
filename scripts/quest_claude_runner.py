@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
-from quest_runtime.claude_runner import run_claude_role
+from quest_runtime.artifacts import expected_artifacts_for_role
+from quest_runtime.claude_runner import resolve_path, run_claude_role
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,9 +19,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt-file", required=True)
     parser.add_argument("--handoff-file", required=True)
     parser.add_argument("--model", default="opus")
-    parser.add_argument("--timeout", type=float, default=90.0)
+    # NOTE: This default is duplicated in scripts/quest_claude_bridge.py.
+    # If you change it here, update it there too.
+    parser.add_argument("--timeout", type=float, default=1800.0,
+                        help="Command timeout seconds (default: 1800)")
     parser.add_argument("--permission-mode", default="bypassPermissions")
-    parser.add_argument("--bridge-script", default="scripts/claude_cli_bridge.py")
+    parser.add_argument("--bridge-script", default="scripts/quest_claude_bridge.py")
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--add-dir", action="append", default=[])
     return parser.parse_args()
@@ -29,6 +32,23 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    try:
+        artifact_paths = expected_artifacts_for_role(
+            quest_dir=args.quest_dir,
+            phase=args.phase,
+            agent=args.agent,
+        )
+    except ValueError as exc:
+        payload = {
+            "exit_code": 1,
+            "handoff_state": "missing",
+            "result_kind": "invocation_error",
+            "source": None,
+            "stderr": str(exc),
+            "stdout": "",
+        }
+        print(json.dumps(payload, ensure_ascii=True))
+        return 1
     result = run_claude_role(
         cwd=args.cwd,
         quest_dir=args.quest_dir,
@@ -37,10 +57,12 @@ def main() -> int:
         iteration=args.iter,
         prompt_file=args.prompt_file,
         handoff_file=args.handoff_file,
-        bridge_script=Path(args.cwd) / args.bridge_script,
+        bridge_script=resolve_path(args.cwd, args.bridge_script),
         model=args.model,
         timeout=args.timeout,
         permission_mode=args.permission_mode,
+        artifact_paths=artifact_paths,
+        allow_text_fallback=True,
         add_dirs=args.add_dir,
     )
     payload = {

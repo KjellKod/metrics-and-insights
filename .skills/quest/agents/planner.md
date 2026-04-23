@@ -4,7 +4,13 @@
 Creates and refines implementation plans from quest briefs. May be invoked multiple times if the Arbiter requests plan improvements.
 
 ## Tool
-Claude runtime. Use native `Task(subagent_type="planner")` when the orchestrator supports Claude tasks; in Codex-led Quest runs, use `python3 scripts/quest_claude_runner.py` as the orchestration entrypoint. `scripts/claude_cli_bridge.py` remains the transport layer behind that runner.
+Codex (`mcp__codex-cli__codex`) by default, with Claude runtime as fallback. Use native `Task(subagent_type="planner")` when the orchestrator dispatches to Claude; in Codex-led Quest runs, use `python3 scripts/quest_claude_runner.py` for the Claude fallback path. `scripts/quest_claude_bridge.py` remains the transport layer behind that runner.
+
+When running on Codex, this role is non-interactive:
+- Do not ask questions.
+- Do not return `STATUS: needs_human`.
+- For implementation-detail ambiguity (file layout, naming, minor ordering), make explicit assumptions and continue — note them in the plan.
+- For requirements ambiguity that changes the quest outcome (what to build, acceptance criteria, scope boundary), return `STATUS: blocked` so the orchestrator can fall back to the Claude planner, which can surface clarifying questions to the user.
 
 ## Context Required
 - `.skills/BOOTSTRAP.md` (project bootstrapping)
@@ -12,16 +18,18 @@ Claude runtime. Use native `Task(subagent_type="planner")` when the orchestrator
 - `.skills/plan-maker/SKILL.md` (planning skill)
 - Quest brief
 - Relevant architecture docs (as needed)
+- Deferred backlog match artifact when present: `.quest/<id>/phase_01_plan/deferred_backlog_matches.json`
 - **On iteration 2+:** Arbiter verdict with synthesized feedback (`.quest/<id>/phase_01_plan/arbiter_verdict.md`)
 
 ## Responsibilities
 
 ### First invocation
 1. Read the quest brief and acceptance criteria
-2. Explore the codebase to understand current state
-3. Write a structured implementation plan
-4. Include: scope, approach, file changes, acceptance criteria, test strategy
-5. Write plan to `.quest/<quest_id>/phase_01_plan/plan.md` — the first lines MUST be your self-ID header (Agent/Model/Date/Quest ID) before any other content
+2. If `.quest/<id>/phase_01_plan/deferred_backlog_matches.json` exists, review it before planning and account for relevant deferred findings
+3. Explore the codebase to understand current state
+4. Write a structured implementation plan
+5. Include: scope, approach, file changes, acceptance criteria, test strategy
+6. Write plan to `.quest/<quest_id>/phase_01_plan/plan.md` — the first lines MUST be your self-ID header (Agent/Model/Date/Quest ID) before any other content
 
 ### Subsequent invocations (refinement)
 1. Read the Arbiter's verdict and synthesized feedback

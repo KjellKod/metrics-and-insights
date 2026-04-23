@@ -6,6 +6,8 @@ try/except for graceful degradation -- missing or malformed files produce
 empty defaults, never crashes.
 """
 
+from __future__ import annotations
+
 import json
 import re
 from dataclasses import dataclass, field
@@ -35,6 +37,14 @@ class Achievement:
 
 
 @dataclass
+class CarryoverFindings:
+    """Artifact-backed carry-over findings surfaced in celebrations."""
+
+    count: int = 0
+    summaries: List[str] = field(default_factory=list)
+
+
+@dataclass
 class QuestData:
     """Rich structured data extracted from a quest directory."""
 
@@ -52,6 +62,8 @@ class QuestData:
 
     # From quest_brief.md
     brief_summary: str = ""
+    brief_body: str = ""
+    brief_source: str = ""
 
     # From plan.md
     plan_summary: str = ""
@@ -62,13 +74,19 @@ class QuestData:
     # From review*.md files
     review_findings: List[str] = field(default_factory=list)
     review_count: int = 0
+    inherited_findings_used: CarryoverFindings = field(default_factory=CarryoverFindings)
+    findings_left_for_future_quests: CarryoverFindings = field(
+        default_factory=CarryoverFindings
+    )
 
     # Computed
     files_changed: List[str] = field(default_factory=list)
     pr_number: Optional[int] = None
     achievements: List[Achievement] = field(default_factory=list)
     quality_score: int = 0
-    quality_tier: str = ""  # Diamond/Platinum/Gold/Silver/Bronze/Tin/Cardboard/Abandoned
+    quality_tier: str = (
+        ""  # Diamond/Platinum/Gold/Silver/Bronze/Tin/Cardboard/Abandoned
+    )
     test_count: Optional[int] = None
     tests_added: Optional[int] = None
 
@@ -115,7 +133,10 @@ def _load_allowlist_quality_defaults() -> Tuple[int, int, int]:
         and gates["max_plan_iterations"] >= 1
     ):
         max_plan_iterations = gates["max_plan_iterations"]
-    if type(gates.get("max_fix_iterations")) is int and gates["max_fix_iterations"] >= 1:
+    if (
+        type(gates.get("max_fix_iterations")) is int
+        and gates["max_fix_iterations"] >= 1
+    ):
         max_fix_iterations = gates["max_fix_iterations"]
 
     solo = data.get("solo", {})
@@ -167,18 +188,15 @@ def _read_state_json(quest_dir: Path) -> dict:
         return {}
 
 
-def _read_quest_brief(quest_dir: Path) -> Tuple[str, str]:
-    """Extract name and summary from quest_brief.md.
-
-    Returns (name, summary). Falls back to empty strings.
-    """
+def _read_quest_brief(quest_dir: Path) -> Tuple[str, str, str, str]:
+    """Extract name, summary, full body, and source from quest_brief.md."""
     brief_path = quest_dir / "quest_brief.md"
     if not brief_path.exists():
-        return "", ""
+        return "", "", "", ""
     try:
         text = brief_path.read_text(encoding="utf-8")
     except IOError:
-        return "", ""
+        return "", "", "", ""
 
     name = ""
     # Try "# Quest Brief: <title>"
@@ -191,24 +209,74 @@ def _read_quest_brief(quest_dir: Path) -> Tuple[str, str]:
         if heading_match:
             name = heading_match.group(1).strip()
 
-    # Extract summary: look for "## User Input" section, or first paragraph
-    summary = ""
-    user_input_match = re.search(
-        r"## User Input\s*\n+(.+?)(?:\n\n|\n##|\Z)", text, re.DOTALL
+    def extract_section(heading_patterns: tuple[str, ...]) -> str:
+        for heading_pattern in heading_patterns:
+            match = re.search(
+                rf"{heading_pattern}\s*\n+(.+?)(?=^##\s+|\Z)",
+                text,
+                re.IGNORECASE | re.MULTILINE | re.DOTALL,
+            )
+            if match:
+                section = match.group(1).strip()
+                if section:
+                    return section
+        return ""
+
+    def first_level_two_section() -> str:
+        matches = list(re.finditer(r"^##\s+(.+?)\s*$", text, re.MULTILINE))
+        for idx, match in enumerate(matches):
+            heading = match.group(1).strip().lower()
+            if heading == "router classification":
+                continue
+            start = match.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+            section = text[start:end].strip()
+            if section:
+                return section
+        return ""
+
+    def summarize(markdown: str) -> str:
+        cleaned_lines: list[str] = []
+        in_code_block = False
+        for raw_line in markdown.splitlines():
+            stripped = raw_line.strip()
+            if stripped.startswith("```"):
+                in_code_block = not in_code_block
+                continue
+            if in_code_block:
+                continue
+            stripped = re.sub(r"^\s*>\s?", "", stripped)
+            if stripped:
+                cleaned_lines.append(stripped)
+        summary = re.sub(r"\s+", " ", " ".join(cleaned_lines)).strip()
+        if len(summary) > 200:
+            summary = summary[:197] + "..."
+        return summary
+
+    brief_body = extract_section(
+        (
+            r"^##\s+User Input(?:\s+\(Original Prompt\))?\s*$",
+            r"^##\s+User Request\s*$",
+            r"^##\s+Original User Input\s*$",
+            r"^##\s+Original Request\s*$",
+        )
     )
-    if user_input_match:
-        summary = user_input_match.group(1).strip()
-    else:
-        # First non-heading paragraph
+    brief_source = "original_prompt" if brief_body else ""
+
+    if not brief_body:
+        brief_body = first_level_two_section()
+        if brief_body:
+            brief_source = "brief_section"
+
+    if not brief_body:
         para_match = re.search(r"\n\n([^#\n].+?)(?:\n\n|\Z)", text, re.DOTALL)
         if para_match:
-            summary = para_match.group(1).strip()
+            brief_body = para_match.group(1).strip()
+            brief_source = "brief_paragraph"
 
-    # Truncate summary to first ~200 chars for display
-    if len(summary) > 200:
-        summary = summary[:197] + "..."
+    brief_summary = summarize(brief_body) if brief_body else ""
 
-    return name, summary
+    return name, brief_summary, brief_body, brief_source
 
 
 def _read_plan_summary(quest_dir: Path) -> str:
@@ -393,6 +461,81 @@ def _collect_review_findings(quest_dir: Path) -> Tuple[List[str], int]:
                     findings.append(finding)
 
     return findings, review_count
+
+
+def _normalize_summary(value: object) -> str:
+    """Return a compact one-line summary or empty string for invalid input."""
+    if not isinstance(value, str):
+        return ""
+    summary = re.sub(r"\s+", " ", value).strip()
+    return summary
+
+
+def _build_carryover_findings(records: object) -> CarryoverFindings:
+    """Extract count + up to three summaries from finding-like records."""
+    if not isinstance(records, list):
+        return CarryoverFindings()
+
+    summaries: List[str] = []
+    count = 0
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        summary = _normalize_summary(record.get("summary"))
+        if not summary:
+            continue
+        count += 1
+        if len(summaries) < 3:
+            summaries.append(summary)
+
+    return CarryoverFindings(count=count, summaries=summaries)
+
+
+def _read_inherited_findings_used(quest_dir: Path) -> CarryoverFindings:
+    """Read deferred backlog matches captured during planner startup."""
+    matches_path = quest_dir / "phase_01_plan" / "deferred_backlog_matches.json"
+    if not matches_path.exists():
+        return CarryoverFindings()
+
+    try:
+        payload = json.loads(matches_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return CarryoverFindings()
+
+    return _build_carryover_findings(payload)
+
+
+def _read_findings_left_for_future_quests(
+    quest_dir: Path, quest_id: str
+) -> CarryoverFindings:
+    """Read deferred findings recorded for the current quest."""
+    if not quest_id:
+        return CarryoverFindings()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    backlog_path = repo_root / ".quest" / "backlog" / "deferred_findings.jsonl"
+    if not backlog_path.exists():
+        return CarryoverFindings()
+
+    records: List[dict] = []
+    try:
+        for raw_line in backlog_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if (
+                isinstance(record, dict)
+                and record.get("deferred_by_quest") == quest_id
+            ):
+                records.append(record)
+    except OSError:
+        return CarryoverFindings()
+
+    return _build_carryover_findings(records)
 
 
 def _find_pr_number(
@@ -627,9 +770,7 @@ def compute_quality_tier(
 
     effective_max_fix_iterations = max_fix_iterations
     if quest_mode == "solo":
-        effective_max_fix_iterations = min(
-            max_fix_iterations, solo_max_fix_iterations
-        )
+        effective_max_fix_iterations = min(max_fix_iterations, solo_max_fix_iterations)
 
     # Check from worst to best so max-gate check uses strict equality
 
@@ -716,7 +857,7 @@ def extract_celebration_data_from_journal(content: str) -> Optional[dict]:
         return None
 
 
-def _extract_metadata(content: str, key: str) -> str:
+def extract_metadata_value(content: str, key: str) -> str | None:
     """Extract journal metadata from bold, list-item, or plain formats."""
     patterns = [
         rf"\*\*{re.escape(key)}:\s*\*\*\s*(.+?)(?:\n|$)",
@@ -728,6 +869,13 @@ def _extract_metadata(content: str, key: str) -> str:
         match = re.search(pattern, content, re.IGNORECASE | re.MULTILINE)
         if match:
             return match.group(1).strip().strip("`")
+    return None
+
+
+def _extract_metadata(content: str, key: str) -> str:
+    value = extract_metadata_value(content, key)
+    if value is not None:
+        return value
     return ""
 
 
@@ -749,6 +897,31 @@ def _extract_dict_items(value: object) -> list[dict]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _extract_carryover_findings(value: object) -> CarryoverFindings:
+    """Parse carry-over findings from celebration JSON."""
+    if not isinstance(value, dict):
+        return CarryoverFindings()
+
+    raw_count = value.get("count")
+    count = (
+        raw_count
+        if isinstance(raw_count, int) and not isinstance(raw_count, bool) and raw_count >= 0
+        else 0
+    )
+    summaries = []
+    raw_summaries = value.get("summaries")
+    if isinstance(raw_summaries, list):
+        for item in raw_summaries:
+            summary = _normalize_summary(item)
+            if summary:
+                summaries.append(summary)
+
+    if count == 0 and summaries:
+        count = len(summaries)
+
+    return CarryoverFindings(count=count, summaries=summaries[:3])
 
 
 def load_quest_data_from_journal(journal_path: Path) -> QuestData:
@@ -800,11 +973,20 @@ def load_quest_data_from_journal(journal_path: Path) -> QuestData:
 
         quote = celebration.get("quote", {})
         if isinstance(quote, dict) and quote:
-            data.brief_summary = f'{quote.get("text", "")} — {quote.get("attribution", "")}'
+            data.brief_summary = (
+                f'{quote.get("text", "")} — {quote.get("attribution", "")}'
+            )
 
         victory_narrative = celebration.get("victory_narrative")
         if isinstance(victory_narrative, str):
             data.plan_summary = victory_narrative
+
+        data.inherited_findings_used = _extract_carryover_findings(
+            celebration.get("inherited_findings_used")
+        )
+        data.findings_left_for_future_quests = _extract_carryover_findings(
+            celebration.get("findings_left_for_future_quests")
+        )
 
     # Extract basic metadata from markdown (always, for fields not in JSON)
     if not data.quest_mode:
@@ -832,9 +1014,7 @@ def load_quest_data_from_journal(journal_path: Path) -> QuestData:
         data.plan_iterations = int(plan_match.group(1))
         parsed_plan_iterations = True
 
-    fix_match = re.search(
-        r"(?:\*\*)?[Ff]ix\s+iterations:\s*(?:\*\*)?\s*(\d+)", content
-    )
+    fix_match = re.search(r"(?:\*\*)?[Ff]ix\s+iterations:\s*(?:\*\*)?\s*(\d+)", content)
     parsed_fix_iterations = False
     if fix_match:
         data.fix_iterations = int(fix_match.group(1))
@@ -897,10 +1077,12 @@ def load_quest_data(quest_dir: Path) -> QuestData:
             data.name = parts[0].replace("-", " ").title()
 
     # 2. quest_brief.md
-    brief_name, brief_summary = _read_quest_brief(quest_dir)
+    brief_name, brief_summary, brief_body, brief_source = _read_quest_brief(quest_dir)
     if brief_name:
         data.name = brief_name
     data.brief_summary = brief_summary
+    data.brief_body = brief_body
+    data.brief_source = brief_source
 
     # 3. plan.md
     data.plan_summary = _read_plan_summary(quest_dir)
@@ -910,6 +1092,10 @@ def load_quest_data(quest_dir: Path) -> QuestData:
 
     # 5. review*.md
     data.review_findings, data.review_count = _collect_review_findings(quest_dir)
+    data.inherited_findings_used = _read_inherited_findings_used(quest_dir)
+    data.findings_left_for_future_quests = _read_findings_left_for_future_quests(
+        quest_dir, data.quest_id
+    )
 
     # 6. PR number
     data.pr_number = _find_pr_number(quest_dir, state, data.agents)

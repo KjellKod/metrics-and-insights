@@ -52,13 +52,25 @@ Classify findings using these levels, and include the level in each PR comment:
 
 Rule: Avoid comment-only “style polish” and trivial corrections. Prefer high signal feedback.
 
+### Comment Placement
+
+Default to **inline review comments** for code-specific feedback. If a finding refers to a concrete file, function, branch, or line range, attach it to that code instead of posting it in the main PR discussion.
+
+Use **top-level PR comments/reviews** only for:
+- overall assessment
+- acceptance-criteria coverage summary
+- cross-cutting concerns that do not belong to one code location
+- process notes about the review itself
+
+If a code-specific issue is fixed before you comment, do **not** repost stale feedback as a top-level comment.
+
 ---
 
 ## Review Process
 
 ### Step 0: Manifest Validation
 
-Before reviewing code, run `scripts/validate-manifest.sh` to check that all Quest files are listed in `.quest-manifest`. If validation fails, flag it as a **Must fix** — new or renamed files must be added to the manifest before merge.
+Before reviewing code, run `scripts/quest_validate-manifest.sh` to check that all Quest files are listed in `.quest-manifest`. If validation fails, flag it as a **Must fix** — new or renamed files must be added to the manifest before merge.
 
 ### Step 1: Architecture Boundaries and Standards
 
@@ -221,3 +233,12 @@ A good code review should:
 - ✅ Ensure tests map to acceptance criteria
 - ✅ Prevent secret leaks and basic security failures
 - ✅ Provide actionable feedback with severity
+
+---
+
+## Common Pitfalls
+
+| Shortcut | Why It Fails | Red Flag |
+|----------|-------------|----------|
+| "While you're here, also change..." | Scope creep disguised as review feedback. Refactor suggestions unrelated to the PR add noise and expand scope. | Review comments referencing code outside the diff |
+| Marking missing AC tests as "Should fix" | Untested acceptance criteria ship to production. If an AC exists but has no test, that is a "Must fix", not a suggestion. | AC exists but test coverage column is empty |

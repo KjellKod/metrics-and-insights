@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 import sys
@@ -43,9 +44,35 @@ def show_usage():
     print("  python3 jira_metrics/individual.py -team swedes")
     print("  python3 jira_metrics/individual.py -project SWE")
     print("\nOptional flags:")
+    print("  --year      Analyze a specific calendar year (defaults to current year)")
     print("  -verbose    Show detailed processing information")
     print("  -csv        Generate CSV report")
     sys.exit(1)
+
+
+def parse_year(value):
+    """Parse and validate the year argument."""
+    try:
+        year = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("year must be a four-digit integer") from exc
+
+    if year < 2000 or year > 2100:
+        raise argparse.ArgumentTypeError("year must be between 2000 and 2100")
+
+    return year
+
+
+def get_year_date_range(year):
+    """Return the start and end dates for a calendar year."""
+    return f"{year}-01-01", f"{year}-12-31"
+
+
+def is_timestamp_in_date_range(timestamp, start_date, end_date):
+    """Return True when a timestamp falls inside an inclusive YYYY-MM-DD range."""
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    return start <= timestamp.date() <= end
 
 
 def parse_arguments():
@@ -57,6 +84,7 @@ def parse_arguments():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-team", help="Process metrics for specified team")
     group.add_argument("-project", help="Process metrics for specified project")
+    parser.add_argument("--year", type=parse_year, default=datetime.now().year, help="Calendar year to analyze")
 
     try:
         args = parser.parse_args()
@@ -106,6 +134,13 @@ def calculate_individual_jira_metrics(start_date, end_date, team_name=None, proj
 
         if not completion_timestamp:
             verbose_print(f"Warning: Issue {issue.key} does not have a completion timestamp (Released, Done).")
+            continue
+
+        if not is_timestamp_in_date_range(completion_timestamp, start_date, end_date):
+            verbose_print(
+                f"Skipping issue {issue.key} because completion timestamp {completion_timestamp.date()} "
+                f"is outside {start_date} to {end_date}."
+            )
             continue
 
         # Handle team identification based on whether we're using team or project
@@ -358,9 +393,7 @@ def print_year_summary(assignee_metrics):
 
 def main():
     args = parse_arguments()
-    current_year = datetime.now().year
-    start_date = f"{current_year}-01-01"
-    end_date = f"{current_year}-12-31"
+    start_date, end_date = get_year_date_range(args.year)
 
     identifier = args.team if args.team else args.project
 
