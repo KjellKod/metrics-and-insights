@@ -48,21 +48,21 @@ EXPECTED_PATTERNS=(
   ".claude/agents/*.md"
   ".claude/hooks/*.sh"
   ".claude/skills/*/*.md"
-  "scripts/quest_allowlist_matcher.py"
-  "scripts/quest_claude_bridge.py"
-  "scripts/quest_claude_probe.py"
-  "scripts/quest_claude_runner.py"
-  "scripts/quest_review_intelligence.py"
-  "scripts/quest_select_tests.py"
-  "scripts/quest_startup_branch.py"
-  "scripts/quest_validate-handoff-contracts.sh"
-  "scripts/quest_validate-manifest.sh"
-  "scripts/quest_validate-quest-config.sh"
-  "scripts/quest_validate-quest-state.sh"
+  "scripts/quest_*.py"
+  "scripts/quest_*.sh"
   "scripts/quest_checks/*.py"
+  "scripts/quest_celebrate/*.py"
+  "scripts/quest_celebrate/*.sh"
   "scripts/quest_runtime/*.py"
   "tests/integration/test-enforce-allowlist.sh"
   "tests/unit/test_allowlist_matcher.py"
+  "tests/unit/test_codex_skill_wrappers.py"
+  "tests/unit/test_review_intelligence.py"
+  "tests/unit/test_quest*.py"
+)
+
+EXCLUDED_FILES=(
+  "scripts/quest_installer.sh"
 )
 
 # Find all files matching our patterns
@@ -77,6 +77,10 @@ done
 
 # Clean up and sort
 FOUND_FILES=$(echo "$FOUND_FILES" | grep -v '^$' | sort | uniq)
+for excluded in "${EXCLUDED_FILES[@]}"; do
+  FOUND_FILES=$(printf '%s\n' "$FOUND_FILES" | grep -vxF "$excluded" || true)
+done
+FOUND_FILES=$(printf '%s\n' "$FOUND_FILES" | grep -v '^$' || true)
 
 # Check each found file is in the manifest
 echo "Checking Quest files are listed in $MANIFEST..."

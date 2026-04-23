@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from quest_runtime.state import load_state, update_state
+from quest_runtime.state import OptimisticLockError, load_state, update_state
 
 
 def find_validator() -> Path:
@@ -141,16 +141,25 @@ def main() -> int:
             print(output, file=sys.stderr)
             return 1
 
-    state = update_state(
-        quest_dir,
-        phase=target_phase,
-        status=args.status,
-        last_role=args.last_role,
-        last_verdict=args.last_verdict,
-        quest_mode=args.quest_mode,
-        plan_iteration=args.plan_iteration,
-        fix_iteration=args.fix_iteration,
-    )
+    try:
+        state = update_state(
+            quest_dir,
+            expected_phase=args.expect_phase if args.transition else None,
+            phase=target_phase,
+            status=args.status,
+            last_role=args.last_role,
+            last_verdict=args.last_verdict,
+            quest_mode=args.quest_mode,
+            plan_iteration=args.plan_iteration,
+            fix_iteration=args.fix_iteration,
+        )
+    except OptimisticLockError as exc:
+        print(
+            f"{exc} Another agent may have modified state concurrently.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(json.dumps(state, indent=2))
     return 0
 
