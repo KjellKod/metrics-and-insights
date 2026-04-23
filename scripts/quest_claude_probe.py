@@ -5,18 +5,19 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
-from quest_runtime.claude_runner import run_bridge_probe
+from quest_runtime.claude_runner import resolve_path, run_bridge_probe
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Probe Quest Claude bridge via artifact write")
+    parser = argparse.ArgumentParser(
+        description="Probe Quest Claude bridge via artifact write"
+    )
     parser.add_argument("--quest-dir", required=True)
     parser.add_argument("--model", default="opus")
-    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--permission-mode", default="bypassPermissions")
-    parser.add_argument("--bridge-script", default="scripts/claude_cli_bridge.py")
+    parser.add_argument("--bridge-script", default="scripts/quest_claude_bridge.py")
     parser.add_argument("--cwd", default=".")
     return parser.parse_args()
 
@@ -26,7 +27,7 @@ def main() -> int:
     result = run_bridge_probe(
         cwd=args.cwd,
         quest_dir=args.quest_dir,
-        bridge_script=Path(args.cwd) / args.bridge_script,
+        bridge_script=resolve_path(args.cwd, args.bridge_script),
         model=args.model,
         timeout=args.timeout,
         permission_mode=args.permission_mode,
