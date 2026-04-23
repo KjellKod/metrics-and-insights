@@ -1,0 +1,39 @@
+.quest-manifest
+  da277b1cf866947b 59-68,74-75,85,92-96
+tests/unit/test_quest_state.py
+  da277b1cf866947b 1-99
+scripts/quest_checks/cli.py
+  da277b1cf866947b 5,15-17,21-25,29-36
+scripts/quest_validate-manifest.sh
+  da277b1cf866947b 51-52,54-55,59-65,80-83
+scripts/quest_runtime/state.py
+  da277b1cf866947b 5,12-23,44-64
+scripts/quest_state.py
+  da277b1cf866947b 33,144-162
+.gitignore
+  da277b1cf866947b 179
+tests/unit/test_quest_checks_cli.py
+  da277b1cf866947b 1-56
+tests/unit/test_quest_manifest.py
+  da277b1cf866947b 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "a18de915dc2d4c3bb5f02fd23a4175c672b1d956",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 337,
+      "total_deletions": 42,
+      "accepted_lines": 1772,
+      "overriden_lines": 0
+    }
+  }
+}
