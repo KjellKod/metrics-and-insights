@@ -27,9 +27,9 @@ This directory contains specialized skills for AI agents working in this reposit
 **Location:** `.skills/plan-maker/SKILL.md`
 
 ### engineering-throughput-spreadsheet
-**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, charts, compact GitHub insights, percent deltas, and executive/team recommendations.
+**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and executive/team recommendations.
 
-**Use when:** The user asks to create, refresh, or analyze the Jira/GitHub engineering throughput spreadsheet, especially for team-by-team monthly completed tickets/points and GitHub PR efficiency trends.
+**Use when:** The user asks to create, refresh, or analyze the Jira/GitHub engineering throughput spreadsheet, especially for team-by-team monthly completed tickets/points, Jira baseline comparisons, and GitHub PR efficiency trends with confirmed repo coverage.
 
 **Location:** `.skills/engineering-throughput-spreadsheet/SKILL.md`
 
