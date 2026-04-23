@@ -1,0 +1,69 @@
+scripts/quest_runtime/state.py
+  da277b1cf866947b 31-38
+.claude/hooks/enforce-allowlist.sh
+  da277b1cf866947b 32-53,63,69-70,80-110
+scripts/quest_checks/cli.py
+  da277b1cf866947b 14-21,25-28
+tests/integration/test-enforce-allowlist.sh
+  da277b1cf866947b 34-41,58-96,104-108
+tests/unit/test_review_intelligence.py
+  da277b1cf866947b 15,23-24,164,170-293,494-791
+scripts/quest_complete.py
+  da277b1cf866947b 315
+.skills/SKILLS.md
+  da277b1cf866947b 78-83
+scripts/quest_review_intelligence.py
+  da277b1cf866947b 25-26,100-104,110-126,219-222,309-314,318-340
+scripts/quest_validate-quest-state.sh
+  da277b1cf866947b 371-398,497-499,644,652-696,698,736-753
+scripts/quest_state.py
+  da277b1cf866947b 33,144-153
+.skills/celebrate/SKILL.md
+  da277b1cf866947b 58,61,64-65,68
+.skills/quest/delegation/workflow.md
+  da277b1cf866947b 131,303,475,479-482,484-485,488,501-502,512-540,542-543,547
+.skills/quest/agents/arbiter.md
+  da277b1cf866947b 4,37,39,41-75,111-112,123
+.skills/pr-assistant/SKILL.md
+  da277b1cf866947b 225-227
+scripts/quest_runtime/review_intelligence.py
+  da277b1cf866947b 41,235-264,321-344,349,353-355,361-364,374,381-483
+tests/unit/test_codex_skill_wrappers.py
+  da277b1cf866947b 18,20,26-28,34,39
+.quest-version
+  da277b1cf866947b 1
+.skills/implementer/SKILL.md
+  da277b1cf866947b 89
+scripts/quest_validate-manifest.sh
+  da277b1cf866947b 51-61
+scripts/quest_runtime/artifacts.py
+  da277b1cf866947b 20-21
+AGENTS.md
+  da277b1cf866947b 16-17,21-23,28
+scripts/quest_allowlist_matcher.py
+  da277b1cf866947b 62,68
+.quest-checksums
+  da277b1cf866947b 11,27,46,51,54,56,65,69-70,82,85-86,89,91,94-95,98,100,102-106
+scripts/quest_claude_runner.py
+  da277b1cf866947b 8-10,16-47,70-77,93-103,130-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "1ed83d7477fe01d9720428e07363fbc2206d9d9e",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 1109,
+      "total_deletions": 384,
+      "accepted_lines": 2793,
+      "overriden_lines": 0
+    }
+  }
+}
