@@ -1,0 +1,25 @@
+.skills/SKILLS.md
+  da277b1cf866947b 30,32
+.skills/engineering-throughput-spreadsheet/SKILL.md
+  da277b1cf866947b 3,12,24-25,32-37,43,46,64-66,84-92,110,131-138,145,150-154,170,181,186-188,191,202-216,237-238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "9251bdbd285a870a567bed95fabac763c2ae63e3",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 8,
+      "accepted_lines": 1510,
+      "overriden_lines": 0
+    }
+  }
+}
