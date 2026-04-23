@@ -177,3 +177,5 @@ cython_debug/
 # Quest ephemeral state
 .quest/
 .worktrees/
+.ws/
+.codex/environments/
