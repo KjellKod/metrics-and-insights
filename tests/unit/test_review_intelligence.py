@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
+_scripts_dir = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
+
+import quest_review_intelligence
 from quest_runtime.pr_review_cycle import (
     normalize_pr_review_intake,
     retag_backlog_at_cap,
@@ -215,6 +223,65 @@ def test_append_deferred_findings_bootstraps_missing_file(tmp_path: Path) -> Non
         },
     )
     assert nested.exists()
+
+
+def test_classify_pr_stop_does_not_persist_retagged_backlog_when_append_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backlog_path = tmp_path / "review_backlog.json"
+    original = {
+        "items": [
+            _finding(
+                finding_id="F-unsafe-ordering",
+                severity="medium",
+                confidence="medium",
+            )
+        ]
+    }
+    backlog_path.write_text(json.dumps(original, indent=2) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        quest_review_intelligence,
+        "classify_pr_loop_stop",
+        lambda *args, **kwargs: {"stop": True, "retag_required": True, "outcome": "stop"},
+    )
+    monkeypatch.setattr(
+        quest_review_intelligence,
+        "retag_backlog_at_cap",
+        lambda payload: {
+            "items": [
+                {
+                    **payload["items"][0],
+                    "decision": "defer",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        quest_review_intelligence,
+        "append_deferred_findings",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("append failed")),
+    )
+
+    args = argparse.Namespace(
+        ci_state="failing",
+        actionable=1,
+        iteration=3,
+        cap=3,
+        backlog=str(backlog_path),
+        retag_output=None,
+        deferred_jsonl=None,
+        deferred_by_quest=None,
+        deferred_at=None,
+        defer_reason="accepted debt",
+        proposed_followup="Create a focused follow-up quest.",
+    )
+
+    with pytest.raises(RuntimeError, match="append failed"):
+        quest_review_intelligence._cmd_classify_pr_stop(args)
+
+    assert json.loads(backlog_path.read_text(encoding="utf-8")) == original
 
 
 def test_scan_deferred_backlog_matches_exact_write_scope_path(tmp_path: Path) -> None:

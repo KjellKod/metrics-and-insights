@@ -55,17 +55,18 @@ If no argument is provided:
 
 Before rendering, explicitly decide whether the celebration should show the carry-over sections:
 
-1. Check `phase_01_plan/deferred_backlog_matches.json`
+1. If celebrating from a journal entry and it contains structured `celebration_data`, use the embedded carry-over counts and summaries as the source of truth.
+2. Otherwise, for live quest directories or legacy journals without structured `celebration_data`, check `phase_01_plan/deferred_backlog_matches.json`
    - If the file is missing, unreadable, or empty, treat `Inherited Findings Used` as count `0`
    - If present, count only records with a usable short summary
-2. Check `.quest/backlog/deferred_findings.jsonl`
+3. For live quest directories or legacy journals without structured `celebration_data`, check `.quest/backlog/deferred_findings.jsonl`
    - Filter entries where `deferred_by_quest` matches the current quest ID
    - If the file is missing, unreadable, or no matching records exist, treat `Findings Left For Future Quests` as count `0`
-3. Render each carry-over section only when its artifact-backed count is greater than `0`
-4. If both counts are `0`, include one short empty-state section instead:
+4. Render each carry-over section only when its chosen source-of-truth count is greater than `0`
+5. If both counts are `0`, include one short empty-state section instead:
    - `Carry-Over Findings`
    - `No carry-over findings this round; nothing was inherited from earlier quests and nothing needs to be saved for the next one.`
-5. Do not replace this with vague filler, "no baggage", or inferred planner insights
+6. Do not replace this with vague filler, "no baggage", or inferred planner insights
 
 ### Step 4: Generate the Celebration as Rich Markdown
 

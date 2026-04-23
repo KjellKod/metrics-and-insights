@@ -193,10 +193,6 @@ def _cmd_classify_pr_stop(args: argparse.Namespace) -> int:
         }
 
         retagged = retag_backlog_at_cap(payload)
-        _write_json(backlog_path, retagged)
-        if args.retag_output:
-            _write_json(Path(args.retag_output), retagged)
-
         deferred_items = [
             item
             for item in retagged.get("items", [])
@@ -222,6 +218,10 @@ def _cmd_classify_pr_stop(args: argparse.Namespace) -> int:
                 deferred_items,
                 lineage,
             )
+
+        _write_json(backlog_path, retagged)
+        if args.retag_output:
+            _write_json(Path(args.retag_output), retagged)
 
     payload = dict(classification)
     payload["deferred_count"] = deferred_count

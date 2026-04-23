@@ -312,7 +312,17 @@ def main() -> int:
 
     # Load quest data
     data = load_quest_data(quest_dir)
-    completion_date = date.fromisoformat(args.date) if args.date else _today()
+    if args.date:
+        try:
+            completion_date = date.fromisoformat(args.date)
+        except ValueError:
+            print(
+                f"Error: invalid --date '{args.date}'. Expected YYYY-MM-DD.",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        completion_date = _today()
 
     # Determine slug and outcome
     slug = data.slug or state.get("slug", quest_dir.name.split("_")[0])
