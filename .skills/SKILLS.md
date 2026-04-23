@@ -26,13 +26,6 @@ This directory contains specialized skills for AI agents working in this reposit
 
 **Location:** `.skills/plan-maker/SKILL.md`
 
-### engineering-throughput-spreadsheet
-**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and executive/team recommendations.
-
-**Use when:** The user asks to create, refresh, or analyze the Jira/GitHub engineering throughput spreadsheet, especially for team-by-team monthly completed tickets/points, Jira baseline comparisons, and GitHub PR efficiency trends with confirmed repo coverage.
-
-**Location:** `.skills/engineering-throughput-spreadsheet/SKILL.md`
-
 ### plan-reviewer
 **Purpose:** Review implementation plans, PR specifications, and feature documentation to ensure comprehensive test coverage and validation strategies.
 
@@ -81,6 +74,13 @@ This directory contains specialized skills for AI agents working in this reposit
 **Use when:** The user wants to push a PR through CI and review, or asks to shepherd/babysit a PR until it's ready.
 
 **Location:** `.skills/pr-shepherd/SKILL.md`
+
+### review-decisions
+**Purpose:** Shared policy for translating canonical review findings into deterministic backlog decisions (`fix_now`, `verify_first`, `defer`, `drop`, `needs_human_decision`) including loop-cap behavior and deferred backlog lineage.
+
+**Use when:** Arbiter or automation needs to produce `review_backlog.json`, enforce the review-loop cap, or append deferred findings to `.quest/backlog/deferred_findings.jsonl`.
+
+**Location:** `.skills/review-decisions/SKILL.md`
 
 ### gpt
 **Purpose:** Delegate tasks to OpenAI Codex (GPT-5.4) via MCP. Provides structured invocation with sensible defaults for sandbox, model, and reasoning effort.

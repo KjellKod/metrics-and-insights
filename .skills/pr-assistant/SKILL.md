@@ -222,9 +222,9 @@ Rules:
   - Claude → `noreply@anthropic.com`
   - Codex / OpenAI → `noreply@openai.com`
   - OpenCode → `noreply@opencode.ai`
-- Resolve `<human author identity>` without exposing private local emails in the PR body:
-  - Prefer a GitHub username inferred from `gh`, the remote URL, or existing PR metadata
-  - If only local git config is available, use `git config user.name` without the email
+- Resolve `<human author identity>` from local git config when available:
+  - Prefer `git config user.name` + `git config user.email` and format as `Name <email>`
+  - If only a GitHub username can be inferred from git config or the remote URL, use that username
   - If no human identity can be verified, use `the repository author`
 - The `in collaboration with` line is always present and always last.
 

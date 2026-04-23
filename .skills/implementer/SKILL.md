@@ -86,7 +86,7 @@ Stop and ask a question if any of these are unclear:
 
 If the uncertainty is not impactful, choose the simplest interpretation and record it in the Decision Log with an `ASSUMPTION` tag so reviewers can validate it:
 
-- ASSUMPTION: [what you assumed]
+- Assumption: [what you assumed]
   - context: [what in the plan was ambiguous]
   - alternative: [what else you considered]
 

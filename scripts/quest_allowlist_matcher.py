@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import shlex
 import sys
 
@@ -59,20 +58,14 @@ def shell_tokens(command: str) -> list[str] | None:
         return None
 
 
-def command_basename(command_tokens: list[str]) -> str:
-    if not command_tokens:
-        return ""
-    return Path(command_tokens[0]).name
-
-
 def contains_blocked_find_action(command_tokens: list[str]) -> bool:
-    if command_basename(command_tokens) != "find":
+    if not command_tokens or command_tokens[0] != "find":
         return False
     return any(token in BLOCKED_FIND_ACTIONS for token in command_tokens[1:])
 
 
 def contains_blocked_rg_flag(command_tokens: list[str]) -> bool:
-    if command_basename(command_tokens) != "rg":
+    if not command_tokens or command_tokens[0] != "rg":
         return False
     return any(
         token in BLOCKED_RG_FLAGS
