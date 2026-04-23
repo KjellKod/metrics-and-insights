@@ -74,6 +74,32 @@ class TestTransformMonth(unittest.TestCase):
         self.assertEqual(result, "2024 Jun")
 
 
+class TestYearDateRange(unittest.TestCase):
+    def test_get_year_date_range(self):
+        start_date, end_date = individual.get_year_date_range(2025)
+        self.assertEqual(start_date, "2025-01-01")
+        self.assertEqual(end_date, "2025-12-31")
+
+    def test_parse_year_accepts_valid_year(self):
+        self.assertEqual(individual.parse_year("2026"), 2026)
+
+    def test_parse_year_rejects_non_integer(self):
+        with self.assertRaises(individual.argparse.ArgumentTypeError):
+            individual.parse_year("next-year")
+
+    def test_parse_year_rejects_out_of_range_year(self):
+        with self.assertRaises(individual.argparse.ArgumentTypeError):
+            individual.parse_year("1999")
+
+    def test_is_timestamp_in_date_range_accepts_dates_inside_range(self):
+        timestamp = individual.datetime.fromisoformat("2025-12-31T23:59:00+00:00")
+        self.assertTrue(individual.is_timestamp_in_date_range(timestamp, "2025-01-01", "2025-12-31"))
+
+    def test_is_timestamp_in_date_range_rejects_dates_outside_range(self):
+        timestamp = individual.datetime.fromisoformat("2026-01-01T00:00:00+00:00")
+        self.assertFalse(individual.is_timestamp_in_date_range(timestamp, "2025-01-01", "2025-12-31"))
+
+
 class TestCalculatePoints(unittest.TestCase):
     def test_calculate_points_with_value(self):
         issue = MagicMock()

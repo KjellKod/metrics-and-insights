@@ -34,6 +34,41 @@ If no quest ID is provided:
 2. Evaluate the user's input against the 7 substance dimensions
 3. Produce the routing decision JSON: `{route, confidence (0.0-1.0), risk_level, complexity, reason, missing_information}`
 
+### Step 2b: Second Model Availability Probe (New Quest Only)
+
+**MANDATORY — run before Step 3.** From the repository root, execute the preflight check:
+
+```bash
+./scripts/quest_preflight.sh --orchestrator claude   # if you are Claude
+./scripts/quest_preflight.sh --orchestrator codex    # if you are Codex
+```
+
+The script is at the **repository root** (`scripts/quest_preflight.sh`), NOT inside the skill directory.
+
+1. Parse the JSON output. Cache `available` as a boolean for the session.
+2. If `available` is false:
+   - Display **every line** of the `warning` array from the JSON output as a blockquote before route options. The array contains the heading, setup commands, and instructions — show them all.
+   - Then pause quest startup and offer these choices:
+     ```
+     Second-model setup is not currently available.
+
+     Options:
+       1. Fix it now and rerun preflight (recommended)
+       2. Continue with a single-model quest for this run
+       3. Cancel
+     ```
+   - If the user selects "fix it now", do not create the quest folder yet. Let them complete the remediation, then rerun Step 2b.
+   - For Codex-led sessions, prefer `claude auth login` as the default interactive fix when Claude CLI auth is missing. If the warning indicates a restricted sandbox may be hiding auth state, rerun the preflight with whatever permissions are needed to read the real Claude CLI auth state.
+   - For Claude-led sessions, use the warning lines to guide Codex MCP install/auth remediation before rerunning Step 2b.
+   - Append "(Claude-only)" or "(Codex-only)" to solo/full quest option labels.
+3. If `available` is true, proceed normally.
+4. For Codex-led sessions, if the JSON includes `runtime_requirement: "host_context"`, treat that as authoritative:
+   - Claude bridge probing and Claude-designated role execution must use the same host-visible context that can see Claude CLI auth.
+   - Do not assume a sandbox-local `claude auth status` result is enough.
+   - The script retains a successful probe in `.quest/cache/claude_bridge_codex.json` by default, so a recent host-verified success can be reused across quest starts without repeating browser login.
+
+This result carries into workflow.md — do not re-probe there.
+
 ### Step 3: Route
 
 Based on the router decision:
@@ -125,14 +160,32 @@ Before creating the quest folder, present the routing classification to the user
 ### Quest Folder Creation
 
 1. Generate a slug (lowercase, hyphenated, 2-5 words) and inform the user
-2. Create `.quest/<slug>_YYYY-MM-DD__HHMM/` with subfolders:
+2. **Ask the user** which workspace mode to use for this quest. Present these options:
+   - **branch** — create a `quest/<slug>` feature branch (switches away from current branch)
+   - **worktree** — create a `quest/<slug>` branch in a separate worktree (current branch stays checked out)
+   - **none** — stay on the current branch as-is
+   
+   If already on a non-default branch, inform the user and skip the prompt — the quest will use the current branch.
+   If the current workspace is not inside a git repository, skip the prompt — Quest must stay in the current workspace with `vcs_available: false`.
+
+3. Run quest startup branch preparation with the user's choice:
+   - Execute: `python3 scripts/quest_startup_branch.py --slug <slug> --mode <choice>`
+   - Parse the JSON result
+   - If `status` is `"blocked"`: show the returned `message`, do NOT create the quest folder yet, and stop for the user to resolve the git state or config
+   - If `status` is `"created"` or `"skipped"`: continue and surface the returned `message` to the user
+   - Record these fields for `state.json` initialization:
+     - `vcs_available`
+     - `branch`
+     - `branch_mode`
+     - `worktree_path` (if present)
+4. Create `.quest/<slug>_YYYY-MM-DD__HHMM/` with subfolders:
    `phase_01_plan/`, `phase_02_implementation/`, `phase_03_review/`, `logs/`
-3. Write quest brief to `.quest/<id>/quest_brief.md` including:
+5. Write quest brief to `.quest/<id>/quest_brief.md` including:
    - User input (original prompt)
    - Questioner summary (if questioning occurred)
    - **Router classification JSON** (the final routing decision that sent the quest to workflow). This is the classification produced by the most recent router evaluation — if the router ran twice (once before questioning, once after), record the second (final) classification.
-4. Copy `.ai/allowlist.json` to `.quest/<id>/logs/allowlist_snapshot.json`
-5. Initialize `state.json`:
+6. Copy `.ai/allowlist.json` to `.quest/<id>/logs/allowlist_snapshot.json`
+7. Initialize `state.json`:
    ```json
    {
      "quest_id": "<id>",
@@ -140,6 +193,10 @@ Before creating the quest folder, present the routing classification to the user
      "phase": "plan",
      "status": "pending",
      "quest_mode": "workflow",
+     "vcs_available": true,
+     "branch": "quest/<slug> or current branch",
+     "branch_mode": "branch | worktree | none",
+     "worktree_path": "/absolute/path/to/worktree (worktree mode only)",
      "plan_iteration": 0,
      "fix_iteration": 0,
      "created_at": "<timestamp>",
@@ -147,3 +204,5 @@ Before creating the quest folder, present the routing classification to the user
    }
    ```
    Set `quest_mode` to the user's final selection: `"workflow"` (default) or `"solo"`. This field is read by `workflow.md` to determine agent dispatch and by `validate-quest-state.sh` for artifact checks.
+   `vcs_available` must be copied directly from `scripts/quest_startup_branch.py` output. Do not infer it from `branch_mode`.
+   `branch_mode` records the actual startup mode used for this quest run after no-op handling. If Quest starts on an existing feature branch, set `branch_mode` to `"none"` and record that branch in `branch`.
