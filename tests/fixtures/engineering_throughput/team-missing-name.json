@@ -1,0 +1,8 @@
+{
+  "teams": [
+    {
+      "jira_csv": "alpha_individual_metrics.csv",
+      "repos": ["api"]
+    }
+  ]
+}

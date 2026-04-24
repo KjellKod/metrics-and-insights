@@ -1,0 +1,14 @@
+{
+  "teams": [
+    {
+      "name": "Alpha Team",
+      "jira_csv": "alpha_individual_metrics.csv",
+      "repos": ["api", "web"]
+    },
+    {
+      "name": "Beta Team",
+      "jira_csv": "beta_individual_metrics.csv",
+      "repos": ["worker"]
+    }
+  ]
+}

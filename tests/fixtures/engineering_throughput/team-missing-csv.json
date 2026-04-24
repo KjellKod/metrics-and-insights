@@ -1,0 +1,9 @@
+{
+  "teams": [
+    {
+      "name": "Alpha Team",
+      "jira_csv": "does-not-exist.csv",
+      "repos": ["api"]
+    }
+  ]
+}
