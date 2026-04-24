@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.json
+!tests/fixtures/engineering_throughput/*.json
 *.txt 
 .tmp_*.diff
 
@@ -63,6 +64,7 @@ cover/
 
 # csv output
 *.csv
+!tests/fixtures/engineering_throughput/*.csv
 
 # Test artifacts
 junit.xml
@@ -176,3 +178,6 @@ cython_debug/
 
 # Quest ephemeral state
 .quest/
+.worktrees/
+.ws/
+.codex/environments/

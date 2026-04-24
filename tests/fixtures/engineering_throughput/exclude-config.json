@@ -1,0 +1,17 @@
+{
+  "windows": [
+    {
+      "name": "hackathon",
+      "start": "2026-02-10",
+      "end": "2026-02-15"
+    }
+  ],
+  "rules": [
+    {
+      "reason": "release-promotion",
+      "repos": ["mobile"],
+      "authors": ["release-bot"],
+      "title_contains": ["release"]
+    }
+  ]
+}
