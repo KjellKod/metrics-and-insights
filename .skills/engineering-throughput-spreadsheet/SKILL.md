@@ -1,11 +1,17 @@
 ---
 name: engineering-throughput-spreadsheet
-description: Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and executive/team recommendations.
+description: Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and agent-authored recommendations.
 ---
 
 # Engineering Throughput Spreadsheet
 
 Use this skill when the user asks to create, refresh, or analyze an engineering throughput spreadsheet from this repo's Jira and GitHub metrics scripts.
+
+Important contract:
+- committed repo code does **not** author recommendation prose
+- the `Recommendations` tab is mandatory
+- the `Recommendations` tab must be authored by an LLM/agent
+- a human-only run without agent access must stop after local artifact generation with a clear error
 
 ## Intake
 
@@ -116,6 +122,7 @@ Use the committed build entrypoint for GitHub collection, Jira summarization, an
 python3 scripts/engineering_throughput_build.py \
   --jira-csv-dir <jira-csv-dir> \
   [--team-config <team-config.json>] \
+  --recommendations-file <agent-recommendations.json> \
   --spreadsheet-mode <create|update> \
   [--spreadsheet-id <sheet-id>] \
   [--repos <repo1,repo2>] \
@@ -132,12 +139,38 @@ The committed build:
 - stores raw PR detail locally as `github_metrics_payload.json`
 - keeps raw throughput metrics visible
 - applies optional exclusion rules only to process-eligible metrics
+- writes `recommendation_signals.json` for the agent recommendation pass
+- writes `base_sheet_payload.json` before the recommendation step
 - writes:
   - `run_config.json`
   - `github_metrics_payload.json`
   - `github_summary.json`
   - `jira_summary.json`
+  - `recommendation_signals.json`
+  - `base_sheet_payload.json`
   - `sheet_payload.json`
+
+The build is intentionally two-step:
+
+1. Run the committed build without `--recommendations-file` to generate local artifacts and recommendation signals.
+2. Have the agent read `recommendation_signals.json`, `github_summary.json`, and `jira_summary.json`, then author an `agent-recommendations.json` file shaped like:
+
+```json
+{
+  "title": "Recommendations",
+  "values": [
+    ["Recommendations"],
+    ["Audience", "Observation", "Evidence", "Suggested action", "Priority"]
+  ],
+  "notes": {
+    "author": "agent"
+  }
+}
+```
+
+3. Re-run the committed build with `--recommendations-file <agent-recommendations.json>` to produce the final `sheet_payload.json`.
+
+If a human runs the build without agent access, the script must stop with a clear error after writing the local artifacts. Do not bypass this by hardcoding advice into repo code.
 
 Use `exclude-config.json` only for special cases that distort process interpretation. First-pass schema:
 
@@ -160,6 +193,10 @@ Use `exclude-config.json` only for special cases that distort process interpreta
 ### 4. Google Sheets MCP
 
 Use the Google Sheets MCP connector for spreadsheet operations.
+
+Prerequisite:
+- creating or updating a real Google spreadsheet requires an agent runtime that has Google Sheets write capability
+- if that capability is unavailable, local artifacts are still useful, but the workflow stops at local JSON/CSV outputs and does not create a spreadsheet
 
 Typical sequence:
 

@@ -76,7 +76,7 @@ This directory contains specialized skills for AI agents working in this reposit
 **Location:** `.skills/pr-shepherd/SKILL.md`
 
 ### engineering-throughput-spreadsheet
-**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and executive/team recommendations.
+**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and agent-authored recommendations.
 
 **Use when:** The user asks to create, refresh, or analyze the Jira/GitHub engineering throughput spreadsheet, especially for team-by-team monthly completed tickets/points, Jira baseline comparisons, and GitHub PR efficiency trends with confirmed repo coverage.
 

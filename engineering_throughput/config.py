@@ -316,6 +316,7 @@ def print_run_config(config: RunConfig) -> int:
     print(f"Teams: {teams_display}")
     print(f"Team config source: {config.team_config_path or 'n/a'}")
     print(f"Exclude config source: {config.exclude_config_path or 'n/a'}")
+    print(f"Recommendations source: {config.recommendations_file or 'agent-required'}")
     print(f"Spreadsheet mode: {config.spreadsheet_mode}")
     print(f"Spreadsheet ID: {config.spreadsheet_id or 'n/a'}")
     print(f"Output dir: {config.output_dir}")
@@ -339,6 +340,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--spreadsheet-id")
     parser.add_argument("--out-dir")
     parser.add_argument("--exclude-config")
+    parser.add_argument("--recommendations-file")
     parser.add_argument("--show-config", action="store_true")
     return parser
 
@@ -398,6 +400,7 @@ def resolve_run_config(args: argparse.Namespace, current_date: date | None = Non
     team_config_path = Path(args.team_config) if args.team_config else None
     jira_csv_dir = Path(args.jira_csv_dir) if args.jira_csv_dir else None
     exclude_config_path = Path(args.exclude_config) if args.exclude_config else None
+    recommendations_file = Path(args.recommendations_file) if args.recommendations_file else None
 
     teams, jira_source = load_team_config(team_config_path, jira_csv_dir)
     exclude_config = load_exclude_config(exclude_config_path)
@@ -415,6 +418,7 @@ def resolve_run_config(args: argparse.Namespace, current_date: date | None = Non
         team_config_path=team_config_path,
         exclude_config_path=exclude_config_path,
         exclude_config=exclude_config,
+        recommendations_file=recommendations_file,
         spreadsheet_mode=args.spreadsheet_mode,
         spreadsheet_id=args.spreadsheet_id,
         show_config=bool(args.show_config),

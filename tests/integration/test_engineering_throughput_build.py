@@ -74,6 +74,23 @@ def _subprocess_env() -> dict[str, str]:
     return env
 
 
+def _write_recommendations_file(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "title": "Recommendations",
+                "values": [
+                    ["Recommendations"],
+                    ["Audience", "Observation", "Evidence", "Suggested action", "Priority"],
+                    ["Leaders", "Agent-authored summary", "Signals reviewed", "Act on the queue", "A"],
+                ],
+                "notes": {"author": "agent"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_show_config_script_runs_as_cli(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     out_dir = tmp_path / "show-config-run"
@@ -184,6 +201,8 @@ def test_build_script_writes_run_config_summaries_and_combined_payload(tmp_path:
     )
     module = _load_module(Path("scripts/engineering_throughput_build.py"), "engineering_throughput_build")
     out_dir = tmp_path / "run"
+    recommendations_file = tmp_path / "agent-recommendations.json"
+    _write_recommendations_file(recommendations_file)
 
     exit_code = module.main(
         [
@@ -203,6 +222,8 @@ def test_build_script_writes_run_config_summaries_and_combined_payload(tmp_path:
             "2026-03-31",
             "--out-dir",
             str(out_dir),
+            "--recommendations-file",
+            str(recommendations_file),
         ],
         github_client=FakeGitHubClient(),
     )
@@ -212,6 +233,8 @@ def test_build_script_writes_run_config_summaries_and_combined_payload(tmp_path:
     assert (out_dir / "github_metrics_payload.json").exists()
     assert (out_dir / "github_summary.json").exists()
     assert (out_dir / "jira_summary.json").exists()
+    assert (out_dir / "recommendation_signals.json").exists()
+    assert (out_dir / "base_sheet_payload.json").exists()
     assert (out_dir / "sheet_payload.json").exists()
 
     payload = json.loads((out_dir / "sheet_payload.json").read_text(encoding="utf-8"))
@@ -226,6 +249,52 @@ def test_build_script_writes_run_config_summaries_and_combined_payload(tmp_path:
     run_config = json.loads((out_dir / "run_config.json").read_text(encoding="utf-8"))
     assert run_config["jira_source"]["mode"] == "team_config"
     assert run_config["spreadsheet_mode"] == "create"
+
+
+def test_build_script_requires_agent_authored_recommendations_file(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "GITHUB_METRIC_OWNER_OR_ORGANIZATION=example-org",
+                "GITHUB_METRIC_REPO=api,web",
+                "GITHUB_REPO_FOR_PR_TRACKING=",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    module = _load_module(
+        Path("scripts/engineering_throughput_build.py"),
+        "engineering_throughput_build_missing_recommendations",
+    )
+    out_dir = tmp_path / "run"
+
+    with pytest.raises(ValueError, match="Agent-authored recommendations are required"):
+        module.main(
+            [
+                "--env-file",
+                str(env_file),
+                "--team-config",
+                str(FIXTURE_DIR / "team-config.json"),
+                "--jira-csv-dir",
+                str(FIXTURE_DIR),
+                "--baseline-year",
+                "2025",
+                "--focus-year",
+                "2026",
+                "--focus-start",
+                "2026-02-01",
+                "--date-end",
+                "2026-03-31",
+                "--out-dir",
+                str(out_dir),
+            ],
+            github_client=FakeGitHubClient(),
+        )
+
+    assert (out_dir / "recommendation_signals.json").exists()
+    assert (out_dir / "base_sheet_payload.json").exists()
+    assert not (out_dir / "sheet_payload.json").exists()
 
 
 def test_build_script_fails_when_requested_repo_access_is_incomplete(tmp_path: Path) -> None:

@@ -33,6 +33,20 @@ Example workflow:
 4. Create visualizations
 5. Discuss trends with team
 
+### Engineering Throughput Build Flow
+The committed engineering throughput workflow is agent-driven.
+
+- `scripts/engineering_throughput_show_config.py` resolves runtime config and repo coverage
+- `scripts/engineering_throughput_build.py` writes local metrics artifacts and a `recommendation_signals.json` file
+- the final `Recommendations` tab is mandatory, but it must be authored by an agent, not by repo code
+
+This means:
+- a human-only local run can generate local JSON artifacts
+- a human-only local run cannot produce the final `sheet_payload.json` without an agent-authored recommendations file
+- creating or updating a real Google Sheet also requires an agent/runtime with Google Sheets write capability
+
+If you only need local analysis artifacts, MCP/Sheets access is not required. If you need the actual Google spreadsheet, an agent with Sheets write access is required.
+
 ## Repository Structure
 
 ```

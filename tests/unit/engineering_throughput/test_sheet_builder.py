@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date
-import os
 from pathlib import Path
 
 import pytest
@@ -14,19 +13,11 @@ from engineering_throughput.models import (
     GitHubSummary,
     JiraSummary,
     JiraTeamSummary,
-    JiraSource,
     PeriodMetrics,
-    RunConfig,
     SheetSection,
     TeamConfig,
 )
-from engineering_throughput.recommendations import build_recommendations
 from engineering_throughput.sheet_builder import assemble_sheet_payload
-
-
-def _blocked_identifier_tokens() -> tuple[str, ...]:
-    raw = os.environ.get("THROUGHPUT_BLOCKED_IDENTIFIER_TOKENS", "")
-    return tuple(token.strip() for token in raw.split(",") if token.strip())
 
 
 def _date_window() -> DateWindowConfig:
@@ -201,23 +192,6 @@ def test_sheet_builder_computes_ranges_from_table_sizes() -> None:
     assert len(payload.tabs) == 5
 
 
-def test_recommendations_use_generic_templates_without_embedded_names_or_years() -> None:
-    recommendations = build_recommendations(
-        _jira_summary(),
-        _github_summary(),
-        (TeamConfig(name="Platform", jira_csv=Path("platform.csv"), repos=("api",)),),
-        _date_window(),
-    )
-    payload = assemble_sheet_payload([recommendations, SheetSection(title="Scratch", values=[["x"]])])
-    text = " ".join(str(cell) for row in recommendations.values for cell in row)
-
-    for token in _blocked_identifier_tokens():
-        assert token.lower() not in text.lower()
-    assert "2025 vs 2026" not in text
-    assert "Platform" in text
-    assert payload.data[0]["range"].startswith("'Recommendations'!A1:")
-
-
 def test_jira_sections_backfill_zero_months_from_date_window() -> None:
     sections = build_jira_sections(
         _jira_summary(),
@@ -244,28 +218,6 @@ def test_jira_sections_backfill_zero_months_from_date_window() -> None:
     assert ["2026-01", 0, 0] in jira_summary_section.values
     assert ["2025-03", 0, 0] in team_section.values
     assert ["Alex", 5, 0, 0, 0, 6, 0] in team_section.values
-
-
-def test_recommendations_render_missing_approval_data_as_na_without_raising_priority() -> None:
-    github_summary = _github_summary()
-    github_summary = replace(
-        github_summary,
-        eligible_baseline=replace(github_summary.eligible_baseline, median_first_approval_hours=None),
-    )
-
-    recommendations = build_recommendations(
-        _jira_summary(),
-        github_summary,
-        (TeamConfig(name="Platform", jira_csv=Path("platform.csv"), repos=("api",)),),
-        _date_window(),
-    )
-
-    managers_row = next(row for row in recommendations.values if row and row[0] == "Managers")
-    assert managers_row[1] == "Approval latency held steady or improved."
-    assert managers_row[2] == "Median first approval hours: n/a -> 7.0."
-    assert managers_row[4] == "B"
-
-
 def test_github_payload_caps_audit_and_sample_rows_for_sheet_use() -> None:
     github_summary = _github_summary()
     github_summary = replace(

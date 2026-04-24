@@ -37,6 +37,7 @@ def _config() -> RunConfig:
             windows=tuple(),
             rules=tuple(),
         ),
+        recommendations_file=None,
         spreadsheet_mode="create",
         spreadsheet_id=None,
     )

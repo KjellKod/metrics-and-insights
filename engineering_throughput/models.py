@@ -144,6 +144,7 @@ class RunConfig:
     team_config_path: Path | None
     exclude_config_path: Path | None
     exclude_config: ExcludeConfig
+    recommendations_file: Path | None
     spreadsheet_mode: str
     spreadsheet_id: str | None
     show_config: bool = False
@@ -162,6 +163,7 @@ class RunConfig:
             "team_config_path": _path_string(self.team_config_path),
             "exclude_config_path": _path_string(self.exclude_config_path),
             "exclude_config": self.exclude_config.to_dict(),
+            "recommendations_file": _path_string(self.recommendations_file),
             "spreadsheet_mode": self.spreadsheet_mode,
             "spreadsheet_id": self.spreadsheet_id,
             "show_config": self.show_config,
@@ -400,4 +402,22 @@ class SheetPayload:
             "tabs": list(self.tabs),
             "data": list(self.data),
             "metadata": self.metadata,
+        }
+
+
+@dataclass(frozen=True)
+class RecommendationSignals:
+    """Structured facts for an agent-authored recommendations pass."""
+
+    comparison_label: str
+    github: dict[str, Any]
+    jira: dict[str, Any]
+    teams: tuple[dict[str, Any], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "comparison_label": self.comparison_label,
+            "github": self.github,
+            "jira": self.jira,
+            "teams": list(self.teams),
         }
