@@ -77,15 +77,22 @@ def unique_preserving_order(values: Iterable[str]) -> list[str]:
     return result
 
 
-def parse_iso_date(value: str | None) -> date | None:
+def parse_iso_date(value: Any) -> date | None:
     """Parse an optional YYYY-MM-DD date string."""
 
-    if not value:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"invalid ISO date: {value!r}")
+    normalized = value.strip()
+    if not normalized:
         return None
     try:
-        return date.fromisoformat(value)
+        return date.fromisoformat(normalized)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"invalid ISO date: {value}") from exc
+        raise ValueError(f"invalid ISO date: {value}") from exc
 
 
 def _load_json_file(path: Path) -> Any:

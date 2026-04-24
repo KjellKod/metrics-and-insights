@@ -66,8 +66,8 @@ Use `GITHUB_METRIC_REPO` and `GITHUB_REPO_FOR_PR_TRACKING` as the source of trut
 
 ```bash
 python3 scripts/engineering_throughput_show_config.py \
-  --team-config <team-config.json> \
   --jira-csv-dir <jira-csv-dir> \
+  [--team-config <team-config.json>] \
   --spreadsheet-mode <create|update> \
   [--spreadsheet-id <sheet-id>] \
   [--repos <repo1,repo2>] \
@@ -114,8 +114,8 @@ Use the committed build entrypoint for GitHub collection, Jira summarization, an
 
 ```bash
 python3 scripts/engineering_throughput_build.py \
-  --team-config <team-config.json> \
   --jira-csv-dir <jira-csv-dir> \
+  [--team-config <team-config.json>] \
   --spreadsheet-mode <create|update> \
   [--spreadsheet-id <sheet-id>] \
   [--repos <repo1,repo2>] \

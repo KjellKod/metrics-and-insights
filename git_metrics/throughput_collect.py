@@ -19,6 +19,7 @@ GRAPHQL_URL = "https://api.github.com/graphql"
 REST_URL = "https://api.github.com"
 LARGE_PR_LINES = 1000
 SLOW_MERGE_HOURS = 72
+MAX_GRAPHQL_SEARCH_RESULTS = 1000
 
 
 @dataclass(frozen=True)
@@ -127,10 +128,10 @@ class GitHubClient:
         raise RuntimeError("GraphQL request failed after retries")
 
     def search_merged_prs(self, owner: str, repo: str, window: MonthWindow) -> list[dict[str, Any]]:
-        query_text = f"repo:{owner}/{repo} is:pr is:merged merged:{window.start.isoformat()}..{window.end.isoformat()}"
         query = """
         query($query: String!, $cursor: String) {
           search(type: ISSUE, query: $query, first: 100, after: $cursor) {
+            issueCount
             pageInfo { hasNextPage endCursor }
             nodes {
               ... on PullRequest {
@@ -155,11 +156,44 @@ class GitHubClient:
           }
         }
         """
+        return self._search_merged_prs_range(owner, repo, window, query, window.start, window.end)
+
+    def _search_merged_prs_range(
+        self,
+        owner: str,
+        repo: str,
+        window: MonthWindow,
+        query: str,
+        range_start: date,
+        range_end: date,
+    ) -> list[dict[str, Any]]:
+        query_text = f"repo:{owner}/{repo} is:pr is:merged merged:{range_start.isoformat()}..{range_end.isoformat()}"
         cursor = None
         rows: list[dict[str, Any]] = []
+        first_page = True
         while True:
             data = self.graphql(query, {"query": query_text, "cursor": cursor})
             search = data["search"]
+            if first_page:
+                issue_count = int(search.get("issueCount") or 0)
+                if issue_count > MAX_GRAPHQL_SEARCH_RESULTS:
+                    if range_start >= range_end:
+                        raise RuntimeError(
+                            "GitHub search returned more than 1000 merged PRs for "
+                            f"{owner}/{repo} on {range_start.isoformat()}; narrow the date range"
+                        )
+                    midpoint = range_start + timedelta(days=(range_end - range_start).days // 2)
+                    left = self._search_merged_prs_range(owner, repo, window, query, range_start, midpoint)
+                    right = self._search_merged_prs_range(
+                        owner,
+                        repo,
+                        window,
+                        query,
+                        midpoint + timedelta(days=1),
+                        range_end,
+                    )
+                    return left + right
+                first_page = False
             rows.extend([node for node in search["nodes"] if node])
             page_info = search["pageInfo"]
             if not page_info["hasNextPage"]:

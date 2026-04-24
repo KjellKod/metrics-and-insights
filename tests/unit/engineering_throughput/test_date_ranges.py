@@ -51,3 +51,14 @@ def test_focus_window_requires_month_aligned_start_and_month_end_or_today() -> N
             date_end=date(2026, 3, 15),
             today=date(2026, 4, 23),
         )
+
+
+def test_focus_window_rejects_future_month_end_dates() -> None:
+    with pytest.raises(ValueError, match="--date-end must be today or the last day of a month"):
+        resolve_date_window(
+            baseline_year=2025,
+            focus_year=2026,
+            focus_start=date(2026, 2, 1),
+            date_end=date(2026, 4, 30),
+            today=date(2026, 4, 23),
+        )

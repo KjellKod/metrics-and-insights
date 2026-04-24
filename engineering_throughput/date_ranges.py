@@ -45,6 +45,8 @@ def _is_month_aligned_start(value: date) -> bool:
 
 
 def _is_valid_focus_end(value: date, current_day: date) -> bool:
+    if value > current_day:
+        return False
     return value == current_day or value == _month_end(value)
 
 

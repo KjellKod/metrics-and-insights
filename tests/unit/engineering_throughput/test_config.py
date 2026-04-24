@@ -10,6 +10,7 @@ from engineering_throughput.config import (
     build_argument_parser,
     load_exclude_config,
     load_team_config,
+    parse_iso_date,
     print_run_config,
     resolve_run_config,
 )
@@ -215,6 +216,11 @@ def test_resolve_run_config_rejects_blank_cli_owner_or_repos(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="--repos cannot be blank"):
         resolve_run_config(blank_repos_args, current_date=date(2026, 4, 23))
+
+
+def test_parse_iso_date_rejects_non_string_values_with_validation_error() -> None:
+    with pytest.raises(ValueError, match="invalid ISO date"):
+        parse_iso_date(123)
 
 
 def test_show_config_output_lists_owner_repos_focus_window_and_sources(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
