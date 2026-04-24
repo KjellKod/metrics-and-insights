@@ -1,0 +1,49 @@
+engineering_throughput/jira_payload.py
+  da277b1cf866947b 10-90
+engineering_throughput/config.py
+  da277b1cf866947b 25-268
+engineering_throughput/sheet_builder.py
+  da277b1cf866947b 30-44
+engineering_throughput/recommendations.py
+  da277b1cf866947b 12-57
+tests/unit/engineering_throughput/test_date_ranges.py
+  da277b1cf866947b 5-53
+.quest-manifest
+  da277b1cf866947b 91-94
+tests/integration/test_engineering_throughput_build.py
+  da277b1cf866947b 5-269
+engineering_throughput/github_payload.py
+  da277b1cf866947b 9-156
+tests/unit/engineering_throughput/test_sheet_builder.py
+  da277b1cf866947b 3-334
+scripts/engineering_throughput_build.py
+  da277b1cf866947b 7-58
+tests/unit/engineering_throughput/test_github_summary.py
+  da277b1cf866947b 3-49
+tests/unit/engineering_throughput/test_config.py
+  da277b1cf866947b 9-346
+engineering_throughput/date_ranges.py
+  da277b1cf866947b 43-85
+scripts/engineering_throughput_show_config.py
+  da277b1cf866947b 6-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "dba3a3b15aaf8c59f94954c791b4b1d0e0a00c79",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 1047,
+      "total_deletions": 196,
+      "accepted_lines": 1885,
+      "overriden_lines": 0
+    }
+  }
+}
