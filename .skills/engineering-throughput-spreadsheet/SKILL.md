@@ -16,8 +16,8 @@ Do not hardcode team names. Do not include specific team names or individual nam
   - `-team <Jira Team[Dropdown] value>`
   - or `-project <Jira project key>`
 - time range:
-  - default to `2025` through the current year only if the user has not specified a range
-  - confirm exact years when the user uses relative language like "this year" or "since February"
+  - default to previous calendar year for the baseline period and current calendar year for the focus period when the user does not specify overrides
+  - confirm exact dates when the user uses relative language like "this year" or "since February"
 - GitHub repositories:
   - prefer explicit user input
   - otherwise read non-secret repo config from `.env`
@@ -41,7 +41,7 @@ Use `GITHUB_METRIC_REPO` and `GITHUB_REPO_FOR_PR_TRACKING` as the source of trut
 - Spreadsheet tabs:
   - `Recommendations`
   - `Jira Summary`
-  - one tab per team
+  - one tab per team from runtime team metadata
   - `GitHub Summary`
   - `GitHub No Approval`
   - `GitHub Repos`
@@ -55,190 +55,135 @@ Use `GITHUB_METRIC_REPO` and `GITHUB_REPO_FOR_PR_TRACKING` as the source of trut
 
 1. Inspect repo-local skills and obey `AGENTS.md`.
 2. Create a run directory under `.ws/`.
-3. Check `jira_metrics/individual.py` supports `--year`. If not, add it before collecting data.
-4. Read non-secret config from `.env` when needed:
+3. Read non-secret config from `.env` when needed:
    - `GITHUB_METRIC_OWNER_OR_ORGANIZATION`
    - `GITHUB_METRIC_REPO`
    - `GITHUB_REPO_FOR_PR_TRACKING`
-   - `GITHUB_REPO_FOR_RELEASE_TRACKING`
-5. If repos were not explicitly provided by the user, resolve them from `.env`, show the exact list to the user, and require confirmation before collecting GitHub data.
-6. If the repo list is wrong, instruct the user to update the env variable(s) and restart the prompt after the env file is corrected.
-7. Keep secrets out of logs and final answers.
+4. If repos were not explicitly provided by the user, resolve them from `.env`, show the exact list to the user, and require confirmation before collecting GitHub data.
+5. If the repo list is wrong, instruct the user to update the env variable(s) and restart the prompt after the env file is corrected.
+6. Keep secrets out of logs and final answers.
+7. Use the committed repo-confirmation script before the build:
+
+```bash
+python3 scripts/engineering_throughput_show_config.py \
+  --team-config <team-config.json> \
+  --jira-csv-dir <jira-csv-dir> \
+  --spreadsheet-mode <create|update> \
+  [--spreadsheet-id <sheet-id>] \
+  [--repos <repo1,repo2>] \
+  [--focus-start <YYYY-MM-DD>] \
+  [--date-end <YYYY-MM-DD>]
+```
 
 ### 2. Collect Jira Metrics
 
 For each requested team source and each requested year:
 
 ```bash
-python3 jira_metrics/individual.py --year 2025 -team "<team dropdown value>" -csv
-python3 jira_metrics/individual.py --year 2026 -project "<project key>" -csv
+python3 jira_metrics/individual.py --year <baseline_year> -team "<team dropdown value>" -csv
+python3 jira_metrics/individual.py --year <focus_year> -project "<project key>" -csv
 ```
 
-If `individual.py` writes CSVs to the repo root, move them into the `.ws/` run directory immediately.
+Move generated CSVs into the run directory immediately if they land in the repo root.
 
-Parse the CSV sections:
+Create a runtime team config JSON for the committed build when team tabs are needed:
 
-- `Assignee Released Points`
-- `Assignee Released Tickets`
+```json
+{
+  "teams": [
+    {
+      "name": "Example Team",
+      "jira_csv": "example_individual_metrics.csv",
+      "repos": ["example-repo"]
+    }
+  ]
+}
+```
 
-Create a compact `Jira Summary` tab that shows:
+Rules:
 
-- all-team 2025 monthly average vs 2026 focus-period monthly average
-- completed tickets
-- completed points
-- points per completed ticket
-- team-by-team deltas vs the 2025 average
-- a monthly all-team trend table and charts
+- `name` and `jira_csv` are required
+- `repos` is optional and is only used for team-scoped GitHub context
+- if team tabs are not needed, skip the team config and pass only `--jira-csv-dir`; the committed build will produce a global Jira summary without team tabs
 
-For each team tab, write:
-
-- source and generated date
-- period comparison: baseline monthly average, first focus month, focus-period monthly average, delta vs baseline
-- monthly team totals
-- individual points by month
-- individual tickets by month
-- chart helper ranges for top contributors
-
-Create charts per team:
-
-- team monthly totals
-- top individual points
-- top individual tickets
-
-### 3. Collect GitHub Metrics
+### 3. Collect and Summarize GitHub Metrics
 
 Use the requested GitHub repositories. If none are provided, resolve configured repos from `.env`, show the exact repo list to the user, and wait for confirmation before proceeding.
 
-Prefer GitHub GraphQL search by repo/month because REST per-PR calls are too slow for high-volume repos. Collect merged PRs for the requested date range.
+Use the committed build entrypoint for GitHub collection, Jira summarization, and payload generation:
 
-For each PR, capture:
+```bash
+python3 scripts/engineering_throughput_build.py \
+  --team-config <team-config.json> \
+  --jira-csv-dir <jira-csv-dir> \
+  --spreadsheet-mode <create|update> \
+  [--spreadsheet-id <sheet-id>] \
+  [--repos <repo1,repo2>] \
+  [--exclude-config <exclude-config.json>] \
+  [--focus-start <YYYY-MM-DD>] \
+  [--date-end <YYYY-MM-DD>] \
+  [--out-dir .ws/engineering-throughput-<YYYY-MM-DD>]
+```
 
-- month, repo, PR number, title, URL
-- author
-- created and merged timestamps
-- hours to merge
-- hours to first review
-- hours to first approval
-- additions, deletions, changed files, total lines changed
-- review count and approval count
-- flags:
-  - large PR: `lines_changed > 1000`
-  - slow merge: `hours_to_merge > 72`
-  - no approval: `approval_count == 0`
+The committed build:
 
-Store raw PR detail locally as `.ws/.../github_metrics_payload.json`.
+- validates repo access explicitly
+- collects merged PR detail rows by repo and month
+- stores raw PR detail locally as `github_metrics_payload.json`
+- keeps raw throughput metrics visible
+- applies optional exclusion rules only to process-eligible metrics
+- writes:
+  - `run_config.json`
+  - `github_metrics_payload.json`
+  - `github_summary.json`
+  - `jira_summary.json`
+  - `sheet_payload.json`
 
-Separate raw throughput metrics from process-eligible metrics:
+Use `exclude-config.json` only for special cases that distort process interpretation. First-pass schema:
 
-- raw throughput includes all merged PRs
-- process-eligible metrics exclude special-case PRs that distort process interpretation
-- examples of special cases include release-promotion PRs and user-specified hackathon or experiment windows
+```json
+{
+  "windows": [
+    {"name": "hackathon", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+  ],
+  "rules": [
+    {
+      "reason": "release-promotion",
+      "repos": ["example-repo"],
+      "authors": ["release-bot"],
+      "title_contains": ["release"]
+    }
+  ]
+}
+```
 
-Keep raw throughput visible. Use process-eligible metrics for PR-size, approval-latency, slow-merge, and no-approval analysis.
-
-### 4. Compact GitHub Analysis
-
-Only write compact analysis to the spreadsheet:
-
-`GitHub Summary`
-- baseline vs focus-period comparison
-- raw throughput and process-eligible throughput side by side
-- delta and percent change
-- monthly trend table
-- chart helper ranges for PR count, merge latency, and risk rates
-
-`GitHub No Approval`
-- adjusted no-approval list for counted PRs
-- excluded false-positive summary
-- compact list of excluded release-promotion / hackathon / experiment PRs for auditability
-
-`GitHub Repos`
-- repo-level baseline vs focus-period metrics
-
-`GitHub Authors`
-- top increases, top decreases, and current high-volume authors
-- note that GitHub logins are not Jira team identities unless an explicit mapping exists
-
-`GitHub Flags`
-- top flagged authors
-- a small PR sample, not the full raw dump
-
-Create charts:
-
-- GitHub PR count and merge latency
-- GitHub PR risk rates
-- top GitHub authors by merged or eligible PRs
-
-### 5. Recommendations
-
-Write recommendations to a dedicated `Recommendations` tab. Use the data as a management signal, not as a verdict on people.
-
-Include:
-
-- Executive readout for CTO, EMs, and PMs
-- Team manager recommendations for every team
-- 30-day experiments
-- suggested improvement goals / EM scorecard
-
-Use this framing:
-
-- AI tools can increase implementation speed faster than agile/scrum ceremonies adapt.
-- Combine Jira and GitHub signals when explaining the pattern.
-- Expect implementation speed to rise before review, planning, and acceptance processes adapt.
-- Keep improvements where throughput improved.
-- Treat large PRs as the main anti-pattern unless quality data says otherwise.
-- Do not overreact to no-approval PRs; they may represent AI-assisted solo work or AI-review paths. Recommend explicit labels/policy so the metric becomes interpretable.
-- Explain "flow control" concretely: WIP limits, daily review-queue sweeps, same-business-day review for small PRs, mid-sprint acceptance slices, and explicit expedite lanes.
-- Before calling out an individual as needing coaching, caveat capacity changes, team moves, support load, and assignment mix.
-
-Recommended experiment themes:
-
-- small-PR lane
-- explicit `AI-assisted`, `AI-reviewed`, and `human-review-required` labels
-- same-business-day review target for small PRs
-- mid-sprint acceptance slices
-- team AI workflow reviews
-
-Suggested improvement goals should be practical and phased:
-
-- current baseline
-- Q2 target
-- Q3 target
-- Q4 idea or stretch direction
-
-Prefer goals that combine throughput and reviewability, such as:
-
-- median first human approval
-- median merge time for normal PRs
-- large PR rate
-- explicit exception labeling
-- sustaining or recovering Jira ticket throughput without compensating via larger PR batches
-
-### 6. Google Sheets MCP
+### 4. Google Sheets MCP
 
 Use the Google Sheets MCP connector for spreadsheet operations.
 
 Typical sequence:
 
-1. `gs_drive_create_spreadsheet`
-2. `gs_write_create_sheet` for each tab
-3. `gs_write_values_batch_update` for compact table writes
+1. `gs_drive_create_spreadsheet` when mode is `create`
+2. `gs_write_create_sheet` for each tab in `sheet_payload.json`
+3. `gs_write_values_batch_update` using the bounded ranges from `sheet_payload.json`
 4. `gs_chart_create` for charts
 5. `gs_write_set_column_width` and `gs_write_format_cells` for readability
 6. `gs_read_values_*` and `gs_chart_list` to verify
 
 If the MCP transport closes, do not work around it by dumping huge payloads. First compact the data further, then retry when the MCP is available.
 
-### 7. Verification
+### 5. Verification
 
 Before final response:
 
-- Run targeted tests if code changed, especially `python3 -m unittest jira_metrics.tests.test_individual`.
+- Run targeted tests if code changed, especially:
+  - `python3 -m unittest jira_metrics.tests.test_individual`
+  - `python3 -m pytest tests/unit/engineering_throughput`
+  - `python3 -m pytest tests/integration/test_engineering_throughput_build.py`
 - Read back key ranges from:
   - `Jira Summary`
-- Read back key ranges from:
   - `GitHub Summary`
   - `Recommendations`
-  - at least one Jira team tab
+  - at least one Jira team tab when a team config was used
 - Run `gs_chart_list` and confirm expected charts exist.
 - Report the spreadsheet URL, tabs created, chart count, local raw-data path, tests run, and any caveats.
