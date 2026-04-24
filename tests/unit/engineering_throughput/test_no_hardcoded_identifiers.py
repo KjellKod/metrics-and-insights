@@ -2,18 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-DENY_LIST = [
-    "2025 vs 2026",
-    "onfleet",
-    "Spork",
-    "Panda",
-    "Mint",
-    "Blackwidow",
-    "rodolfo",
-    "Gonzalo",
-    "Nastassy",
-]
+from tests.unit.engineering_throughput.identifier_tokens import BLOCKED_IDENTIFIER_TOKENS
 
 
 def test_committed_modules_do_not_leak_hardcoded_identifiers() -> None:
@@ -23,5 +12,5 @@ def test_committed_modules_do_not_leak_hardcoded_identifiers() -> None:
 
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        for token in DENY_LIST:
+        for token in BLOCKED_IDENTIFIER_TOKENS:
             assert token not in text, f"found leaked token {token!r} in {path}"

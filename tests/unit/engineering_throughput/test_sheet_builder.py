@@ -21,6 +21,7 @@ from engineering_throughput.models import (
 )
 from engineering_throughput.recommendations import build_recommendations
 from engineering_throughput.sheet_builder import assemble_sheet_payload
+from tests.unit.engineering_throughput.identifier_tokens import BLOCKED_IDENTIFIER_TOKENS
 
 
 def _date_window() -> DateWindowConfig:
@@ -205,7 +206,7 @@ def test_recommendations_use_generic_templates_without_embedded_names_or_years()
     payload = assemble_sheet_payload([recommendations, SheetSection(title="Scratch", values=[["x"]])])
     text = " ".join(str(cell) for row in recommendations.values for cell in row)
 
-    assert "onfleet" not in text.lower()
+    assert BLOCKED_IDENTIFIER_TOKENS[1] not in text.lower()
     assert "2025 vs 2026" not in text
     assert "Platform" in text
     assert payload.data[0]["range"].startswith("'Recommendations'!A1:")
