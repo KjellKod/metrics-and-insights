@@ -1,0 +1,37 @@
+tests/unit/engineering_throughput/test_config.py
+  da277b1cf866947b 13,221-223
+tests/unit/engineering_throughput/test_skill_references.py
+  da277b1cf866947b 11
+.skills/engineering-throughput-spreadsheet/SKILL.md
+  da277b1cf866947b 70,118
+tests/unit/engineering_throughput/test_date_ranges.py
+  da277b1cf866947b 54-64
+engineering_throughput/config.py
+  da277b1cf866947b 80,83-90,93,95
+tests/unit/engineering_throughput/test_github_collect.py
+  da277b1cf866947b 1-64
+git_metrics/throughput_collect.py
+  da277b1cf866947b 22,134,159-170,173,177-196
+engineering_throughput/date_ranges.py
+  da277b1cf866947b 48-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f166c77817af4231e55e62988c629250b8e78c5c",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 134,
+      "total_deletions": 9,
+      "accepted_lines": 1412,
+      "overriden_lines": 0
+    }
+  }
+}
