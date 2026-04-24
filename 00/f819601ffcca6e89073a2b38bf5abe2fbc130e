@@ -1,0 +1,45 @@
+tests/unit/engineering_throughput/test_recommendation_signals.py
+  da277b1cf866947b 1-145
+.skills/engineering-throughput-spreadsheet/SKILL.md
+  da277b1cf866947b 3,10-15,125,142-143,149-150,153-174,197-199
+engineering_throughput/models.py
+  da277b1cf866947b 147,166,406-422
+tests/unit/engineering_throughput/test_skill_references.py
+  da277b1cf866947b 12
+.skills/SKILLS.md
+  da277b1cf866947b 79
+engineering_throughput/config.py
+  da277b1cf866947b 319,343,403,421
+tests/unit/engineering_throughput/test_github_summary.py
+  da277b1cf866947b 40
+engineering_throughput/recommendation_signals.py
+  da277b1cf866947b 1,5-7,9-16,19-26,29,34-60,62-132,135-160
+README.md
+  da277b1cf866947b 36-49
+engineering_throughput/__init__.py
+  da277b1cf866947b 5,9-10
+scripts/engineering_throughput_build.py
+  da277b1cf866947b 18-21,64-69,71-75,85,93-109,115-119
+tests/integration/test_engineering_throughput_build.py
+  da277b1cf866947b 77-93,204-205,225-226,236-237,254-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "00f819601ffcca6e89073a2b38bf5abe2fbc130e",
+  "prompts": {
+    "da277b1cf866947b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019db752-baac-7120-83c3-f38907b6bc4d",
+        "model": "gpt-5.4"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 494,
+      "total_deletions": 158,
+      "accepted_lines": 1441,
+      "overriden_lines": 1
+    }
+  }
+}
