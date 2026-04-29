@@ -38,6 +38,13 @@ LINTER_PATTERNS = (
     "golangci-lint",
     "shellcheck",
     "hadolint",
+    "cargo fmt",
+    "cargo clippy",
+    "clippy",
+    "rustfmt --check",
+    "cargo machete",
+    "cargo deny",
+    "cargo audit",
 )
 UNIT_TEST_PATTERNS = (
     "unit",
@@ -50,6 +57,8 @@ UNIT_TEST_PATTERNS = (
     "pnpm test",
     "go test",
     "cargo test",
+    "cargo nextest run",
+    "nextest",
     "dotnet test",
     "mvn test",
     "gradle test",
@@ -63,6 +72,10 @@ INTEGRATION_PATTERNS = (
     "cypress",
     "selenium",
     "postman",
+    "cargo test --test",
+    "cargo test --tests",
+    "cargo nextest run --test",
+    "cargo nextest run --tests",
 )
 AGENTIC_PATTERNS = (
     "codex",
@@ -644,6 +657,9 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
 def render_table(report: dict[str, Any]) -> str:
     lines = [
         f"CI maturity for {report['owner']} ({report['repository_count']} repositories)",
+        "Legend: score is 0-4, with 1 point each for linter, unit tests, smoke/integration/e2e tests, and agentic CI.",
+        "Active means a GitHub Actions workflow ran recently. Authors are recent merged PR authors to help route follow-up, not assigned owners.",
+        "",
         "score grade      active  repo                                      recent merged PR authors",
         "----- ---------- ------- ----------------------------------------- ------------------------",
     ]

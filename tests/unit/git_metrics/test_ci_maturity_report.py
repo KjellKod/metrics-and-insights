@@ -107,6 +107,36 @@ jobs:
     assert not evidence["agentic_ci"]
 
 
+def test_rust_lint_and_integration_patterns_count_toward_score() -> None:
+    workflows = [
+        {
+            "path": ".github/workflows/rust-ci.yml",
+            "text": """
+name: Rust CI
+jobs:
+  rust:
+    steps:
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Unit tests
+        run: cargo test --workspace --all-features
+      - name: Integration tests
+        run: cargo test --tests --workspace --all-features
+""",
+        }
+    ]
+
+    score, grade, evidence = score_workflows(workflows)
+
+    assert score == 3
+    assert grade == "strong"
+    assert evidence["linter"]
+    assert evidence["unit_tests"]
+    assert evidence["smoke_integration_tests"]
+
+
 def test_configured_agentic_workflow_counts_as_agentic_ci(monkeypatch) -> None:
     monkeypatch.setenv("CI_MATURITY_AGENTIC_PATTERNS", "review-agent")
     workflows = [
@@ -129,18 +159,18 @@ jobs:
     assert evidence["agentic_ci"]
 
 
-def test_openai_codex_workflow_counts_as_agentic_ci_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("CI_MATURITY_AGENTIC_PATTERNS", raising=False)
+def test_tool_specific_workflow_counts_as_agentic_ci_when_configured(monkeypatch) -> None:
+    monkeypatch.setenv("CI_MATURITY_AGENTIC_PATTERNS", "example-review-action")
     workflows = [
         {
-            "path": ".github/workflows/codex-frontend-review.yml",
+            "path": ".github/workflows/frontend-review.yml",
             "text": """
 name: Frontend / UX Review
 jobs:
   frontend-review:
     steps:
       - name: AI frontend review
-        uses: openai/codex-action@v1
+        uses: example/example-review-action@v1
 """,
         }
     ]
@@ -357,6 +387,8 @@ def test_table_output_includes_responsible_people() -> None:
 
     rendered = render_table(report)
 
+    assert "Legend: score is 0-4, with 1 point each for linter" in rendered
+    assert "Authors are recent merged PR authors to help route follow-up, not assigned owners." in rendered
     assert "recent merged PR authors" in rendered
     assert "KjellKod (Kjell Hedstrom)" in rendered
     assert "Re-run with --force-fresh" in rendered
