@@ -418,6 +418,91 @@ def write_csv(rows, fieldnames, output_file):
     return output_file
 
 
+def format_signed(value):
+    return f"+{value}" if value > 0 else str(value)
+
+
+def format_percent(value):
+    return f"{value * 100:.1f}%"
+
+
+def company_all_rows(summaries):
+    return [
+        row
+        for row in summaries
+        if row["scope_type"] == "company" and row["scope"] == "all" and row["priority"] == "all"
+    ]
+
+
+def latest_company_row(summaries):
+    rows = company_all_rows(summaries)
+    return max(rows, key=lambda row: row["period"]) if rows else None
+
+
+def latest_team_rows(summaries, period):
+    return [
+        row
+        for row in summaries
+        if row["period"] == period and row["scope_type"] == "team" and row["priority"] == "all"
+    ]
+
+
+def render_console_summary(summaries, details):
+    """Render a concise human summary for terminal output."""
+    if not summaries:
+        return "Bug health summary\nNo matching bugs found for this date range."
+
+    company_rows = sorted(company_all_rows(summaries), key=lambda row: row["period"])
+    latest = latest_company_row(summaries)
+    if not latest:
+        return "Bug health summary\nNo company-level summary rows were generated."
+
+    created_total = sum(row["created_count"] for row in company_rows)
+    closed_total = sum(row["closed_count"] for row in company_rows)
+    period_start = company_rows[0]["period"]
+    period_end = company_rows[-1]["period"]
+    total_unique_tickets = len({detail["ticket_key"] for detail in details})
+
+    lines = [
+        "",
+        "Bug health summary",
+        f"- Range: {period_start} to {period_end}; unique bugs seen: {total_unique_tickets}",
+        f"- Flow: created {created_total}, closed {closed_total}, net {format_signed(created_total - closed_total)}",
+        (
+            f"- Latest period {latest['period']}: created {latest['created_count']}, "
+            f"closed {latest['closed_count']}, net {format_signed(latest['net_change'])}, "
+            f"backlog {latest['open_backlog_count']}"
+        ),
+        (
+            f"- SLA/data quality: breached {latest['sla_breached_count']} "
+            f"({format_percent(latest['sla_breach_rate'])}), "
+            f"missing priority {latest['missing_priority_count']}, "
+            f"missing due date {latest['missing_due_date_count']}"
+        ),
+    ]
+
+    if latest["median_days_to_close"] != "":
+        lines.append(
+            f"- Close time: median {latest['median_days_to_close']} days, p85 {latest['p85_days_to_close']} days"
+        )
+
+    team_rows = latest_team_rows(summaries, latest["period"])
+    attention_rows = sorted(
+        team_rows,
+        key=lambda row: (row["sla_breached_count"], row["open_backlog_count"], row["net_change"]),
+        reverse=True,
+    )[:3]
+    if attention_rows:
+        lines.append("- Teams to inspect:")
+        for row in attention_rows:
+            lines.append(
+                f"  {row['scope']}: backlog {row['open_backlog_count']}, "
+                f"net {format_signed(row['net_change'])}, SLA breached {row['sla_breached_count']}"
+            )
+
+    return "\n".join(lines)
+
+
 def parse_arguments():
     parser = get_common_parser()
     parser.description = "Generate monthly Jira bug health CSVs"
@@ -456,6 +541,7 @@ def main():
 
     print(f"Bug health summary exported to {summary_file}")
     print(f"Bug health details exported to {detail_file}")
+    print(render_console_summary(summaries, details))
 
 
 if __name__ == "__main__":

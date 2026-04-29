@@ -65,6 +65,10 @@ INTEGRATION_PATTERNS = (
     "postman",
 )
 AGENTIC_PATTERNS = (
+    "codex",
+    "openai",
+    "openai/codex",
+    "codex-action",
     "agentic",
     "ai review",
     "ai code review",
@@ -102,6 +106,7 @@ class GitHubClient:
     session: requests.Session = field(init=False)
     rate_limit_events: list[GitHubRateLimitEvent] = field(default_factory=list)
     auth_source: str = "unknown"
+    user_cache: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.session = requests.Session()
@@ -199,6 +204,78 @@ class GitHubClient:
         runs = payload.get("workflow_runs") or []
         return runs[0] if runs else None
 
+    def recent_merged_pr_authors(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        responsible_count: int,
+        scan_limit: int,
+    ) -> list[dict[str, Any]]:
+        if responsible_count <= 0:
+            return []
+
+        params = {
+            "state": "closed",
+            "sort": "updated",
+            "direction": "desc",
+            "per_page": max(1, min(scan_limit, 100)),
+        }
+        try:
+            pulls = self.get_json(f"/repos/{owner}/{repo}/pulls", params=params)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404}:
+                return []
+            raise
+        if not isinstance(pulls, list):
+            return []
+
+        authors: list[dict[str, Any]] = []
+        seen_logins: set[str] = set()
+        for pull in pulls:
+            if not pull.get("merged_at"):
+                continue
+            user = pull.get("user") or {}
+            login = user.get("login")
+            if not login or login in seen_logins:
+                continue
+            profile = self.user_profile(login)
+            authors.append(
+                {
+                    "login": login,
+                    "name": profile.get("name", ""),
+                    "url": profile.get("url") or user.get("html_url", ""),
+                    "latest_merged_pr": {
+                        "number": pull.get("number"),
+                        "title": pull.get("title", ""),
+                        "merged_at": pull.get("merged_at"),
+                        "url": pull.get("html_url", ""),
+                    },
+                }
+            )
+            seen_logins.add(login)
+            if len(authors) >= responsible_count:
+                break
+        return authors
+
+    def user_profile(self, login: str) -> dict[str, str]:
+        if login in self.user_cache:
+            return self.user_cache[login]
+        try:
+            payload = self.get_json(f"/users/{login}")
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404}:
+                payload = {}
+            else:
+                raise
+        profile = {
+            "login": login,
+            "name": payload.get("name") or "",
+            "url": payload.get("html_url") or "",
+        }
+        self.user_cache[login] = profile
+        return profile
+
     def _should_wait_for_rate_limit(self, response: requests.Response) -> bool:
         if response.status_code == 429:
             return True
@@ -242,19 +319,42 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--owner",
         default=argparse.SUPPRESS,
-        help="GitHub user or organization login.",
+        help="GitHub user or organization login. Example: --owner KjellKod",
     )
     parser.add_argument(
         "--token-env", default=DEFAULT_TOKEN_ENV, help="Environment variable containing a GitHub token."
     )
-    parser.add_argument("--exclude-repos", default="", help="Comma separated repository names to skip.")
     parser.add_argument(
-        "--exclude-patterns", default="", help="Comma separated fnmatch patterns for repo names to skip."
+        "--exclude-repos",
+        default="",
+        help="Comma separated repository names to skip. Example: --exclude-repos 'legacy-api,KjellKod/private-test'",
+    )
+    parser.add_argument(
+        "--exclude-patterns",
+        default="",
+        help="Comma separated fnmatch patterns for repo names to skip. Example: --exclude-patterns 'archived-*,*-other,*-sandbox'",
     )
     parser.add_argument("--include-archived", action="store_true", help="Include archived repositories.")
     parser.add_argument("--active-days", type=int, default=90, help="Recent workflow-run window for active CI.")
-    parser.add_argument("--format", choices=["table", "json", "csv"], default="table", help="Output format.")
-    parser.add_argument("--output", help="Write JSON or CSV output to this file.")
+    parser.add_argument(
+        "--responsible-count",
+        type=int,
+        default=2,
+        help="Number of recent distinct merged PR authors to show as likely responsible people. Example: --responsible-count 3",
+    )
+    parser.add_argument(
+        "--responsible-pr-scan-limit",
+        type=int,
+        default=30,
+        help="Number of recently closed PRs to scan per repo when finding responsible people. Example: --responsible-pr-scan-limit 50",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["table", "json", "csv"],
+        default="table",
+        help="Output format. Example: --format json",
+    )
+    parser.add_argument("--output", help="Write JSON or CSV output to this file. Example: --output ci_maturity.json")
     parser.add_argument("--cache-file", default=DEFAULT_CACHE_FILE, help="Incremental cache file for per-repo results.")
     parser.add_argument(
         "--force-fresh", action="store_true", help="Ignore any existing cache and refetch all repositories."
@@ -399,11 +499,19 @@ def analyze_repository(
     repo: dict[str, Any],
     *,
     active_days: int,
+    responsible_count: int,
+    responsible_pr_scan_limit: int,
     now: datetime,
 ) -> dict[str, Any]:
     name = repo["name"]
     workflows = client.workflow_files(owner, name, repo.get("default_branch"))
     latest_run = client.latest_workflow_run(owner, name)
+    responsible_people = client.recent_merged_pr_authors(
+        owner,
+        name,
+        responsible_count=responsible_count,
+        scan_limit=responsible_pr_scan_limit,
+    )
     score, grade, evidence = score_workflows(workflows)
     active_status, active_reason = active_ci_status(workflows, latest_run, active_days, now)
     latest_run_at = None
@@ -423,11 +531,20 @@ def analyze_repository(
         "workflow_file_count": len(workflows),
         "score": score,
         "grade": grade,
+        "responsible_people": responsible_people,
         "evidence": evidence,
     }
 
 
-def load_cache(path: str, *, force_fresh: bool, owner: str, active_days: int) -> dict[str, Any]:
+def load_cache(
+    path: str,
+    *,
+    force_fresh: bool,
+    owner: str,
+    active_days: int,
+    responsible_count: int,
+    responsible_pr_scan_limit: int,
+) -> dict[str, Any]:
     if force_fresh or not path:
         return {"repositories": {}}
     cache_path = Path(path)
@@ -440,7 +557,12 @@ def load_cache(path: str, *, force_fresh: bool, owner: str, active_days: int) ->
         return {"repositories": {}}
     if not isinstance(payload, dict):
         return {"repositories": {}}
-    if payload.get("owner") != owner or payload.get("active_days") != active_days:
+    if (
+        payload.get("owner") != owner
+        or payload.get("active_days") != active_days
+        or payload.get("responsible_count") != responsible_count
+        or payload.get("responsible_pr_scan_limit") != responsible_pr_scan_limit
+    ):
         return {"repositories": {}}
     payload.setdefault("repositories", {})
     return payload
@@ -462,21 +584,46 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
         include_archived=args.include_archived,
     )
     now = datetime.now(timezone.utc)
-    cache = load_cache(args.cache_file, force_fresh=args.force_fresh, owner=args.owner, active_days=args.active_days)
+    cache = load_cache(
+        args.cache_file,
+        force_fresh=args.force_fresh,
+        owner=args.owner,
+        active_days=args.active_days,
+        responsible_count=args.responsible_count,
+        responsible_pr_scan_limit=args.responsible_pr_scan_limit,
+    )
     cached_repos = cache.setdefault("repositories", {})
     results: list[dict[str, Any]] = []
+    cached_result_count = 0
 
     for repo in filter_result.included:
         full_name = repo.get("full_name") or f"{args.owner}/{repo['name']}"
         if full_name in cached_repos:
             logging.getLogger(__name__).info("Using cached result for %s", full_name)
             results.append(cached_repos[full_name])
+            cached_result_count += 1
             continue
         logging.getLogger(__name__).info("Analyzing %s", full_name)
-        result = analyze_repository(client, args.owner, repo, active_days=args.active_days, now=now)
+        result = analyze_repository(
+            client,
+            args.owner,
+            repo,
+            active_days=args.active_days,
+            responsible_count=args.responsible_count,
+            responsible_pr_scan_limit=args.responsible_pr_scan_limit,
+            now=now,
+        )
         cached_repos[full_name] = result
         results.append(result)
-        cache.update({"owner": args.owner, "active_days": args.active_days, "updated_at": now.isoformat()})
+        cache.update(
+            {
+                "owner": args.owner,
+                "active_days": args.active_days,
+                "responsible_count": args.responsible_count,
+                "responsible_pr_scan_limit": args.responsible_pr_scan_limit,
+                "updated_at": now.isoformat(),
+            }
+        )
         save_cache(args.cache_file, cache)
 
     results.sort(key=lambda item: (-int(item["score"]), item["name"].lower()))
@@ -484,6 +631,9 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
         "owner": args.owner,
         "auth_source": client.auth_source,
         "active_days": args.active_days,
+        "responsible_count": args.responsible_count,
+        "responsible_pr_scan_limit": args.responsible_pr_scan_limit,
+        "cached_result_count": cached_result_count,
         "repository_count": len(results),
         "skipped": filter_result.skipped,
         "repositories": results,
@@ -494,18 +644,38 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
 def render_table(report: dict[str, Any]) -> str:
     lines = [
         f"CI maturity for {report['owner']} ({report['repository_count']} repositories)",
-        "score grade      active  repo",
-        "----- ---------- ------- ----------------------------------------",
+        "score grade      active  repo                                      recent merged PR authors",
+        "----- ---------- ------- ----------------------------------------- ------------------------",
     ]
     for repo in report["repositories"]:
         active = "unknown" if repo["active_ci"] is None else str(bool(repo["active_ci"])).lower()
-        lines.append(f"{repo['score']}/4   {repo['grade']:<10} {active:<7} {repo['name']}")
+        lines.append(
+            f"{repo['score']}/4   {repo['grade']:<10} {active:<7} {repo['name']:<41} "
+            f"{format_responsible_people(repo.get('responsible_people', []))}"
+        )
     if report["skipped"]:
         lines.append("")
         lines.append(f"Skipped repositories: {len(report['skipped'])}")
         for skipped in report["skipped"]:
             lines.append(f"- {skipped['name']}: {skipped['reason']}")
+    if report.get("cached_result_count", 0):
+        lines.append("")
+        lines.append(
+            f"Used cached results for {report['cached_result_count']} repositories. "
+            "Re-run with --force-fresh to refetch from GitHub."
+        )
     return "\n".join(lines)
+
+
+def format_responsible_people(people: list[dict[str, Any]]) -> str:
+    if not people:
+        return "unknown"
+    formatted = []
+    for person in people:
+        login = person.get("login") or "unknown"
+        name = person.get("name") or ""
+        formatted.append(f"{login} ({name})" if name else login)
+    return ", ".join(formatted)
 
 
 def render_csv(report: dict[str, Any], output_file: Any) -> None:
@@ -523,6 +693,9 @@ def render_csv(report: dict[str, Any], output_file: Any) -> None:
             "unit_tests",
             "smoke_integration_tests",
             "agentic_ci",
+            "responsible_people",
+            "responsible_logins",
+            "cached_result_count",
         ],
     )
     writer.writeheader()
@@ -541,6 +714,11 @@ def render_csv(report: dict[str, Any], output_file: Any) -> None:
                 "unit_tests": bool(evidence["unit_tests"]),
                 "smoke_integration_tests": bool(evidence["smoke_integration_tests"]),
                 "agentic_ci": bool(evidence["agentic_ci"]),
+                "responsible_people": format_responsible_people(repo.get("responsible_people", [])),
+                "responsible_logins": ",".join(
+                    person.get("login", "") for person in repo.get("responsible_people", [])
+                ),
+                "cached_result_count": report.get("cached_result_count", 0),
             }
         )
 
@@ -560,6 +738,12 @@ def emit_report(report: dict[str, Any], *, output_format: str, output_path: str 
                 render_csv(report, output_file)
         else:
             render_csv(report, sys.stdout)
+        if report.get("cached_result_count", 0):
+            print(
+                f"Used cached results for {report['cached_result_count']} repositories. "
+                "Re-run with --force-fresh to refetch from GitHub.",
+                file=sys.stderr,
+            )
         return
 
     rendered = render_table(report)

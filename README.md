@@ -266,3 +266,4 @@ To generate monthly bug health dashboard CSVs:
 ```bash
 python3 jira_metrics/bug_health.py --start-date 2024-01-01 --end-date 2024-03-31 --output-dir reports
 ```
+The script also prints a concise end-of-run summary with company-level flow, latest backlog, SLA/data-quality signals, close-time percentiles, and the top teams to inspect.

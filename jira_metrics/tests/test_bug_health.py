@@ -255,3 +255,75 @@ class TestBugHealthCsv(unittest.TestCase):
                 csv_rows = list(csv.DictReader(csvfile))
         self.assertEqual(csv_rows[0]["period"], "2024-01")
         self.assertEqual(csv_rows[0]["created_count"], "1")
+
+
+class TestBugHealthConsoleSummary(unittest.TestCase):
+    def test_render_console_summary_empty(self):
+        rendered = bug_health.render_console_summary([], [])
+
+        self.assertIn("No matching bugs found", rendered)
+
+    def test_render_console_summary_includes_key_insights_without_details_dump(self):
+        summaries = [
+            {
+                "period": "2024-01",
+                "scope_type": "company",
+                "scope": "all",
+                "priority": "all",
+                "created_count": 5,
+                "closed_count": 3,
+                "net_change": 2,
+                "open_backlog_count": 4,
+                "sla_breached_count": 1,
+                "sla_breach_rate": 0.25,
+                "missing_priority_count": 1,
+                "missing_due_date_count": 2,
+                "median_days_to_close": 4,
+                "p85_days_to_close": 8,
+            },
+            {
+                "period": "2024-02",
+                "scope_type": "company",
+                "scope": "all",
+                "priority": "all",
+                "created_count": 2,
+                "closed_count": 5,
+                "net_change": -3,
+                "open_backlog_count": 1,
+                "sla_breached_count": 0,
+                "sla_breach_rate": 0,
+                "missing_priority_count": 0,
+                "missing_due_date_count": 1,
+                "median_days_to_close": 3,
+                "p85_days_to_close": 6,
+            },
+            {
+                "period": "2024-02",
+                "scope_type": "team",
+                "scope": EXAMPLE_TEAM,
+                "priority": "all",
+                "created_count": 2,
+                "closed_count": 1,
+                "net_change": 1,
+                "open_backlog_count": 3,
+                "sla_breached_count": 2,
+                "sla_breach_rate": 0.5,
+                "missing_priority_count": 0,
+                "missing_due_date_count": 0,
+                "median_days_to_close": 3,
+                "p85_days_to_close": 6,
+            },
+        ]
+        details = [
+            {"ticket_key": "BUG-1"},
+            {"ticket_key": "BUG-2"},
+            {"ticket_key": "BUG-1"},
+        ]
+
+        rendered = bug_health.render_console_summary(summaries, details)
+
+        self.assertIn("Range: 2024-01 to 2024-02; unique bugs seen: 2", rendered)
+        self.assertIn("Flow: created 7, closed 8, net -1", rendered)
+        self.assertIn("Latest period 2024-02: created 2, closed 5, net -3, backlog 1", rendered)
+        self.assertIn("SLA/data quality: breached 0 (0.0%), missing priority 0, missing due date 1", rendered)
+        self.assertIn(f"{EXAMPLE_TEAM}: backlog 3, net +1, SLA breached 2", rendered)

@@ -107,16 +107,20 @@ Options:
 - `--exclude-patterns PATTERNS` Comma-separated case-insensitive `fnmatch` patterns such as `archived-*,*-other`
 - `--include-archived` Include archived repositories; archived repos are skipped by default
 - `--active-days DAYS` Treat CI as active when the latest workflow run is within this many days (default: `90`)
+- `--responsible-count COUNT` Number of recent distinct merged PR authors to show as likely responsible people (default: `2`)
+- `--responsible-pr-scan-limit LIMIT` Number of recently closed PRs to scan per repo when finding responsible people (default: `30`)
 - `--format table|json|csv` Output format (default: `table`)
 - `--output FILE` Write output to a file
 - `--cache-file FILE` Incremental cache for completed per-repo analysis (default: `.ci_maturity_cache.json`)
-- `--force-fresh` Ignore cache and refetch everything
+- `--force-fresh` Ignore cache and refetch everything from GitHub
 
 Environment configuration:
 - `CI_MATURITY_AGENTIC_PATTERNS`: Optional comma-separated patterns for agentic CI detection.
 
 When GitHub API rate limits are hit, the script honors `Retry-After` or waits until `X-RateLimit-Reset` before retrying.
-JSON output includes per-repo scores, grade labels, category evidence, skipped repositories, and rate-limit wait metadata.
+When cached repository results are reused, table and CSV runs print a reminder to re-run with `--force-fresh` for fresh GitHub data.
+Table and CSV output include likely responsible people based on recent distinct merged PR authors, with public profile names when available.
+JSON output includes per-repo scores, grade labels, responsible people, category evidence, skipped repositories, and rate-limit wait metadata.
 
 ### active_devs_one_off.py
 One-time script to identify and analyze active developers in the repository.

@@ -14,9 +14,11 @@ from git_metrics.ci_maturity_report import (
     configured_agentic_patterns,
     emit_report,
     filter_repositories,
+    format_responsible_people,
     load_token,
     parse_patterns,
     parse_csv_values,
+    render_table,
     score_workflows,
 )
 
@@ -127,6 +129,29 @@ jobs:
     assert evidence["agentic_ci"]
 
 
+def test_openai_codex_workflow_counts_as_agentic_ci_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("CI_MATURITY_AGENTIC_PATTERNS", raising=False)
+    workflows = [
+        {
+            "path": ".github/workflows/codex-frontend-review.yml",
+            "text": """
+name: Frontend / UX Review
+jobs:
+  frontend-review:
+    steps:
+      - name: AI frontend review
+        uses: openai/codex-action@v1
+""",
+        }
+    ]
+
+    score, grade, evidence = score_workflows(workflows)
+
+    assert score == 1
+    assert grade == "basic"
+    assert evidence["agentic_ci"]
+
+
 def test_agentic_patterns_are_configurable(monkeypatch) -> None:
     monkeypatch.setenv("CI_MATURITY_AGENTIC_PATTERNS", "first-agent,second-agent")
 
@@ -158,12 +183,114 @@ def test_rate_limit_wait_uses_retry_after_before_reset_header() -> None:
     assert client.rate_limit_events[0].reset_at is None
 
 
+class StubGitHubClient(GitHubClient):
+    def __init__(self, payloads: dict[str, object]) -> None:
+        super().__init__("token")
+        self.payloads = payloads
+
+    def get_json(self, path_or_url: str, *, params: dict[str, object] | None = None) -> object:
+        if path_or_url.endswith("/pulls"):
+            return self.payloads["pulls"]
+        if path_or_url.startswith("/users/"):
+            login = path_or_url.rsplit("/", 1)[1]
+            return self.payloads["users"][login]
+        raise AssertionError(f"unexpected request: {path_or_url}")
+
+
+def test_recent_merged_pr_authors_returns_distinct_recent_people_with_names() -> None:
+    client = StubGitHubClient(
+        {
+            "pulls": [
+                {
+                    "number": 5,
+                    "title": "open",
+                    "merged_at": None,
+                    "html_url": "https://github.test/pr/5",
+                    "user": {"login": "ignored", "html_url": "https://github.test/ignored"},
+                },
+                {
+                    "number": 4,
+                    "title": "latest api change",
+                    "merged_at": "2026-04-28T10:00:00Z",
+                    "html_url": "https://github.test/pr/4",
+                    "user": {"login": "KjellKod", "html_url": "https://github.test/KjellKod"},
+                },
+                {
+                    "number": 3,
+                    "title": "second change",
+                    "merged_at": "2026-04-27T10:00:00Z",
+                    "html_url": "https://github.test/pr/3",
+                    "user": {"login": "teammate", "html_url": "https://github.test/teammate"},
+                },
+                {
+                    "number": 2,
+                    "title": "older duplicate",
+                    "merged_at": "2026-04-26T10:00:00Z",
+                    "html_url": "https://github.test/pr/2",
+                    "user": {"login": "KjellKod", "html_url": "https://github.test/KjellKod"},
+                },
+            ],
+            "users": {
+                "KjellKod": {"name": "Kjell Hedstrom", "html_url": "https://github.test/KjellKod"},
+                "teammate": {"name": "", "html_url": "https://github.test/teammate"},
+            },
+        }
+    )
+
+    authors = client.recent_merged_pr_authors("KjellKod", "metrics-and-insights", responsible_count=2, scan_limit=30)
+
+    assert authors == [
+        {
+            "login": "KjellKod",
+            "name": "Kjell Hedstrom",
+            "url": "https://github.test/KjellKod",
+            "latest_merged_pr": {
+                "number": 4,
+                "title": "latest api change",
+                "merged_at": "2026-04-28T10:00:00Z",
+                "url": "https://github.test/pr/4",
+            },
+        },
+        {
+            "login": "teammate",
+            "name": "",
+            "url": "https://github.test/teammate",
+            "latest_merged_pr": {
+                "number": 3,
+                "title": "second change",
+                "merged_at": "2026-04-27T10:00:00Z",
+                "url": "https://github.test/pr/3",
+            },
+        },
+    ]
+
+
+def test_format_responsible_people_includes_public_name_when_available() -> None:
+    people = [{"login": "KjellKod", "name": "Kjell Hedstrom"}, {"login": "teammate", "name": ""}]
+
+    assert format_responsible_people(people) == "KjellKod (Kjell Hedstrom), teammate"
+    assert format_responsible_people([]) == "unknown"
+
+
 def test_parser_does_not_embed_owner_env_value_in_default(monkeypatch) -> None:
-    monkeypatch.setenv("GITHUB_METRIC_OWNER_OR_ORGANIZATION", "example-owner")
+    monkeypatch.setenv("GITHUB_METRIC_OWNER_OR_ORGANIZATION", "KjellKod")
 
     args = build_argument_parser().parse_args([])
 
     assert not hasattr(args, "owner")
+
+
+def test_help_output_includes_filtering_and_responsibility_examples(capsys) -> None:
+    try:
+        build_argument_parser().parse_args(["--help"])
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    help_text = capsys.readouterr().out
+    assert "archived-*,*-other,*-sandbox" in help_text
+    assert "count 3" in help_text
+    assert "scan-limit 50" in help_text
+    assert "\nExamples:" not in help_text
 
 
 def test_load_token_uses_configured_env_var(monkeypatch) -> None:
@@ -176,6 +303,7 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
     report = {
         "owner": "example",
         "active_days": 90,
+        "cached_result_count": 0,
         "repository_count": 1,
         "skipped": [{"name": "legacy", "reason": "archived"}],
         "repositories": [
@@ -187,6 +315,7 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
                 "active_ci_reason": "latest_run_within_90_days",
                 "latest_workflow_run_at": "2026-04-28T00:00:00Z",
                 "workflow_file_count": 2,
+                "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
                 "evidence": {
                     "linter": ["ci.yml: ruff check ."],
                     "unit_tests": ["ci.yml: pytest"],
@@ -204,12 +333,38 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["repositories"][0]["score"] == 4
     assert payload["repositories"][0]["evidence"]["agentic_ci"]
+    assert payload["repositories"][0]["responsible_people"][0]["login"] == "KjellKod"
     assert payload["skipped"] == [{"name": "legacy", "reason": "archived"}]
     assert payload["rate_limit_events"][0]["slept_seconds"] == 7.0
 
 
+def test_table_output_includes_responsible_people() -> None:
+    report = {
+        "owner": "KjellKod",
+        "repository_count": 1,
+        "cached_result_count": 2,
+        "skipped": [],
+        "repositories": [
+            {
+                "name": "KjellKod/metrics-and-insights",
+                "score": 4,
+                "grade": "top",
+                "active_ci": True,
+                "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
+            }
+        ],
+    }
+
+    rendered = render_table(report)
+
+    assert "recent merged PR authors" in rendered
+    assert "KjellKod (Kjell Hedstrom)" in rendered
+    assert "Re-run with --force-fresh" in rendered
+
+
 def test_csv_output_has_category_booleans() -> None:
     report = {
+        "cached_result_count": 1,
         "repositories": [
             {
                 "name": "example/api",
@@ -219,6 +374,7 @@ def test_csv_output_has_category_booleans() -> None:
                 "active_ci_reason": "latest_run_within_90_days",
                 "latest_workflow_run_at": "2026-04-28T00:00:00Z",
                 "workflow_file_count": 1,
+                "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
                 "evidence": {
                     "linter": [],
                     "unit_tests": [],
@@ -226,7 +382,7 @@ def test_csv_output_has_category_booleans() -> None:
                     "agentic_ci": ["ai-review.yml: example/review-agent-action"],
                 },
             }
-        ]
+        ],
     }
     output = io.StringIO()
 
@@ -235,4 +391,7 @@ def test_csv_output_has_category_booleans() -> None:
     render_csv(report, output)
 
     assert "agentic_ci" in output.getvalue()
+    assert "responsible_people" in output.getvalue()
+    assert "cached_result_count" in output.getvalue()
+    assert "KjellKod (Kjell Hedstrom)" in output.getvalue()
     assert "True" in output.getvalue()
