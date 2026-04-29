@@ -104,6 +104,7 @@ Scripts for analyzing GitHub repository metrics and developer activity. For deta
 - `repo_commit_report.sh`: Generate detailed commit reports for multiple repositories
 - `code_review_metrics.py`: Analyze code review patterns and timing
 - `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
+- `ci_maturity_report.py`: Grade repository CI maturity across a GitHub user or organization profile
 - `active_devs_one_off.py`: Identify and analyze active developers
 - `active_repositories_in_organization.py`: Identify and analyze active repositories
 

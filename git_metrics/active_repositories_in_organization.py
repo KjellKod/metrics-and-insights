@@ -25,7 +25,7 @@ Usage:
 python git_metrics/active_repositories_in_organization.py --org ORGANIZATION --token-env TOKEN_VAR [--days DAYS]
 
 Required Arguments:
-  --org, -o          GitHub organization name (e.g., 'onfleet', 'microsoft')
+  --org, -o          GitHub organization name (e.g., 'example-org')
   --token-env, -t    Environment variable name containing GitHub personal access token
 
 Optional Arguments:
@@ -34,7 +34,7 @@ Optional Arguments:
 
 Examples:
   export GITHUB_TOKEN=ghp_xxxxx
-  python git_metrics/active_repositories_in_organization.py --org onfleet --token-env GITHUB_TOKEN
+  python git_metrics/active_repositories_in_organization.py --org example-org --token-env GITHUB_TOKEN
   python git_metrics/active_repositories_in_organization.py --org myorg --token-env GITHUB_TOKEN --days 30 --verbose
 """
 
@@ -59,7 +59,7 @@ def parse_arguments():
         epilog="""
 Examples:
   export GITHUB_TOKEN=ghp_xxxxx
-  %(prog)s --org onfleet --token-env GITHUB_TOKEN
+  %(prog)s --org example-org --token-env GITHUB_TOKEN
   %(prog)s --org myorg --token-env GITHUB_TOKEN --days 30 --verbose
 
 Note: You can get a GitHub personal access token from:
@@ -67,7 +67,7 @@ https://github.com/settings/tokens
         """,
     )
 
-    parser.add_argument("--org", "-o", required=True, help="GitHub organization name (e.g., 'onfleet', 'microsoft')")
+    parser.add_argument("--org", "-o", required=True, help="GitHub organization name (e.g., 'example-org')")
 
     parser.add_argument(
         "--token-env", "-t", required=True, help="Environment variable name containing GitHub personal access token"
