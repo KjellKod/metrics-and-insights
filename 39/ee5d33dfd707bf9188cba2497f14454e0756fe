@@ -1,0 +1,46 @@
+jira_metrics/tests/test_bug_health.py
+  3fbe2c205adaf8ec 258-329
+git_metrics/ci_maturity_report.py
+  3fbe2c205adaf8ec 68-71,109,207-278,322,328-335,339-357,502-503,509-514,534,539-547,560-565,587-594,597,604,607-615,618-626,634-636,647-648,652-655,661-666,670-680,696-698,717-721,741-746
+jira_metrics/bug_health.py
+  3fbe2c205adaf8ec 421-505,544
+git_metrics/README.md
+  3fbe2c205adaf8ec 110-111,115,121-123
+tests/unit/git_metrics/test_ci_maturity_report.py
+  718a6c68c30c251b 17,21,132-154,186-274,276,283-295,306,318,336,341-364,367,377,385,394-396
+README.md
+  3fbe2c205adaf8ec 269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "39ee5d33dfd707bf9188cba2497f14454e0756fe",
+  "prompts": {
+    "3fbe2c205adaf8ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd66b-ddab-7de3-a7b3-14429fffa1f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 362,
+      "total_deletions": 15,
+      "accepted_lines": 1140,
+      "overriden_lines": 0
+    },
+    "718a6c68c30c251b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd65b-2f5b-7c32-95df-795b56ca41af",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 161,
+      "total_deletions": 2,
+      "accepted_lines": 161,
+      "overriden_lines": 0
+    }
+  }
+}
