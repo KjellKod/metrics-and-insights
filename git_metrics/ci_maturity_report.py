@@ -78,10 +78,6 @@ INTEGRATION_PATTERNS = (
     "cargo nextest run --tests",
 )
 AGENTIC_PATTERNS = (
-    "codex",
-    "openai",
-    "openai/codex",
-    "codex-action",
     "agentic",
     "ai review",
     "ai code review",
