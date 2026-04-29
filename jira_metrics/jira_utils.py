@@ -284,6 +284,21 @@ def _create_status_object(fields_data):
     return status
 
 
+def _create_priority_object(fields_data):
+    """Create priority object from fields data with error handling."""
+    priority_data = fields_data.get("priority")
+    if not priority_data:
+        return None
+
+    if not isinstance(priority_data, dict):
+        verbose_print(f"Warning: Invalid priority data format: {type(priority_data)}")
+        return None
+
+    priority = SimpleNamespace()
+    priority.name = priority_data.get("name")
+    return priority
+
+
 def _create_assignee_object(fields_data):
     """Create assignee object from fields data with error handling."""
     assignee_data = fields_data.get("assignee")
@@ -436,10 +451,14 @@ def convert_raw_issue_to_simple_object(raw_issue):  # pylint: disable=too-many-s
         # Add standard fields using helper functions
         issue.fields.project = _create_project_object(fields_data)
         issue.fields.status = _create_status_object(fields_data)
+        issue.fields.priority = _create_priority_object(fields_data)
         issue.fields.assignee = _create_assignee_object(fields_data)
         issue.fields.issuelinks = _create_issue_links(fields_data)
         # Include commonly used primitive fields
         issue.fields.summary = fields_data.get("summary")
+        issue.fields.created = fields_data.get("created")
+        issue.fields.duedate = fields_data.get("duedate")
+        issue.fields.resolutiondate = fields_data.get("resolutiondate")
 
         # Add custom fields
         custom_fields = _create_custom_fields(fields_data)
@@ -694,7 +713,9 @@ def get_tickets_from_graphql(start_date, end_date):
 
 
 def get_team(ticket):
-    team_field = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_TEAM}")
+    team_field = None
+    if CUSTOM_FIELD_TEAM:
+        team_field = getattr(ticket.fields, f"customfield_{CUSTOM_FIELD_TEAM}", None)
     if team_field:
         return team_field.value.strip().lower().capitalize()
     project_key = ticket.fields.project.key.upper()

@@ -83,6 +83,45 @@ Options:
   --start-date DATE      Start date for PR analysis (format: YYYY-MM-DD, default: 2024-01-01)
 ```
 
+### ci_maturity_report.py
+Scans every repository on a GitHub user or organization profile and grades CI maturity from `0/4` to `4/4`.
+
+Scoring:
+- `+1` linter evidence in GitHub Actions workflows
+- `+1` unit test evidence
+- `+1` smoke, Playwright, E2E, or integration test evidence
+- `+1` agentic CI evidence, using generic defaults or `CI_MATURITY_AGENTIC_PATTERNS`
+
+```bash
+python3 git_metrics/ci_maturity_report.py --owner example-org \
+  --exclude-patterns 'archived-*,*-other' \
+  --exclude-repos 'legacy-api,example-org/private-test' \
+  --format json \
+  --output ci_maturity.json
+```
+
+Options:
+- `--owner OWNER` GitHub user or organization login (falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION`)
+- `--token-env ENV` Environment variable containing a GitHub token (default: `GITHUB_TOKEN_READONLY_WEB`)
+- `--exclude-repos REPOS` Comma-separated bare or `owner/repo` names to skip
+- `--exclude-patterns PATTERNS` Comma-separated case-insensitive `fnmatch` patterns such as `archived-*,*-other`
+- `--include-archived` Include archived repositories; archived repos are skipped by default
+- `--active-days DAYS` Treat CI as active when the latest workflow run is within this many days (default: `90`)
+- `--responsible-count COUNT` Number of recent distinct merged PR authors to show as likely responsible people (default: `2`)
+- `--responsible-pr-scan-limit LIMIT` Number of recently closed PRs to scan per repo when finding responsible people (default: `30`)
+- `--format table|json|csv` Output format (default: `table`)
+- `--output FILE` Write output to a file
+- `--cache-file FILE` Incremental cache for completed per-repo analysis (default: `.ci_maturity_cache.json`)
+- `--force-fresh` Ignore cache and refetch everything from GitHub
+
+Environment configuration:
+- `CI_MATURITY_AGENTIC_PATTERNS`: Optional comma-separated patterns for agentic CI detection.
+
+When GitHub API rate limits are hit, the script honors `Retry-After` or waits until `X-RateLimit-Reset` before retrying.
+When cached repository results are reused, table and CSV runs print a reminder to re-run with `--force-fresh` for fresh GitHub data.
+Table and CSV output include likely responsible people based on recent distinct merged PR authors, with public profile names when available.
+JSON output includes per-repo scores, grade labels, responsible people, category evidence, skipped repositories, and rate-limit wait metadata.
+
 ### active_devs_one_off.py
 One-time script to identify and analyze active developers in the repository.
 

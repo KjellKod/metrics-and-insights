@@ -287,16 +287,16 @@ def construct_jql(team_name=None, project_key=None, start_date=None, end_date=No
     completion_statuses = get_completion_statuses()
     status_list = ", ".join(f'"{status.title()}"' for status in completion_statuses)
 
-    # Use uppercase keywords like bug_stats.py does (IN, CHANGED TO, DURING)
-    # Use single quotes for dates like bug_stats.py does
+    # Use uppercase keywords (IN, CHANGED TO, DURING)
+    # Use single quotes for dates
     base_jql = f"status IN ({status_list}) AND status CHANGED TO ({status_list}) DURING ('{start_date}', '{end_date}') AND issueType IN (Task, Bug, Story, Spike)"
 
     if project_key:
-        # Use single quotes around project key like bug_stats.py
+        # Use single quotes around project key
         return f"project = '{project_key}' AND {base_jql} ORDER BY updated ASC"
 
     if team_name:
-        # Use single quotes around projects like bug_stats.py
+        # Use single quotes around projects
         cleaned_projects = [p.strip().strip("'") for p in projects]
         quoted_projects = [f"'{p}'" for p in cleaned_projects]
         return f'project IN ({", ".join(quoted_projects)}) AND {base_jql} AND "Team[Dropdown]" = "{team_name}" ORDER BY updated ASC'

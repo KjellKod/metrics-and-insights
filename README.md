@@ -65,9 +65,11 @@ If you only need local analysis artifacts, MCP/Sheets access is not required. If
 │   ├── epic_tracking.py                # Track epic completion metrics with time-based analysis
 │   ├── engineering_excellence.py       # Track engineering excellence vs product work
 │   ├── cycle_time.py                   # Analyze time from code review to release
+│   ├── bug_health.py                   # Track bug flow, backlog, priority, and SLA health
 │   ├── release_failure.py              # Analyze release failures and impact
 │   ├── individual.py                   # Individual contributor metrics analysis
 │   ├── released_tickets.py             # Track monthly released ticket counts
+│   ├── archived-old/                   # Retired one-off Jira bug scripts
 │   ├── jira_utils.py                   # Helper utility 
 │
 ├── tests/                              # Test suite
@@ -104,6 +106,7 @@ Scripts for analyzing GitHub repository metrics and developer activity. For deta
 - `repo_commit_report.sh`: Generate detailed commit reports for multiple repositories
 - `code_review_metrics.py`: Analyze code review patterns and timing
 - `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
+- `ci_maturity_report.py`: Grade repository CI maturity across a GitHub user or organization profile
 - `active_devs_one_off.py`: Identify and analyze active developers
 - `active_repositories_in_organization.py`: Identify and analyze active repositories
 
@@ -112,6 +115,7 @@ Scripts for extracting and analyzing Jira metrics:
 - `epic_tracking.py`: Track epic completion metrics with time-based analysis
 - `engineering_excellence.py`: Track engineering excellence vs product work
 - `cycle_time.py`: Calculate cycle time metrics
+- `bug_health.py`: Generate monthly bug flow, backlog, priority, and SLA health CSVs
 - `release_failure.py`: Analyze release failures and impact
 - `individual.py`: Individual contributor metrics analysis
 - `released_tickets.py`: Track monthly released ticket counts
@@ -174,6 +178,13 @@ TEAM_<NAME>="team_name"  # Used when team field isn't available in project
 CUSTOM_FIELD_STORYPOINTS=10025
 CUSTOM_FIELD_TEAM=10075
 CUSTOM_FIELD_WORK_TYPE=10079
+CUSTOM_FIELD_BUG_PRIORITY=10080
+
+# Bug health SLA targets in calendar days (optional)
+BUG_HEALTH_SLA_DAYS=P0:0,P1:1,P2:10,P3:20
+
+# Git metric pattern overrides (optional)
+CI_MATURITY_AGENTIC_PATTERNS=agentic,ai review,ai code review,llm review
 
 # Cache Controls (Git metrics)
 # Time-to-live for PR cache file in hours (default: 8)
@@ -250,3 +261,9 @@ To analyze cycle times:
 ```bash
 python3 jira_metrics/cycle_time.py
 ```
+
+To generate monthly bug health dashboard CSVs:
+```bash
+python3 jira_metrics/bug_health.py --start-date 2024-01-01 --end-date 2024-03-31 --output-dir reports
+```
+The script also prints a concise end-of-run summary with company-level flow, latest backlog, SLA/data-quality signals, close-time percentiles, and the top teams to inspect.
