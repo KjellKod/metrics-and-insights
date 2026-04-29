@@ -40,6 +40,13 @@ This directory contains specialized skills for AI agents working in this reposit
 
 **Location:** `.skills/code-reviewer/SKILL.md`
 
+### pre-commit-review
+**Purpose:** Review local staged plus unstaged tracked-file changes before commit or before a PR exists.
+
+**Use when:** The user invokes `/pre-commit-review`, asks for a pre-commit review, asks to review local changes before commit, or wants a local working-tree review before a PR exists.
+
+**Location:** `.skills/pre-commit-review/SKILL.md`
+
 ### ci-code-reviewer
 **Purpose:** Automated CI code review for GitHub PRs using OpenAI Codex. Validates PR descriptions, enforces Quest architecture boundaries, checks quality, and maps test coverage to acceptance criteria.
 
@@ -74,13 +81,6 @@ This directory contains specialized skills for AI agents working in this reposit
 **Use when:** The user wants to push a PR through CI and review, or asks to shepherd/babysit a PR until it's ready.
 
 **Location:** `.skills/pr-shepherd/SKILL.md`
-
-### engineering-throughput-spreadsheet
-**Purpose:** Create or refresh the engineering throughput Google Sheet from Jira individual metrics and GitHub PR activity, including team tabs, Jira/GitHub summary tabs, charts, adjusted GitHub process metrics, repo confirmation, and agent-authored recommendations.
-
-**Use when:** The user asks to create, refresh, or analyze the Jira/GitHub engineering throughput spreadsheet, especially for team-by-team monthly completed tickets/points, Jira baseline comparisons, and GitHub PR efficiency trends with confirmed repo coverage.
-
-**Location:** `.skills/engineering-throughput-spreadsheet/SKILL.md`
 
 ### review-decisions
 **Purpose:** Shared policy for translating canonical review findings into deterministic backlog decisions (`fix_now`, `verify_first`, `defer`, `drop`, `needs_human_decision`) including loop-cap behavior and deferred backlog lineage.

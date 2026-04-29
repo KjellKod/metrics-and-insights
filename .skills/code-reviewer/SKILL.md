@@ -9,6 +9,10 @@ Review actual code implementations for correctness, maintainability, security hy
 
 This skill focuses on the code itself and the tests that ship with it, but it must validate test coverage against the **acceptance criteria from the plan/spec**.
 
+At activation, announce the skill name and scope in one line. Example: `[code-reviewer] reviewing PR #97 against .quest/example/phase_01_plan/plan.md`.
+
+See `.skills/review-anti-patterns.md` for the shared rule set.
+
 ---
 
 ## Required Inputs (Do Not Start Without These)
@@ -109,6 +113,23 @@ Focus on correctness of the behavior, not micro refactors.
 Review for readability, maintainability, and consistency. See AGENTS.md for coding and architecture philosophy. 
 Strive for simple code that is high quality and easy to read. SRP, DRY, KISS, YAGNI are fundamental pillars to follow.
 
+**Typing discipline**
+
+Prefer clear, concrete types over catch-all / escape-hatch types. This principle is language-agnostic: types and type checking drive quality, and escape hatches should be a deliberate, justified choice rather than a default. When a catch-all is genuinely the best option (boundary deserialization, true generic plumbing, gradual typing of legacy code), expect a one-line comment explaining why.
+
+Per-language reference:
+
+| Language    | Catch-all / escape hatch                                              | Typical concrete alternative                                          |
+|-------------|-----------------------------------------------------------------------|------------------------------------------------------------------------|
+| Python      | `Any`, untyped `dict`/`list`, missing annotations, `# type: ignore`   | precise types, `TypedDict`, `Protocol`, `dataclass`, generics          |
+| TypeScript  | `any`, `as any`, `Object`, `{}`, `Function`                           | `unknown` + narrowing, discriminated unions, generics, `Record<K,V>`   |
+| C#          | `object`, `dynamic`                                                   | concrete class/interface, generics                                     |
+| Java        | `Object`, raw `List` (no `<T>`), `@SuppressWarnings("unchecked")`     | parametric generics, sealed types                                      |
+| C++17       | `void*`, `std::any`, untyped `auto` at API boundaries                 | concrete templates, `std::variant`, strong typedefs                    |
+| Rust        | `Box<dyn Any>`, `mem::transmute`, raw pointers, `unsafe` casts        | enums, `dyn Trait` with concrete bounds, generics                      |
+
+Not all catch-alls are equally lazy. TypeScript `unknown` paired with proper narrowing, and Rust `dyn Trait` with real trait bounds, are usually fine — they preserve type-checker leverage. The lazy patterns are the ones that erase information entirely: `any` / `Any` / raw `Object` / `void*` / `dynamic`. For Python specifically, also flag untyped `dict` / `list` parameters and return types, and overuse of `# type: ignore` (each one should have a comment explaining why the checker is wrong or the fix is deferred).
+
 **Python**
 - Type hints present where expected
 - Clear naming, minimal cleverness
@@ -116,7 +137,6 @@ Strive for simple code that is high quality and easy to read. SRP, DRY, KISS, YA
 - Formatting and lint rules are respected
 
 **JavaScript/TypeScript**
-- Avoid `any` unless justified
 - Async control flow is correct
 - Consistent naming and file structure
 
@@ -196,13 +216,15 @@ Write a PR review that is short and high signal:
 - Recommendation: approve / request changes
 
 ### 2. Blockers
-- Bullet list with concrete fixes
+- Numbered findings in current-review order: `[N] Blocker - path:line - summary and concrete fix`
 
 ### 3. Must Fix
-- Bullet list with concrete fixes
+- Numbered findings in current-review order: `[N] Must fix - path:line - summary and concrete fix`
 
 ### 4. Should Fix
-- Bullet list with concrete fixes
+- Numbered findings in current-review order: `[N] Should fix - path:line - summary and concrete fix`
+
+Finding numbers are review-local indices. Keep numbering stable within the current review and use `[N]` format for every finding that appears in Blockers, Must Fix, or Should Fix.
 
 ### 5. Test Coverage vs Acceptance Criteria
 - A short mapping table or bullet list
