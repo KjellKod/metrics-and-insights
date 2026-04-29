@@ -763,15 +763,82 @@ test_installer_preserves_modified_removed_managed_files_for_manual_cleanup() {
   return $rc
 }
 
-test_installer_prunes_untracked_legacy_source_only_test_matching_upstream() {
+test_load_local_checksums_skips_unsafe_paths() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+
+  (
+    cd "$tmpdir" || exit 1
+    cat > .quest-checksums <<'EOF'
+# Quest Installer Checksums
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  tests/unit/test_review_intelligence.py
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  /tmp/outside.txt
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  ../outside.txt
+EOF
+    load_installer_functions
+
+    log_info() { :; }
+    log_warn() { :; }
+    log_success() { :; }
+    log_action() { :; }
+    clear_progress() { :; }
+
+    load_local_checksums
+
+    [ "${#LOCAL_CHECKSUM_FILES[@]}" -eq 1 ] &&
+      [ "${LOCAL_CHECKSUM_FILES[0]}" = "tests/unit/test_review_intelligence.py" ]
+  )
+  local rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+test_installer_skips_unsafe_removed_managed_file_path() {
+  local tmpdir
+  local outside_file
+  tmpdir=$(mktemp -d)
+  outside_file="$(dirname "$tmpdir")/quest-installer-outside-$$.txt"
+
+  (
+    cd "$tmpdir" || exit 1
+    printf 'outside repo file\n' > "$outside_file"
+    load_installer_functions
+
+    DRY_RUN=false
+    FORCE_MODE=true
+    COPY_AS_IS=("scripts/quest_state.py")
+    USER_CUSTOMIZED=()
+    MERGE_CAREFULLY=()
+    LOCAL_CHECKSUM_FILES=("../$(basename "$outside_file")")
+    LOCAL_CHECKSUM_VALUES=("$(get_file_checksum "../$(basename "$outside_file")")")
+    init_updated_checksums
+
+    log_info() { :; }
+    log_warn() { :; }
+    log_success() { :; }
+    log_action() { :; }
+    clear_progress() { :; }
+
+    cleanup_removed_managed_files
+
+    [ -e "../$(basename "$outside_file")" ] &&
+      [ "${#UPDATED_CHECKSUM_FILES[@]}" -eq 0 ]
+  )
+  local rc=$?
+  rm -f "$outside_file"
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+test_installer_prunes_untracked_legacy_installed_source_only_test_matching_upstream() {
   local tmpdir
   tmpdir=$(mktemp -d)
 
   (
     cd "$tmpdir" || exit 1
     mkdir -p tests/unit
-    printf 'quest source-only test\n' > tests/unit/test_quest_complete.py
-    printf 'quest source-only test\n' > "$tmpdir/upstream_test_quest_complete.py"
+    printf 'quest installed source-only test\n' > tests/unit/test_allowlist_matcher.py
+    printf 'quest installed source-only test\n' > "$tmpdir/upstream_test_allowlist_matcher.py"
     load_installer_functions
 
     DRY_RUN=false
@@ -784,8 +851,8 @@ test_installer_prunes_untracked_legacy_source_only_test_matching_upstream() {
     init_updated_checksums
 
     fetch_file_to_temp() {
-      if [ "$1" = "tests/unit/test_quest_complete.py" ]; then
-        cp "$tmpdir/upstream_test_quest_complete.py" "$2"
+      if [ "$1" = "tests/unit/test_allowlist_matcher.py" ]; then
+        cp "$tmpdir/upstream_test_allowlist_matcher.py" "$2"
         return 0
       fi
       return 1
@@ -798,22 +865,22 @@ test_installer_prunes_untracked_legacy_source_only_test_matching_upstream() {
 
     cleanup_legacy_source_only_tests
 
-    [ ! -e tests/unit/test_quest_complete.py ]
+    [ ! -e tests/unit/test_allowlist_matcher.py ]
   )
   local rc=$?
   rm -rf "$tmpdir"
   return $rc
 }
 
-test_installer_preserves_modified_untracked_legacy_source_only_test() {
+test_installer_preserves_modified_untracked_legacy_installed_source_only_test() {
   local tmpdir
   tmpdir=$(mktemp -d)
 
   (
     cd "$tmpdir" || exit 1
     mkdir -p tests/unit
-    printf 'locally modified quest source-only test\n' > tests/unit/test_quest_complete.py
-    printf 'quest source-only test\n' > "$tmpdir/upstream_test_quest_complete.py"
+    printf 'locally modified quest source-only test\n' > tests/unit/test_allowlist_matcher.py
+    printf 'quest installed source-only test\n' > "$tmpdir/upstream_test_allowlist_matcher.py"
     load_installer_functions
 
     DRY_RUN=false
@@ -826,12 +893,46 @@ test_installer_preserves_modified_untracked_legacy_source_only_test() {
     init_updated_checksums
 
     fetch_file_to_temp() {
-      if [ "$1" = "tests/unit/test_quest_complete.py" ]; then
-        cp "$tmpdir/upstream_test_quest_complete.py" "$2"
+      if [ "$1" = "tests/unit/test_allowlist_matcher.py" ]; then
+        cp "$tmpdir/upstream_test_allowlist_matcher.py" "$2"
         return 0
       fi
       return 1
     }
+    log_info() { :; }
+    log_warn() { :; }
+    log_success() { :; }
+    log_action() { :; }
+    clear_progress() { :; }
+
+    cleanup_legacy_source_only_tests
+
+    [ -e tests/unit/test_allowlist_matcher.py ]
+  )
+  local rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+test_installer_preserves_unowned_source_only_test_path() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+
+  (
+    cd "$tmpdir" || exit 1
+    mkdir -p tests/unit
+    printf 'repo-local source-only test\n' > tests/unit/test_quest_complete.py
+    load_installer_functions
+
+    DRY_RUN=false
+    FORCE_MODE=true
+    COPY_AS_IS=("scripts/quest_state.py")
+    USER_CUSTOMIZED=()
+    MERGE_CAREFULLY=()
+    LOCAL_CHECKSUM_FILES=()
+    LOCAL_CHECKSUM_VALUES=()
+    init_updated_checksums
+
     log_info() { :; }
     log_warn() { :; }
     log_success() { :; }
@@ -867,6 +968,80 @@ test_manifest_excludes_source_only_unit_tests() {
   ! grep -q '^tests/unit/test_allowlist_matcher.py$' "$MANIFEST_FILE" &&
     ! grep -q '^tests/unit/test_review_intelligence.py$' "$MANIFEST_FILE" &&
     ! grep -q '^tests/unit/test_codex_skill_wrappers.py$' "$MANIFEST_FILE"
+}
+
+test_manifest_validator_allows_custom_skills_in_installed_mode() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  (
+    cd "$tmpdir" || exit 1
+    mkdir -p scripts .skills/prepare-mcp-quest
+    cp "$REPO_ROOT/scripts/quest_validate-manifest.sh" scripts/quest_validate-manifest.sh
+    cat > .quest-manifest <<'EOF'
+[copy-as-is]
+scripts/quest_validate-manifest.sh
+
+[directories]
+.quest
+EOF
+    printf '# local custom skill\n' > .skills/prepare-mcp-quest/SKILL.md
+
+    bash scripts/quest_validate-manifest.sh > output.txt 2>&1 &&
+      grep -q 'Installed repo mode' output.txt &&
+      ! grep -q 'prepare-mcp-quest' output.txt
+  )
+  local rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+test_manifest_validator_strict_mode_catches_unmanifested_skills() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  (
+    cd "$tmpdir" || exit 1
+    mkdir -p scripts .skills/prepare-mcp-quest
+    cp "$REPO_ROOT/scripts/quest_validate-manifest.sh" scripts/quest_validate-manifest.sh
+    cat > .quest-manifest <<'EOF'
+[copy-as-is]
+scripts/quest_validate-manifest.sh
+
+[directories]
+.quest
+EOF
+    printf '# local custom skill\n' > .skills/prepare-mcp-quest/SKILL.md
+
+    if QUEST_MANIFEST_STRICT=1 bash scripts/quest_validate-manifest.sh > output.txt 2>&1; then
+      exit 1
+    fi
+    grep -q '.skills/prepare-mcp-quest/SKILL.md' output.txt
+  )
+  local rc=$?
+  rm -rf "$tmpdir"
+  return $rc
+}
+
+test_manifest_validator_rejects_unknown_option() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  (
+    cd "$tmpdir" || exit 1
+    mkdir -p scripts
+    cp "$REPO_ROOT/scripts/quest_validate-manifest.sh" scripts/quest_validate-manifest.sh
+    cat > .quest-manifest <<'EOF'
+[copy-as-is]
+scripts/quest_validate-manifest.sh
+EOF
+
+    if bash scripts/quest_validate-manifest.sh --bogus > output.txt 2>&1; then
+      exit 1
+    fi
+    grep -q 'Unknown option: --bogus' output.txt &&
+      grep -q 'Usage: scripts/quest_validate-manifest.sh' output.txt
+  )
+  local rc=$?
+  rm -rf "$tmpdir"
+  return $rc
 }
 
 test_validation_hook_script_accepts_legacy_symlink_target() {
@@ -1461,11 +1636,17 @@ run_test test_installer_records_checksum_for_new_agents_file
 run_test test_installer_preserves_customized_agents_file_with_sidecar
 run_test test_installer_prunes_pristine_removed_managed_files
 run_test test_installer_preserves_modified_removed_managed_files_for_manual_cleanup
-run_test test_installer_prunes_untracked_legacy_source_only_test_matching_upstream
-run_test test_installer_preserves_modified_untracked_legacy_source_only_test
+run_test test_load_local_checksums_skips_unsafe_paths
+run_test test_installer_skips_unsafe_removed_managed_file_path
+run_test test_installer_prunes_untracked_legacy_installed_source_only_test_matching_upstream
+run_test test_installer_preserves_modified_untracked_legacy_installed_source_only_test
+run_test test_installer_preserves_unowned_source_only_test_path
 run_test test_manifest_lists_prefixed_scripts
 run_test test_manifest_lists_installed_quest_smoke_tests
 run_test test_manifest_excludes_source_only_unit_tests
+run_test test_manifest_validator_allows_custom_skills_in_installed_mode
+run_test test_manifest_validator_strict_mode_catches_unmanifested_skills
+run_test test_manifest_validator_rejects_unknown_option
 run_test test_validation_hook_script_accepts_legacy_symlink_target
 run_test test_quest_claude_runner_polls_handoff_and_logs_runtime
 run_test test_quest_claude_probe_requires_real_artifacts

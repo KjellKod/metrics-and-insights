@@ -133,13 +133,9 @@ OLD_SCRIPT_NAMES=(
   "scripts/validate-quest-state.sh"
 )
 
-LEGACY_SOURCE_ONLY_TESTS=(
+LEGACY_INSTALLED_SOURCE_ONLY_TESTS=(
   "tests/unit/test_allowlist_matcher.py"
   "tests/unit/test_codex_skill_wrappers.py"
-  "tests/unit/test_quest_checks_cli.py"
-  "tests/unit/test_quest_complete.py"
-  "tests/unit/test_quest_manifest.py"
-  "tests/unit/test_quest_state.py"
   "tests/unit/test_review_intelligence.py"
 )
 
@@ -484,6 +480,29 @@ get_content_checksum() {
   $cmd | cut -d' ' -f1
 }
 
+is_safe_repo_relative_path() {
+  local target="$1"
+  local component
+  local path_parts=()
+
+  case "$target" in
+    ""|/*|*$'\n'*|*$'\r'*)
+      return 1
+      ;;
+  esac
+
+  IFS='/' read -r -a path_parts <<< "$target"
+  for component in "${path_parts[@]}"; do
+    case "$component" in
+      ""|"."|"..")
+        return 1
+        ;;
+    esac
+  done
+
+  return 0
+}
+
 # Load checksums from .quest-checksums file
 load_local_checksums() {
   LOCAL_CHECKSUM_FILES=()
@@ -504,6 +523,11 @@ load_local_checksums() {
       # Validate checksum format (SHA256 = 64 hex chars) and filepath is non-empty
       if [ ${#checksum} -ne 64 ] || [ -z "$filepath" ]; then
         log_warn "Malformed checksum entry, skipping: $line"
+        continue
+      fi
+
+      if ! is_safe_repo_relative_path "$filepath"; then
+        log_warn "Unsafe checksum path outside repository, skipping: $filepath"
         continue
       fi
 
@@ -712,6 +736,12 @@ cleanup_removed_managed_files() {
   local current_checksum
 
   for filepath in "${LOCAL_CHECKSUM_FILES[@]}"; do
+    if ! is_safe_repo_relative_path "$filepath"; then
+      remove_updated_checksum "$filepath"
+      log_warn "Skipping unsafe checksum path outside repository: $filepath"
+      continue
+    fi
+
     if is_current_manifest_file "$filepath"; then
       continue
     fi
@@ -756,7 +786,7 @@ cleanup_legacy_source_only_tests() {
   local upstream_checksum
   local temp_file
 
-  for filepath in "${LEGACY_SOURCE_ONLY_TESTS[@]}"; do
+  for filepath in "${LEGACY_INSTALLED_SOURCE_ONLY_TESTS[@]}"; do
     remove_updated_checksum "$filepath"
     if [ ! -e "$filepath" ]; then
       continue
