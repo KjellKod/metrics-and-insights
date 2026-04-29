@@ -18,7 +18,7 @@ From the project root:
 - Run all tests:
   - `python3 -m pytest`
 - Run a specific file:
-  - `python3 -m pytest jira_metrics/tests/test_bug_stats.py`
+  - `python3 -m pytest jira_metrics/tests/test_bug_health.py`
 - Run with coverage:
   - `python3 -m pytest --cov=jira_metrics`
 - CI-equivalent local checks:

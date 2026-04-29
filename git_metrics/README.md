@@ -90,12 +90,12 @@ Scoring:
 - `+1` linter evidence in GitHub Actions workflows
 - `+1` unit test evidence
 - `+1` smoke, Playwright, E2E, or integration test evidence
-- `+1` agentic CI evidence, including OpenAI Codex GitHub Actions workflows
+- `+1` agentic CI evidence, using generic defaults or `CI_MATURITY_AGENTIC_PATTERNS`
 
 ```bash
-python3 git_metrics/ci_maturity_report.py --owner KjellKod \
+python3 git_metrics/ci_maturity_report.py --owner example-org \
   --exclude-patterns 'archived-*,*-other' \
-  --exclude-repos 'legacy-api,KjellKod/private-test' \
+  --exclude-repos 'legacy-api,example-org/private-test' \
   --format json \
   --output ci_maturity.json
 ```
@@ -111,6 +111,9 @@ Options:
 - `--output FILE` Write output to a file
 - `--cache-file FILE` Incremental cache for completed per-repo analysis (default: `.ci_maturity_cache.json`)
 - `--force-fresh` Ignore cache and refetch everything
+
+Environment configuration:
+- `CI_MATURITY_AGENTIC_PATTERNS`: Optional comma-separated patterns for agentic CI detection.
 
 When GitHub API rate limits are hit, the script honors `Retry-After` or waits until `X-RateLimit-Reset` before retrying.
 JSON output includes per-repo scores, grade labels, category evidence, skipped repositories, and rate-limit wait metadata.

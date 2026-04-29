@@ -65,20 +65,17 @@ INTEGRATION_PATTERNS = (
     "postman",
 )
 AGENTIC_PATTERNS = (
-    "codex",
-    "openai",
-    "openai/codex",
-    "codex-action",
+    "agentic",
     "ai review",
     "ai code review",
+    "llm review",
+    "automated code review",
+    "review agent",
+    "agent review",
+    "code review agent",
 )
 
-CATEGORY_PATTERNS = {
-    "linter": LINTER_PATTERNS,
-    "unit_tests": UNIT_TEST_PATTERNS,
-    "smoke_integration_tests": INTEGRATION_PATTERNS,
-    "agentic_ci": AGENTIC_PATTERNS,
-}
+AGENTIC_PATTERNS_ENV = "CI_MATURITY_AGENTIC_PATTERNS"
 
 
 @dataclass
@@ -278,6 +275,22 @@ def parse_patterns(raw: str | None) -> list[str]:
     return [value.strip().lower() for value in raw.split(",") if value.strip()]
 
 
+def configured_agentic_patterns() -> tuple[str, ...]:
+    configured = parse_patterns(os.getenv(AGENTIC_PATTERNS_ENV))
+    if configured:
+        return tuple(configured)
+    return AGENTIC_PATTERNS
+
+
+def category_patterns() -> dict[str, tuple[str, ...]]:
+    return {
+        "linter": LINTER_PATTERNS,
+        "unit_tests": UNIT_TEST_PATTERNS,
+        "smoke_integration_tests": INTEGRATION_PATTERNS,
+        "agentic_ci": configured_agentic_patterns(),
+    }
+
+
 def normalize_repo_name(value: str) -> str:
     candidate = value.strip().lower()
     if "/" in candidate:
@@ -353,7 +366,7 @@ def grade_for_score(score: int) -> str:
 
 def score_workflows(workflows: list[dict[str, str]]) -> tuple[int, str, dict[str, list[str]]]:
     evidence: dict[str, list[str]] = {}
-    for category, patterns in CATEGORY_PATTERNS.items():
+    for category, patterns in category_patterns().items():
         category_evidence: list[str] = []
         for workflow in workflows:
             category_evidence.extend(evidence_for_patterns(workflow["text"], patterns, workflow["path"]))

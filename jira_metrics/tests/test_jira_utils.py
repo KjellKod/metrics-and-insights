@@ -47,10 +47,14 @@ class TestConvertRawIssue(unittest.TestCase):
             "fields": {
                 "project": {"key": "PROJ", "name": "Project"},
                 "status": {"name": "Released"},
+                "priority": {"name": "P2 Moderate Issue"},
                 "assignee": {"displayName": "Alice"},
                 "issuelinks": [{"outwardIssue": {"key": "TEST-2"}}],
                 "summary": "Example summary",
-                "customfield_100": {"value": "Platform"},
+                "created": "2024-01-01T12:00:00.000+0000",
+                "duedate": "2024-01-10",
+                "resolutiondate": "2024-01-05T12:00:00.000+0000",
+                "customfield_100": {"value": "Example team"},
             },
             "changelog": {"histories": []},
         }
@@ -60,9 +64,13 @@ class TestConvertRawIssue(unittest.TestCase):
         self.assertEqual(issue.fields.project.key, "PROJ")
         self.assertEqual(issue.fields.project.name, "Project")
         self.assertEqual(issue.fields.status.name, "Released")
+        self.assertEqual(issue.fields.priority.name, "P2 Moderate Issue")
         self.assertEqual(issue.fields.assignee.displayName, "Alice")
         self.assertEqual(issue.fields.summary, "Example summary")
-        self.assertEqual(issue.fields.customfield_100.value, "Platform")
+        self.assertEqual(issue.fields.created, "2024-01-01T12:00:00.000+0000")
+        self.assertEqual(issue.fields.duedate, "2024-01-10")
+        self.assertEqual(issue.fields.resolutiondate, "2024-01-05T12:00:00.000+0000")
+        self.assertEqual(issue.fields.customfield_100.value, "Example team")
         self.assertEqual(len(issue.fields.issuelinks), 1)
         self.assertEqual(issue.fields.issuelinks[0].outwardIssue.key, "TEST-2")
         self.assertIsInstance(issue.changelog, SimpleNamespace)

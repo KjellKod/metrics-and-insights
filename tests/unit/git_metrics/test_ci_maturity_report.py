@@ -11,6 +11,7 @@ from git_metrics.ci_maturity_report import (
     GitHubClient,
     active_ci_status,
     build_argument_parser,
+    configured_agentic_patterns,
     emit_report,
     filter_repositories,
     load_token,
@@ -104,16 +105,17 @@ jobs:
     assert not evidence["agentic_ci"]
 
 
-def test_codex_workflow_counts_as_agentic_ci() -> None:
+def test_configured_agentic_workflow_counts_as_agentic_ci(monkeypatch) -> None:
+    monkeypatch.setenv("CI_MATURITY_AGENTIC_PATTERNS", "review-agent")
     workflows = [
         {
-            "path": ".github/workflows/codex-review.yml",
+            "path": ".github/workflows/ai-review.yml",
             "text": """
-name: OpenAI Codex Review
+name: AI Review
 jobs:
-  codex:
+  review:
     steps:
-      - uses: openai/codex-action@v1
+      - uses: example/review-agent-action@v1
 """,
         }
     ]
@@ -123,6 +125,12 @@ jobs:
     assert score == 1
     assert grade == "basic"
     assert evidence["agentic_ci"]
+
+
+def test_agentic_patterns_are_configurable(monkeypatch) -> None:
+    monkeypatch.setenv("CI_MATURITY_AGENTIC_PATTERNS", "first-agent,second-agent")
+
+    assert configured_agentic_patterns() == ("first-agent", "second-agent")
 
 
 def test_active_ci_false_when_no_recent_runs() -> None:
@@ -151,7 +159,7 @@ def test_rate_limit_wait_uses_retry_after_before_reset_header() -> None:
 
 
 def test_parser_does_not_embed_owner_env_value_in_default(monkeypatch) -> None:
-    monkeypatch.setenv("GITHUB_METRIC_OWNER_OR_ORGANIZATION", "KjellKod")
+    monkeypatch.setenv("GITHUB_METRIC_OWNER_OR_ORGANIZATION", "example-owner")
 
     args = build_argument_parser().parse_args([])
 
@@ -183,7 +191,7 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
                     "linter": ["ci.yml: ruff check ."],
                     "unit_tests": ["ci.yml: pytest"],
                     "smoke_integration_tests": ["ci.yml: playwright"],
-                    "agentic_ci": ["codex.yml: openai/codex-action"],
+                    "agentic_ci": ["ai-review.yml: example/review-agent-action"],
                 },
             }
         ],
@@ -215,7 +223,7 @@ def test_csv_output_has_category_booleans() -> None:
                     "linter": [],
                     "unit_tests": [],
                     "smoke_integration_tests": [],
-                    "agentic_ci": ["codex.yml: openai/codex-action"],
+                    "agentic_ci": ["ai-review.yml: example/review-agent-action"],
                 },
             }
         ]
