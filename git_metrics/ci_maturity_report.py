@@ -77,6 +77,12 @@ INTEGRATION_PATTERNS = (
     "cargo nextest run --test",
     "cargo nextest run --tests",
 )
+TERRAFORM_CI_PATTERNS = (
+    "atlantis/plan",
+    "atlantis/apply",
+    "terraform plan",
+    "terraform validate",
+)
 AGENTIC_PATTERNS = (
     "agentic",
     "ai review",
@@ -213,6 +219,21 @@ class GitHubClient:
         runs = payload.get("workflow_runs") or []
         return runs[0] if runs else None
 
+    def latest_commit_date(self, owner: str, repo: str, default_branch: str | None) -> str:
+        if not default_branch:
+            return ""
+        try:
+            payload = self.get_json(f"/repos/{owner}/{repo}/commits/{default_branch}")
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404, 409, 422}:
+                return ""
+            raise
+        commit = payload.get("commit") or {}
+        committer = commit.get("committer") or {}
+        author = commit.get("author") or {}
+        raw_date = committer.get("date") or author.get("date") or ""
+        return raw_date[:10]
+
     def recent_merged_pr_authors(
         self,
         owner: str,
@@ -266,6 +287,101 @@ class GitHubClient:
             if len(authors) >= responsible_count:
                 break
         return authors
+
+    def recent_pull_request_ci_signals(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        scan_limit: int,
+    ) -> list[dict[str, str]]:
+        if scan_limit <= 0:
+            return []
+
+        params = {
+            "state": "all",
+            "sort": "updated",
+            "direction": "desc",
+            "per_page": max(1, min(scan_limit, 100)),
+        }
+        try:
+            pulls = self.get_json(f"/repos/{owner}/{repo}/pulls", params=params)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404}:
+                return []
+            raise
+        if not isinstance(pulls, list):
+            return []
+
+        signals: list[dict[str, str]] = []
+        seen_shas: set[str] = set()
+        for pull in pulls:
+            head = pull.get("head") or {}
+            sha = head.get("sha")
+            if not sha or sha in seen_shas:
+                continue
+            seen_shas.add(sha)
+            signals.extend(self.commit_status_ci_signals(owner, repo, sha, pull_number=pull.get("number")))
+            signals.extend(self.commit_check_run_ci_signals(owner, repo, sha, pull_number=pull.get("number")))
+        return signals
+
+    def commit_status_ci_signals(
+        self, owner: str, repo: str, sha: str, *, pull_number: int | None = None
+    ) -> list[dict[str, str]]:
+        try:
+            payload = self.get_json(f"/repos/{owner}/{repo}/commits/{sha}/status")
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404, 409, 422}:
+                return []
+            raise
+        statuses = payload.get("statuses") or []
+        if not isinstance(statuses, list):
+            return []
+        signals = []
+        for status in statuses:
+            signal = classify_external_ci_signal(
+                "commit status",
+                pull_number=pull_number,
+                name=status.get("context"),
+                description=status.get("description"),
+                state=status.get("state"),
+                url=status.get("target_url"),
+                updated_at=status.get("updated_at"),
+            )
+            if signal:
+                signals.append(signal)
+        return signals
+
+    def commit_check_run_ci_signals(
+        self, owner: str, repo: str, sha: str, *, pull_number: int | None = None
+    ) -> list[dict[str, str]]:
+        try:
+            payload = self.get_json(f"/repos/{owner}/{repo}/commits/{sha}/check-runs", params={"per_page": 100})
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in {403, 404, 409, 422}:
+                return []
+            raise
+        check_runs = payload.get("check_runs") or []
+        if not isinstance(check_runs, list):
+            return []
+        signals = []
+        for check_run in check_runs:
+            app = check_run.get("app") or {}
+            signal = classify_external_ci_signal(
+                "check run",
+                pull_number=pull_number,
+                name=check_run.get("name"),
+                description=(
+                    check_run.get("output", {}).get("summary") if isinstance(check_run.get("output"), dict) else ""
+                ),
+                state=check_run.get("conclusion") or check_run.get("status"),
+                url=check_run.get("html_url") or check_run.get("details_url"),
+                updated_at=check_run.get("completed_at") or check_run.get("started_at"),
+                app=app.get("slug") or app.get("name"),
+            )
+            if signal:
+                signals.append(signal)
+        return signals
 
     def user_profile(self, login: str) -> dict[str, str]:
         if login in self.user_cache:
@@ -356,6 +472,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=30,
         help="Number of recently closed PRs to scan per repo when finding responsible people. Example: --responsible-pr-scan-limit 50",
+    )
+    parser.add_argument(
+        "--ci-pr-scan-limit",
+        type=int,
+        default=5,
+        help="Number of recent PRs to scan per repo for external CI statuses/check runs. Example: --ci-pr-scan-limit 10",
     )
     parser.add_argument(
         "--format",
@@ -484,10 +606,69 @@ def score_workflows(workflows: list[dict[str, str]]) -> tuple[int, str, dict[str
     return score, grade_for_score(score), evidence
 
 
+def classify_external_ci_signal(
+    source: str,
+    *,
+    pull_number: int | None,
+    name: str | None,
+    description: str | None,
+    state: str | None,
+    url: str | None,
+    updated_at: str | None,
+    app: str | None = None,
+) -> dict[str, str] | None:
+    label = " ".join(value for value in (name, description, app) if value).lower()
+    if any(pattern in label for pattern in TERRAFORM_CI_PATTERNS):
+        category = "smoke_integration_tests"
+    elif any(pattern in label for pattern in configured_agentic_patterns()):
+        category = "agentic_ci"
+    else:
+        return None
+
+    pr_prefix = f"PR #{pull_number}: " if pull_number else ""
+    status_suffix = f" ({state})" if state else ""
+    signal_name = name or app or source
+    return {
+        "category": category,
+        "evidence": f"{source}: {pr_prefix}{signal_name}{status_suffix}",
+        "updated_at": updated_at or "",
+        "url": url or "",
+    }
+
+
+def merge_external_ci_evidence(evidence: dict[str, list[str]], signals: list[dict[str, str]]) -> dict[str, list[str]]:
+    merged = {category: list(values) for category, values in evidence.items()}
+    for signal in signals:
+        category = signal.get("category")
+        if category not in merged:
+            continue
+        item = signal.get("evidence")
+        if item:
+            merged[category].append(item)
+    return {category: sorted(set(values)) for category, values in merged.items()}
+
+
+def latest_external_ci_signal_at(signals: list[dict[str, str]]) -> datetime | None:
+    timestamps = [
+        parsed for parsed in (iso_to_datetime(signal.get("updated_at")) for signal in signals) if parsed is not None
+    ]
+    if not timestamps:
+        return None
+    return max(timestamps)
+
+
 def active_ci_status(
-    workflows: list[dict[str, str]], latest_run: dict[str, Any] | None, active_days: int, now: datetime
+    workflows: list[dict[str, str]],
+    latest_run: dict[str, Any] | None,
+    active_days: int,
+    now: datetime,
+    external_latest_at: datetime | None = None,
 ) -> tuple[bool | None, str]:
+    if external_latest_at is not None and now - external_latest_at <= timedelta(days=active_days):
+        return True, f"latest_external_ci_within_{active_days}_days"
     if not workflows:
+        if external_latest_at is not None:
+            return False, f"latest_external_ci_older_than_{active_days}_days"
         return False, "no_workflow_files"
     if latest_run and latest_run.get("_status") == "unknown":
         return None, latest_run.get("reason", "workflow_runs_inaccessible")
@@ -510,11 +691,18 @@ def analyze_repository(
     active_days: int,
     responsible_count: int,
     responsible_pr_scan_limit: int,
+    ci_pr_scan_limit: int,
     now: datetime,
 ) -> dict[str, Any]:
     name = repo["name"]
     workflows = client.workflow_files(owner, name, repo.get("default_branch"))
     latest_run = client.latest_workflow_run(owner, name)
+    last_commit_date = client.latest_commit_date(owner, name, repo.get("default_branch"))
+    external_ci_signals = client.recent_pull_request_ci_signals(
+        owner,
+        name,
+        scan_limit=ci_pr_scan_limit,
+    )
     responsible_people = client.recent_merged_pr_authors(
         owner,
         name,
@@ -522,7 +710,11 @@ def analyze_repository(
         scan_limit=responsible_pr_scan_limit,
     )
     score, grade, evidence = score_workflows(workflows)
-    active_status, active_reason = active_ci_status(workflows, latest_run, active_days, now)
+    evidence = merge_external_ci_evidence(evidence, external_ci_signals)
+    score = sum(1 for category_evidence in evidence.values() if category_evidence)
+    grade = grade_for_score(score)
+    external_latest_at = latest_external_ci_signal_at(external_ci_signals)
+    active_status, active_reason = active_ci_status(workflows, latest_run, active_days, now, external_latest_at)
     latest_run_at = None
     if latest_run and not latest_run.get("_status"):
         latest_run_at = latest_run.get("updated_at") or latest_run.get("created_at")
@@ -537,7 +729,9 @@ def analyze_repository(
         "active_ci": active_status,
         "active_ci_reason": active_reason,
         "latest_workflow_run_at": latest_run_at,
+        "last_commit": last_commit_date,
         "workflow_file_count": len(workflows),
+        "external_ci_signal_count": len(external_ci_signals),
         "score": score,
         "grade": grade,
         "responsible_people": responsible_people,
@@ -553,6 +747,7 @@ def load_cache(
     active_days: int,
     responsible_count: int,
     responsible_pr_scan_limit: int,
+    ci_pr_scan_limit: int,
 ) -> dict[str, Any]:
     if force_fresh or not path:
         return {"repositories": {}}
@@ -571,6 +766,7 @@ def load_cache(
         or payload.get("active_days") != active_days
         or payload.get("responsible_count") != responsible_count
         or payload.get("responsible_pr_scan_limit") != responsible_pr_scan_limit
+        or payload.get("ci_pr_scan_limit") != ci_pr_scan_limit
     ):
         return {"repositories": {}}
     payload.setdefault("repositories", {})
@@ -600,6 +796,7 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
         active_days=args.active_days,
         responsible_count=args.responsible_count,
         responsible_pr_scan_limit=args.responsible_pr_scan_limit,
+        ci_pr_scan_limit=args.ci_pr_scan_limit,
     )
     cached_repos = cache.setdefault("repositories", {})
     results: list[dict[str, Any]] = []
@@ -620,6 +817,7 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
             active_days=args.active_days,
             responsible_count=args.responsible_count,
             responsible_pr_scan_limit=args.responsible_pr_scan_limit,
+            ci_pr_scan_limit=args.ci_pr_scan_limit,
             now=now,
         )
         cached_repos[full_name] = result
@@ -630,6 +828,7 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
                 "active_days": args.active_days,
                 "responsible_count": args.responsible_count,
                 "responsible_pr_scan_limit": args.responsible_pr_scan_limit,
+                "ci_pr_scan_limit": args.ci_pr_scan_limit,
                 "updated_at": now.isoformat(),
             }
         )
@@ -642,6 +841,7 @@ def collect_report(client: GitHubClient, args: argparse.Namespace) -> dict[str, 
         "active_days": args.active_days,
         "responsible_count": args.responsible_count,
         "responsible_pr_scan_limit": args.responsible_pr_scan_limit,
+        "ci_pr_scan_limit": args.ci_pr_scan_limit,
         "cached_result_count": cached_result_count,
         "repository_count": len(results),
         "skipped": filter_result.skipped,
@@ -654,15 +854,15 @@ def render_table(report: dict[str, Any]) -> str:
     lines = [
         f"CI maturity for {report['owner']} ({report['repository_count']} repositories)",
         "Legend: score is 0-4, with 1 point each for linter, unit tests, smoke/integration/e2e tests, and agentic CI.",
-        "Active means a GitHub Actions workflow ran recently. Authors are recent merged PR authors to help route follow-up, not assigned owners.",
+        "Active means GitHub Actions or external PR CI checks ran recently. Authors are recent merged PR authors to help route follow-up, not assigned owners.",
         "",
-        "score grade      active  repo                                      recent merged PR authors",
-        "----- ---------- ------- ----------------------------------------- ------------------------",
+        "score grade      active  last commit repo                                      recent merged PR authors",
+        "----- ---------- ------- ----------- ----------------------------------------- ------------------------",
     ]
     for repo in report["repositories"]:
         active = "unknown" if repo["active_ci"] is None else str(bool(repo["active_ci"])).lower()
         lines.append(
-            f"{repo['score']}/4   {repo['grade']:<10} {active:<7} {repo['name']:<41} "
+            f"{repo['score']}/4   {repo['grade']:<10} {active:<7} {repo.get('last_commit', ''):<11} {repo['name']:<41} "
             f"{format_responsible_people(repo.get('responsible_people', []))}"
         )
     if report["skipped"]:
@@ -700,7 +900,9 @@ def render_csv(report: dict[str, Any], output_file: Any) -> None:
             "active_ci",
             "active_ci_reason",
             "latest_workflow_run_at",
+            "last_commit",
             "workflow_file_count",
+            "external_ci_signal_count",
             "linter",
             "unit_tests",
             "smoke_integration_tests",
@@ -721,7 +923,9 @@ def render_csv(report: dict[str, Any], output_file: Any) -> None:
                 "active_ci": repo["active_ci"],
                 "active_ci_reason": repo["active_ci_reason"],
                 "latest_workflow_run_at": repo["latest_workflow_run_at"],
+                "last_commit": repo.get("last_commit", ""),
                 "workflow_file_count": repo["workflow_file_count"],
+                "external_ci_signal_count": repo.get("external_ci_signal_count", 0),
                 "linter": bool(evidence["linter"]),
                 "unit_tests": bool(evidence["unit_tests"]),
                 "smoke_integration_tests": bool(evidence["smoke_integration_tests"]),
