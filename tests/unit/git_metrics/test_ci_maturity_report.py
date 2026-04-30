@@ -11,10 +11,12 @@ from git_metrics.ci_maturity_report import (
     GitHubClient,
     active_ci_status,
     build_argument_parser,
+    classify_external_ci_signal,
     configured_agentic_patterns,
     emit_report,
     filter_repositories,
     format_responsible_people,
+    merge_external_ci_evidence,
     load_token,
     parse_patterns,
     parse_csv_values,
@@ -198,6 +200,41 @@ def test_active_ci_false_when_no_recent_runs() -> None:
     assert reason == "latest_run_older_than_90_days"
 
 
+def test_active_ci_true_when_recent_external_ci_signal_exists_without_workflows() -> None:
+    now = datetime(2026, 4, 30, tzinfo=timezone.utc)
+    external_latest_at = now - timedelta(hours=4)
+
+    status, reason = active_ci_status([], None, 90, now, external_latest_at)
+
+    assert status is True
+    assert reason == "latest_external_ci_within_90_days"
+
+
+def test_atlantis_status_counts_as_external_terraform_integration_ci() -> None:
+    signal = classify_external_ci_signal(
+        "commit status",
+        pull_number=341,
+        name="atlantis/plan: infra/nonproduction/lambda/default",
+        description="Plan failed.",
+        state="failure",
+        url="http://atlantis.internal/jobs/1",
+        updated_at="2026-04-29T17:15:41Z",
+    )
+    _, _, evidence = score_workflows([])
+
+    merged = merge_external_ci_evidence(evidence, [signal])
+
+    assert signal == {
+        "category": "smoke_integration_tests",
+        "evidence": "commit status: PR #341: atlantis/plan: infra/nonproduction/lambda/default (failure)",
+        "updated_at": "2026-04-29T17:15:41Z",
+        "url": "http://atlantis.internal/jobs/1",
+    }
+    assert merged["smoke_integration_tests"] == [
+        "commit status: PR #341: atlantis/plan: infra/nonproduction/lambda/default (failure)"
+    ]
+
+
 def test_rate_limit_wait_uses_retry_after_before_reset_header() -> None:
     sleeps: list[float] = []
     client = GitHubClient("token", sleep_fn=sleeps.append)
@@ -221,6 +258,8 @@ class StubGitHubClient(GitHubClient):
     def get_json(self, path_or_url: str, *, params: dict[str, object] | None = None) -> object:
         if path_or_url.endswith("/pulls"):
             return self.payloads["pulls"]
+        if "/commits/" in path_or_url:
+            return self.payloads["commit"]
         if path_or_url.startswith("/users/"):
             login = path_or_url.rsplit("/", 1)[1]
             return self.payloads["users"][login]
@@ -295,6 +334,21 @@ def test_recent_merged_pr_authors_returns_distinct_recent_people_with_names() ->
     ]
 
 
+def test_latest_commit_date_returns_default_branch_commit_day() -> None:
+    client = StubGitHubClient(
+        {
+            "commit": {
+                "commit": {
+                    "committer": {"date": "2026-04-29T17:15:08Z"},
+                    "author": {"date": "2026-04-28T12:00:00Z"},
+                }
+            }
+        }
+    )
+
+    assert client.latest_commit_date("onfleet", "terraform", "main") == "2026-04-29"
+
+
 def test_format_responsible_people_includes_public_name_when_available() -> None:
     people = [{"login": "KjellKod", "name": "Kjell Hedstrom"}, {"login": "teammate", "name": ""}]
 
@@ -344,6 +398,7 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
                 "active_ci": True,
                 "active_ci_reason": "latest_run_within_90_days",
                 "latest_workflow_run_at": "2026-04-28T00:00:00Z",
+                "last_commit": "2026-04-29",
                 "workflow_file_count": 2,
                 "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
                 "evidence": {
@@ -362,6 +417,7 @@ def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp
 
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["repositories"][0]["score"] == 4
+    assert payload["repositories"][0]["last_commit"] == "2026-04-29"
     assert payload["repositories"][0]["evidence"]["agentic_ci"]
     assert payload["repositories"][0]["responsible_people"][0]["login"] == "KjellKod"
     assert payload["skipped"] == [{"name": "legacy", "reason": "archived"}]
@@ -380,6 +436,7 @@ def test_table_output_includes_responsible_people() -> None:
                 "score": 4,
                 "grade": "top",
                 "active_ci": True,
+                "last_commit": "2026-04-29",
                 "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
             }
         ],
@@ -390,6 +447,8 @@ def test_table_output_includes_responsible_people() -> None:
     assert "Legend: score is 0-4, with 1 point each for linter" in rendered
     assert "Authors are recent merged PR authors to help route follow-up, not assigned owners." in rendered
     assert "recent merged PR authors" in rendered
+    assert "last commit" in rendered
+    assert "2026-04-29" in rendered
     assert "KjellKod (Kjell Hedstrom)" in rendered
     assert "Re-run with --force-fresh" in rendered
 
@@ -405,6 +464,7 @@ def test_csv_output_has_category_booleans() -> None:
                 "active_ci": True,
                 "active_ci_reason": "latest_run_within_90_days",
                 "latest_workflow_run_at": "2026-04-28T00:00:00Z",
+                "last_commit": "2026-04-29",
                 "workflow_file_count": 1,
                 "responsible_people": [{"login": "KjellKod", "name": "Kjell Hedstrom"}],
                 "evidence": {
@@ -423,7 +483,9 @@ def test_csv_output_has_category_booleans() -> None:
     render_csv(report, output)
 
     assert "agentic_ci" in output.getvalue()
+    assert "last_commit" in output.getvalue()
     assert "responsible_people" in output.getvalue()
     assert "cached_result_count" in output.getvalue()
     assert "KjellKod (Kjell Hedstrom)" in output.getvalue()
+    assert "2026-04-29" in output.getvalue()
     assert "True" in output.getvalue()

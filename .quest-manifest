@@ -1,6 +1,7 @@
 [copy-as-is]
 .agents/skills/celebrate/SKILL.md
 .agents/skills/git-commit-assistant/SKILL.md
+.agents/skills/pre-commit-review/SKILL.md
 .agents/skills/pr-assistant/SKILL.md
 .agents/skills/pr-shepherd/SKILL.md
 .agents/skills/quest/SKILL.md
@@ -26,6 +27,7 @@
 .claude/skills/celebrate/SKILL.md
 .claude/skills/git-commit-assistant/SKILL.md
 .claude/skills/gpt/SKILL.md
+.claude/skills/pre-commit-review/SKILL.md
 .claude/skills/pr-assistant/SKILL.md
 .claude/skills/pr-shepherd/SKILL.md
 .claude/skills/quest/SKILL.md
@@ -41,6 +43,7 @@
 .skills/implementer/SKILL.md
 .skills/plan-maker/SKILL.md
 .skills/plan-reviewer/SKILL.md
+.skills/pre-commit-review/SKILL.md
 .skills/pr-assistant/SKILL.md
 .skills/pr-shepherd/SKILL.md
 .skills/quest/SKILL.md
@@ -55,6 +58,7 @@
 .skills/quest/delegation/router.md
 .skills/quest/delegation/workflow.md
 .skills/review-decisions/SKILL.md
+.skills/review-anti-patterns.md
 scripts/quest_allowlist_matcher.py
 scripts/quest_backfill_journal.py
 scripts/quest_celebrate/__init__.py
