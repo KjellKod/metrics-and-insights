@@ -1,0 +1,27 @@
+tests/unit/git_metrics/test_ci_maturity_report.py
+  c499dc8fa4dc59bb 14,19,203-237,261-262,337-351,401,420,439,450-451,467,486,490
+git_metrics/ci_maturity_report.py
+  c499dc8fa4dc59bb 80-85,222-236,291-385,476-481,609-659,661-665,667-668,670-671,694,700-705,713-717,732,734,750,769,799,820,831,844,857,859-860,865,903,905,926,928
+.quest-manifest
+  c499dc8fa4dc59bb 4,30,46,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ecc3193c2b95f431cb1a7143bf6a735f55eb1590",
+  "prompts": {
+    "c499dc8fa4dc59bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ddb78-3c10-7db0-b6fa-c716a7aa3671",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod",
+      "messages": [],
+      "total_additions": 276,
+      "total_deletions": 6,
+      "accepted_lines": 276,
+      "overriden_lines": 0
+    }
+  }
+}
