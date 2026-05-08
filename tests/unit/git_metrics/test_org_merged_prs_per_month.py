@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -257,6 +260,26 @@ def test_per_repo_counts_paginates_and_aggregates_by_repo() -> None:
     assert session.calls[1][1]["per_page"] == 100
     assert session.calls[1][1]["page"] == 1
     assert session.calls[2][1]["page"] == 2
+
+
+def test_per_repo_counts_stops_at_page_10_when_total_equals_search_cap() -> None:
+    # GitHub Search caps at page 10 (1000 results); page 11 returns 422.
+    # When total == 1000 exactly, the loop must terminate after page 10
+    # without attempting page 11.
+    full_page = _items_payload(["api"] * 100, total=1000)
+    responses = [_StubResponse(200, {"total_count": 1000, "items": []})]  # head
+    responses.extend(_StubResponse(200, full_page) for _ in range(10))
+    client, session, _sleeps = _make_client(responses)
+    window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
+
+    counts, total = per_repo_counts_for_window(client, "onfleet", window)
+
+    assert total == 1000
+    assert counts == {"api": 1000}
+    # 1 head probe + 10 paginated calls = 11 total. No page 11 requested.
+    assert len(session.calls) == 11
+    pages_requested = [params.get("page") for _url, params in session.calls if params and params.get("page")]
+    assert pages_requested == list(range(1, 11))
 
 
 def test_per_repo_counts_halves_window_when_total_exceeds_search_cap() -> None:
@@ -627,6 +650,22 @@ def test_argument_parser_accepts_short_l_flag() -> None:
     assert args.loc is True
     args_default = parser.parse_args(["--from", "2025-01-01", "--to", "2025-12-31"])
     assert args_default.loc is False
+
+
+def test_script_path_help_explains_module_invocation_and_verbose_flag() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+
+    result = subprocess.run(
+        [sys.executable, "git_metrics/org_merged_prs_per_month.py", "--help"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "python3 -m git_metrics.org_merged_prs_per_month" in result.stdout
+    assert "Use -v or --verbose, not --v." in result.stdout
 
 
 def test_month_windows_sanity_check_for_year_boundaries() -> None:

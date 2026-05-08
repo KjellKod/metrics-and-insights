@@ -26,13 +26,21 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 
-from git_metrics.ci_maturity_report import DEFAULT_TOKEN_ENV, GitHubClient, load_token
-from git_metrics.throughput_collect import MonthWindow, month_windows
+try:
+    from git_metrics.ci_maturity_report import DEFAULT_TOKEN_ENV, GitHubClient, load_token
+    from git_metrics.throughput_collect import MonthWindow, month_windows
+except ModuleNotFoundError as exc:
+    if exc.name != "git_metrics":
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from git_metrics.ci_maturity_report import DEFAULT_TOKEN_ENV, GitHubClient, load_token
+    from git_metrics.throughput_collect import MonthWindow, month_windows
 
 
 load_dotenv()
@@ -58,6 +66,10 @@ query($q: String!, $cursor: String) {
   }
 }
 """
+
+
+class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    """Show defaults while preserving multiline examples."""
 
 
 @dataclass(frozen=True)
@@ -103,7 +115,16 @@ def parse_iso_date(value: str) -> date:
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Count merged PRs per month across an entire GitHub organization.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=HelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  python3 -m git_metrics.org_merged_prs_per_month "
+            "--owner onfleet --from 2025-01-01 --to 2026-04-30\n"
+            "  python3 -m git_metrics.org_merged_prs_per_month "
+            "--owner onfleet --from 2025-01-01 --to 2026-04-30 --verbose --loc\n\n"
+            "module form matters: put git_metrics.org_merged_prs_per_month immediately after -m, "
+            "then pass CLI flags. Use -v or --verbose, not --v."
+        ),
     )
     parser.add_argument(
         "--from",
@@ -215,7 +236,7 @@ def _per_repo_counts_for_range(
         return counts, 0
 
     page = 1
-    max_pages = (SEARCH_RESULT_CAP // SEARCH_PAGE_SIZE) + 1
+    max_pages = SEARCH_RESULT_CAP // SEARCH_PAGE_SIZE
     while page <= max_pages:
         payload = client.get_json(
             "/search/issues",
@@ -341,7 +362,7 @@ def collect_report(
 ) -> MergedPrReport:
     if range_end < range_start:
         raise ValueError("--to must be on or after --from")
-    today_value = today if today is not None else datetime.now().date()
+    today_value = today if today is not None else datetime.now(timezone.utc).date()
     if range_end > today_value:
         raise ValueError(
             f"--to ({range_end.isoformat()}) is in the future (today is {today_value.isoformat()}); "
@@ -363,6 +384,7 @@ def collect_report(
         if loc:
             if pause_seconds > 0:
                 sleep_fn(pause_seconds)
+            # REST total_count is canonical for merged_prs; GraphQL issueCount is dropped.
             additions, deletions, _loc_total = loc_for_window(client, owner, window)
         rows.append(
             MonthlyMergedCount(
