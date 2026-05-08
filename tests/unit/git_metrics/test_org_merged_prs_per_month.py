@@ -12,6 +12,7 @@ from git_metrics.org_merged_prs_per_month import (
     build_argument_parser,
     collect_report,
     count_merged_prs_for_window,
+    loc_for_window,
     per_repo_counts_for_window,
     render_csv,
     render_json,
@@ -42,10 +43,17 @@ class _RecordingSession:
     def __init__(self, responses: list[_StubResponse]):
         self._responses = list(responses)
         self.calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.post_calls: list[tuple[str, dict[str, Any] | None]] = []
         self.headers: dict[str, str] = {}
 
     def get(self, url: str, *, params: dict[str, Any] | None = None, timeout: float = 0) -> _StubResponse:
         self.calls.append((url, dict(params) if params is not None else None))
+        if not self._responses:
+            raise AssertionError("no scripted responses left")
+        return self._responses.pop(0)
+
+    def post(self, url: str, *, json: dict[str, Any] | None = None, timeout: float = 0) -> _StubResponse:
+        self.post_calls.append((url, dict(json) if json is not None else None))
         if not self._responses:
             raise AssertionError("no scripted responses left")
         return self._responses.pop(0)
@@ -366,6 +374,209 @@ def test_argument_parser_accepts_short_v_flag() -> None:
     assert args.verbose is True
     args_default = parser.parse_args(["--from", "2025-01-01", "--to", "2025-12-31"])
     assert args_default.verbose is False
+
+
+def _graphql_response(*, total: int, nodes: list[dict[str, int]], next_cursor: str | None = None) -> _StubResponse:
+    return _StubResponse(
+        200,
+        {
+            "data": {
+                "search": {
+                    "issueCount": total,
+                    "pageInfo": {
+                        "hasNextPage": bool(next_cursor),
+                        "endCursor": next_cursor,
+                    },
+                    "nodes": nodes,
+                }
+            }
+        },
+    )
+
+
+def test_loc_for_window_sums_additions_and_deletions_across_pages() -> None:
+    responses = [
+        _graphql_response(
+            total=3,
+            nodes=[
+                {"additions": 100, "deletions": 30},
+                {"additions": 50, "deletions": 20},
+            ],
+            next_cursor="abc",
+        ),
+        _graphql_response(
+            total=3,
+            nodes=[
+                {"additions": 7, "deletions": 1},
+            ],
+        ),
+    ]
+    client, session, _sleeps = _make_client(responses)
+    window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
+
+    additions, deletions, total = loc_for_window(client, "onfleet", window)
+
+    assert (additions, deletions, total) == (157, 51, 3)
+    # GraphQL POSTs only — no REST GETs from this path.
+    assert len(session.post_calls) == 2
+    assert len(session.calls) == 0
+    first_payload = session.post_calls[0][1]
+    assert first_payload is not None
+    assert "query" in first_payload and "search" in first_payload["query"]
+    assert first_payload["variables"]["q"] == "org:onfleet is:pr is:merged merged:2025-04-01..2025-04-30"
+    assert first_payload["variables"]["cursor"] is None
+    # Second page passes the cursor returned by the first.
+    assert session.post_calls[1][1]["variables"]["cursor"] == "abc"
+
+
+def test_loc_for_window_halves_window_when_total_exceeds_search_cap() -> None:
+    responses = [
+        _graphql_response(total=1500, nodes=[]),  # head -> too big -> split
+        _graphql_response(  # left half
+            total=700,
+            nodes=[{"additions": 200, "deletions": 80}],
+        ),
+        _graphql_response(  # right half
+            total=800,
+            nodes=[{"additions": 300, "deletions": 50}],
+        ),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
+
+    additions, deletions, total = loc_for_window(client, "onfleet", window)
+
+    assert additions == 500
+    assert deletions == 130
+    assert total == 1500
+
+
+def test_collect_report_in_loc_mode_attaches_additions_and_deletions() -> None:
+    responses = [
+        # Apr: count head, then graphql
+        _StubResponse(200, {"total_count": 2}),
+        _graphql_response(total=2, nodes=[{"additions": 100, "deletions": 30}, {"additions": 50, "deletions": 20}]),
+        # May: count head, then graphql
+        _StubResponse(200, {"total_count": 1}),
+        _graphql_response(total=1, nodes=[{"additions": 9, "deletions": 4}]),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+
+    report = collect_report(
+        client,
+        "onfleet",
+        date(2025, 4, 1),
+        date(2025, 5, 31),
+        loc=True,
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+
+    assert [row.merged_prs for row in report.rows] == [2, 1]
+    assert [row.additions for row in report.rows] == [150, 9]
+    assert [row.deletions for row in report.rows] == [50, 4]
+    assert report.total == 3
+    assert report.total_additions == 159
+    assert report.total_deletions == 54
+    assert report.has_loc is True
+
+
+def test_render_table_in_loc_mode_includes_additions_and_deletions_columns() -> None:
+    responses = [
+        _StubResponse(200, {"total_count": 2}),
+        _graphql_response(total=2, nodes=[{"additions": 100, "deletions": 30}, {"additions": 50, "deletions": 20}]),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    report = collect_report(
+        client,
+        "onfleet",
+        date(2025, 4, 1),
+        date(2025, 4, 30),
+        loc=True,
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+    rendered = render_table(report)
+    header_line = [line for line in rendered.splitlines() if "merged_prs" in line][0]
+    assert "additions" in header_line
+    assert "deletions" in header_line
+    apr_row = [line for line in rendered.splitlines() if line.startswith("2025-04")][0]
+    cells = apr_row.split()
+    assert cells[0] == "2025-04"
+    assert cells[1] == "2"
+    assert cells[2] == "150"
+    assert cells[3] == "50"
+    total_row = [line for line in rendered.splitlines() if line.startswith("TOTAL")][0]
+    assert total_row.split() == ["TOTAL", "2", "150", "50"]
+
+
+def test_render_json_in_loc_mode_includes_additions_deletions_and_totals() -> None:
+    responses = [
+        _StubResponse(200, {"total_count": 2}),
+        _graphql_response(total=2, nodes=[{"additions": 100, "deletions": 30}, {"additions": 50, "deletions": 20}]),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    report = collect_report(
+        client,
+        "onfleet",
+        date(2025, 4, 1),
+        date(2025, 4, 30),
+        loc=True,
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+    payload = json.loads(render_json(report))
+    assert payload["rows"][0]["additions"] == 150
+    assert payload["rows"][0]["deletions"] == 50
+    assert payload["total_additions"] == 150
+    assert payload["total_deletions"] == 50
+
+
+def test_render_csv_in_loc_mode_emits_extra_columns() -> None:
+    responses = [
+        _StubResponse(200, {"total_count": 2}),
+        _graphql_response(total=2, nodes=[{"additions": 100, "deletions": 30}, {"additions": 50, "deletions": 20}]),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    report = collect_report(
+        client,
+        "onfleet",
+        date(2025, 4, 1),
+        date(2025, 4, 30),
+        loc=True,
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+    rendered = render_csv(report)
+    lines = rendered.splitlines()
+    assert lines[0] == "month,window_start,window_end,merged_prs,additions,deletions"
+    assert lines[1] == "2025-04,2025-04-01,2025-04-30,2,150,50"
+    assert lines[-1] == "TOTAL,,,2,150,50"
+
+
+def test_loc_for_window_retries_when_graphql_returns_200_with_rate_limit_error() -> None:
+    rate_limited = _StubResponse(
+        200,
+        {"errors": [{"message": "API rate limit exceeded for user"}]},
+        headers={"Retry-After": "1"},
+    )
+    success = _graphql_response(total=1, nodes=[{"additions": 5, "deletions": 2}])
+    client, _session, sleeps = _make_client([rate_limited, success])
+    window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
+
+    additions, deletions, total = loc_for_window(client, "onfleet", window)
+
+    assert (additions, deletions, total) == (5, 2, 1)
+    assert sleeps == [1.0]
+    assert len(client.rate_limit_events) == 1
+
+
+def test_argument_parser_accepts_short_l_flag() -> None:
+    parser = build_argument_parser()
+    args = parser.parse_args(["--from", "2025-01-01", "--to", "2025-12-31", "-l"])
+    assert args.loc is True
+    args_default = parser.parse_args(["--from", "2025-01-01", "--to", "2025-12-31"])
+    assert args_default.loc is False
 
 
 def test_month_windows_sanity_check_for_year_boundaries() -> None:
