@@ -1,0 +1,32 @@
+tests/unit/git_metrics/test_org_merged_prs_per_month.py
+  s_d308aad07a89b4::t_d25cf137e71234 173-176
+  s_d308aad07a89b4::t_12f8c22b53e3e7 15
+  s_d308aad07a89b4::t_85f0e14433c2b3 1-14,16-172,177-213,371-378
+  s_d308aad07a89b4::t_6e8aaef3123f47 214-241,244,246,248,250,252-255,257,263-370
+  s_d308aad07a89b4::t_dad1c0028bf4ea 242-243,245,247,249,251,256,258-262
+git_metrics/org_merged_prs_per_month.py
+  s_d308aad07a89b4::t_a82a9aa377c806 28
+  s_d308aad07a89b4::t_6cce83316484d0 29,42-43,52
+  s_d308aad07a89b4::t_0a43cb2fc63092 248-264,271-276,287-297,302,312-325
+  s_d308aad07a89b4::t_f7de9ff89f3b95 355
+  s_d308aad07a89b4::t_87695766f05bbb 107-112
+  s_d308aad07a89b4::t_2d12ef653e41ba 167
+  s_d308aad07a89b4::t_8b47ca99441c18 117-120,128-131,133-166,168-194,203,215-219,226
+  s_d308aad07a89b4::t_f893382654d258 1-27,30-41,44-51,53-106,113-116,121-127,132,195-202,204-214,220-225,227-247,265-270,277-286,298-301,303-311,326-354,356-363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "ece7572e2c973d07f7675d96dcb9dc44e28e15db",
+  "prompts": {},
+  "sessions": {
+    "s_d308aad07a89b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "489fafc4-b5f1-4026-a325-49d98b408350",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
