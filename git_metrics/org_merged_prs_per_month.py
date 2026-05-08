@@ -119,9 +119,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
         epilog=(
             "examples:\n"
             "  python3 -m git_metrics.org_merged_prs_per_month "
-            "--owner onfleet --from 2025-01-01 --to 2026-04-30\n"
+            "--owner KjellKod --from 2025-01-01 --to 2026-04-30\n"
             "  python3 -m git_metrics.org_merged_prs_per_month "
-            "--owner onfleet --from 2025-01-01 --to 2026-04-30 --verbose --loc\n\n"
+            "--owner KjellKod --from 2025-01-01 --to 2026-04-30 --verbose --loc\n\n"
             "module form matters: put git_metrics.org_merged_prs_per_month immediately after -m, "
             "then pass CLI flags. Use -v or --verbose, not --v."
         ),

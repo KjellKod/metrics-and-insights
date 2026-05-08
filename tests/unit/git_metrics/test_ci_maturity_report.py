@@ -346,7 +346,7 @@ def test_latest_commit_date_returns_default_branch_commit_day() -> None:
         }
     )
 
-    assert client.latest_commit_date("onfleet", "terraform", "main") == "2026-04-29"
+    assert client.latest_commit_date("KjellKod", "terraform", "main") == "2026-04-29"
 
 
 def test_format_responsible_people_includes_public_name_when_available() -> None:

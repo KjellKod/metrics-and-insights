@@ -74,14 +74,14 @@ def test_count_merged_prs_for_window_builds_search_query_and_extracts_total_coun
     client, session, _sleeps = _make_client([_StubResponse(200, {"total_count": 142, "incomplete_results": False})])
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    count = count_merged_prs_for_window(client, "onfleet", window)
+    count = count_merged_prs_for_window(client, "KjellKod", window)
 
     assert count == 142
     assert len(session.calls) == 1
     url, params = session.calls[0]
     assert url == "https://api.github.com/search/issues"
     assert params == {
-        "q": "org:onfleet is:pr is:merged merged:2025-05-01..2025-05-31",
+        "q": "org:KjellKod is:pr is:merged merged:2025-05-01..2025-05-31",
         "per_page": 1,
     }
 
@@ -90,7 +90,7 @@ def test_count_merged_prs_handles_missing_total_count_as_zero() -> None:
     client, _session, _sleeps = _make_client([_StubResponse(200, {"incomplete_results": False})])
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    assert count_merged_prs_for_window(client, "onfleet", window) == 0
+    assert count_merged_prs_for_window(client, "KjellKod", window) == 0
 
 
 def test_collect_report_iterates_month_windows_and_paces_requests() -> None:
@@ -103,7 +103,7 @@ def test_collect_report_iterates_month_windows_and_paces_requests() -> None:
 
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 3, 15),
         date(2025, 5, 8),
         sleep_fn=sleeps.append,
@@ -121,15 +121,15 @@ def test_collect_report_iterates_month_windows_and_paces_requests() -> None:
     # Each call hits search/issues with the right per-window query string.
     assert all(call[0] == "https://api.github.com/search/issues" for call in session.calls)
     assert session.calls[0][1] == {
-        "q": "org:onfleet is:pr is:merged merged:2025-03-15..2025-03-31",
+        "q": "org:KjellKod is:pr is:merged merged:2025-03-15..2025-03-31",
         "per_page": 1,
     }
     assert session.calls[1][1] == {
-        "q": "org:onfleet is:pr is:merged merged:2025-04-01..2025-04-30",
+        "q": "org:KjellKod is:pr is:merged merged:2025-04-01..2025-04-30",
         "per_page": 1,
     }
     assert session.calls[2][1] == {
-        "q": "org:onfleet is:pr is:merged merged:2025-05-01..2025-05-08",
+        "q": "org:KjellKod is:pr is:merged merged:2025-05-01..2025-05-08",
         "per_page": 1,
     }
 
@@ -145,7 +145,7 @@ def test_collect_report_retries_after_secondary_rate_limit() -> None:
     client, _session, sleeps = _make_client(responses)
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    count = count_merged_prs_for_window(client, "onfleet", window)
+    count = count_merged_prs_for_window(client, "KjellKod", window)
 
     assert count == 7
     assert sleeps == [1.0]
@@ -156,7 +156,7 @@ def test_collect_report_retries_after_secondary_rate_limit() -> None:
 def test_collect_report_rejects_inverted_range() -> None:
     client, _session, _sleeps = _make_client([])
     with pytest.raises(ValueError):
-        collect_report(client, "onfleet", date(2025, 6, 1), date(2025, 5, 1), sleep_fn=lambda _s: None)
+        collect_report(client, "KjellKod", date(2025, 6, 1), date(2025, 5, 1), sleep_fn=lambda _s: None)
 
 
 def test_collect_report_rejects_future_end_date() -> None:
@@ -164,7 +164,7 @@ def test_collect_report_rejects_future_end_date() -> None:
     with pytest.raises(ValueError, match="future"):
         collect_report(
             client,
-            "onfleet",
+            "KjellKod",
             date(2026, 5, 1),
             date(2026, 6, 1),
             today=date(2026, 5, 8),
@@ -186,13 +186,13 @@ def _make_collect_inputs():
         _StubResponse(200, {"total_count": 250}),
     ]
     client, _session, _sleeps = _make_client(responses)
-    return client, "onfleet", date(2025, 4, 1), date(2025, 5, 31)
+    return client, "KjellKod", date(2025, 4, 1), date(2025, 5, 31)
 
 
 def test_render_table_shows_per_month_rows_and_total() -> None:
     report = _sample_report()
     rendered = render_table(report)
-    assert "Org: onfleet" in rendered
+    assert "Org: KjellKod" in rendered
     assert "Window: 2025-04-01 .. 2025-05-31" in rendered
     lines = {line.split()[0]: line for line in rendered.splitlines() if line and line.split()}
     assert lines["2025-04"].split() == ["2025-04", "100"]
@@ -203,7 +203,7 @@ def test_render_table_shows_per_month_rows_and_total() -> None:
 def test_render_json_serializes_full_payload() -> None:
     report = _sample_report()
     payload = json.loads(render_json(report))
-    assert payload["owner"] == "onfleet"
+    assert payload["owner"] == "KjellKod"
     assert payload["from"] == "2025-04-01"
     assert payload["to"] == "2025-05-31"
     assert payload["total"] == 350
@@ -236,7 +236,7 @@ def test_argument_parser_requires_from_and_to_and_defaults_format_to_table() -> 
 
 
 def _items_payload(repos: list[str], total: int | None = None) -> dict[str, Any]:
-    items = [{"repository_url": f"https://api.github.com/repos/onfleet/{name}"} for name in repos]
+    items = [{"repository_url": f"https://api.github.com/repos/KjellKod/{name}"} for name in repos]
     return {"total_count": total if total is not None else len(repos), "items": items}
 
 
@@ -251,7 +251,7 @@ def test_per_repo_counts_paginates_and_aggregates_by_repo() -> None:
     client, session, _sleeps = _make_client(responses)
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    counts, total = per_repo_counts_for_window(client, "onfleet", window)
+    counts, total = per_repo_counts_for_window(client, "KjellKod", window)
 
     assert total == 108
     assert counts == {"api": 65, "web": 40, "docs": 3}
@@ -272,7 +272,7 @@ def test_per_repo_counts_stops_at_page_10_when_total_equals_search_cap() -> None
     client, session, _sleeps = _make_client(responses)
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    counts, total = per_repo_counts_for_window(client, "onfleet", window)
+    counts, total = per_repo_counts_for_window(client, "KjellKod", window)
 
     assert total == 1000
     assert counts == {"api": 1000}
@@ -295,7 +295,7 @@ def test_per_repo_counts_halves_window_when_total_exceeds_search_cap() -> None:
     client, session, _sleeps = _make_client(responses)
     window = MonthWindow(label="2025-05", start=date(2025, 5, 1), end=date(2025, 5, 31))
 
-    counts, total = per_repo_counts_for_window(client, "onfleet", window)
+    counts, total = per_repo_counts_for_window(client, "KjellKod", window)
 
     # Total preserved from per-half head probes.
     assert total == 700 + 800
@@ -319,7 +319,7 @@ def test_collect_report_in_verbose_mode_attaches_per_repo_counts() -> None:
 
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 5, 31),
         verbose=True,
@@ -341,7 +341,7 @@ def test_render_table_in_verbose_mode_shows_per_repo_block_above_totals() -> Non
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         verbose=True,
@@ -350,7 +350,7 @@ def test_render_table_in_verbose_mode_shows_per_repo_block_above_totals() -> Non
     )
     rendered = render_table(report)
     breakdown_index = rendered.find("Per-repo merged PRs")
-    totals_header_index = rendered.find("Org: onfleet")
+    totals_header_index = rendered.find("Org: KjellKod")
     assert breakdown_index != -1
     assert totals_header_index != -1
     assert breakdown_index < totals_header_index
@@ -369,7 +369,7 @@ def test_render_json_in_verbose_mode_includes_per_repo_object() -> None:
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         verbose=True,
@@ -388,7 +388,7 @@ def test_render_csv_in_verbose_mode_emits_per_repo_rows() -> None:
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         verbose=True,
@@ -450,7 +450,7 @@ def test_loc_for_window_sums_additions_and_deletions_across_pages() -> None:
     client, session, _sleeps = _make_client(responses)
     window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
 
-    additions, deletions, total = loc_for_window(client, "onfleet", window)
+    additions, deletions, total = loc_for_window(client, "KjellKod", window)
 
     assert (additions, deletions, total) == (157, 51, 3)
     # GraphQL POSTs only — no REST GETs from this path.
@@ -459,7 +459,7 @@ def test_loc_for_window_sums_additions_and_deletions_across_pages() -> None:
     first_payload = session.post_calls[0][1]
     assert first_payload is not None
     assert "query" in first_payload and "search" in first_payload["query"]
-    assert first_payload["variables"]["q"] == "org:onfleet is:pr is:merged merged:2025-04-01..2025-04-30"
+    assert first_payload["variables"]["q"] == "org:KjellKod is:pr is:merged merged:2025-04-01..2025-04-30"
     assert first_payload["variables"]["cursor"] is None
     # Second page passes the cursor returned by the first.
     assert session.post_calls[1][1]["variables"]["cursor"] == "abc"
@@ -480,7 +480,7 @@ def test_loc_for_window_halves_window_when_total_exceeds_search_cap() -> None:
     client, _session, _sleeps = _make_client(responses)
     window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
 
-    additions, deletions, total = loc_for_window(client, "onfleet", window)
+    additions, deletions, total = loc_for_window(client, "KjellKod", window)
 
     assert additions == 500
     assert deletions == 130
@@ -500,7 +500,7 @@ def test_collect_report_in_loc_mode_attaches_additions_and_deletions() -> None:
 
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 5, 31),
         loc=True,
@@ -525,7 +525,7 @@ def test_render_table_in_loc_mode_includes_additions_and_deletions_columns() -> 
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         loc=True,
@@ -554,7 +554,7 @@ def test_render_json_in_loc_mode_includes_additions_deletions_and_totals() -> No
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         loc=True,
@@ -576,7 +576,7 @@ def test_render_csv_in_loc_mode_emits_extra_columns() -> None:
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         loc=True,
@@ -600,7 +600,7 @@ def test_loc_for_window_retries_when_graphql_returns_200_with_rate_limit_error()
     client, _session, sleeps = _make_client([rate_limited, success])
     window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
 
-    additions, deletions, total = loc_for_window(client, "onfleet", window)
+    additions, deletions, total = loc_for_window(client, "KjellKod", window)
 
     assert (additions, deletions, total) == (5, 2, 1)
     assert sleeps == [1.0]
@@ -625,7 +625,7 @@ def test_render_csv_in_verbose_plus_loc_mode_includes_per_repo_and_loc_columns()
     client, _session, _sleeps = _make_client(responses)
     report = collect_report(
         client,
-        "onfleet",
+        "KjellKod",
         date(2025, 4, 1),
         date(2025, 4, 30),
         verbose=True,
