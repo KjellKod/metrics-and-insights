@@ -122,7 +122,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--owner",
         default=argparse.SUPPRESS,
-        help=f"GitHub organization or user. Defaults to ${ENV_OWNER_KEY}.",
+        help=(
+            "GitHub organization login. Searches are org-scoped (org:<owner>); "
+            f"user accounts are not supported. Defaults to ${ENV_OWNER_KEY}."
+        ),
     )
     parser.add_argument(
         "--token-env",
@@ -332,11 +335,18 @@ def collect_report(
     *,
     verbose: bool = False,
     loc: bool = False,
+    today: date | None = None,
     sleep_fn: Any = time.sleep,
     pause_seconds: float = INTER_REQUEST_PAUSE_SECONDS,
 ) -> MergedPrReport:
     if range_end < range_start:
         raise ValueError("--to must be on or after --from")
+    today_value = today if today is not None else datetime.now().date()
+    if range_end > today_value:
+        raise ValueError(
+            f"--to ({range_end.isoformat()}) is in the future (today is {today_value.isoformat()}); "
+            "future months would emit misleading zero-data rows"
+        )
 
     rows: list[MonthlyMergedCount] = []
     windows = month_windows(range_start, range_end)
@@ -466,7 +476,17 @@ def render_csv(report: MergedPrReport) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     has_per_repo = any(row.per_repo is not None for row in report.rows)
-    if has_per_repo:
+    if has_per_repo and report.has_loc:
+        writer.writerow(["month", "repo", "merged_prs", "additions", "deletions"])
+        for row in report.rows:
+            if row.per_repo is None:
+                continue
+            for repo, count in sorted(row.per_repo.items(), key=lambda kv: (-kv[1], kv[0])):
+                # Per-repo LOC is not collected in this revision; leave additions/deletions blank.
+                writer.writerow([row.month, repo, count, "", ""])
+            writer.writerow([row.month, "(month total)", row.merged_prs, row.additions or 0, row.deletions or 0])
+        writer.writerow(["TOTAL", "", report.total, report.total_additions, report.total_deletions])
+    elif has_per_repo:
         writer.writerow(["month", "repo", "merged_prs"])
         for row in report.rows:
             if row.per_repo is None:

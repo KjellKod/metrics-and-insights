@@ -156,6 +156,19 @@ def test_collect_report_rejects_inverted_range() -> None:
         collect_report(client, "onfleet", date(2025, 6, 1), date(2025, 5, 1), sleep_fn=lambda _s: None)
 
 
+def test_collect_report_rejects_future_end_date() -> None:
+    client, _session, _sleeps = _make_client([])
+    with pytest.raises(ValueError, match="future"):
+        collect_report(
+            client,
+            "onfleet",
+            date(2026, 5, 1),
+            date(2026, 6, 1),
+            today=date(2026, 5, 8),
+            sleep_fn=lambda _s: None,
+        )
+
+
 def _sample_report():
     return collect_report(
         *_make_collect_inputs(),
@@ -569,6 +582,43 @@ def test_loc_for_window_retries_when_graphql_returns_200_with_rate_limit_error()
     assert (additions, deletions, total) == (5, 2, 1)
     assert sleeps == [1.0]
     assert len(client.rate_limit_events) == 1
+
+
+def test_render_csv_in_verbose_plus_loc_mode_includes_per_repo_and_loc_columns() -> None:
+    responses = [
+        # Verbose path: head + page-1 with 3 items
+        _StubResponse(200, {"total_count": 3, "items": []}),
+        _StubResponse(200, _items_payload(["api", "api", "web"], total=3)),
+        # LOC path: GraphQL with 3 PRs
+        _graphql_response(
+            total=3,
+            nodes=[
+                {"additions": 100, "deletions": 30},
+                {"additions": 50, "deletions": 20},
+                {"additions": 7, "deletions": 1},
+            ],
+        ),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    report = collect_report(
+        client,
+        "onfleet",
+        date(2025, 4, 1),
+        date(2025, 4, 30),
+        verbose=True,
+        loc=True,
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+    rendered = render_csv(report)
+    lines = rendered.splitlines()
+    assert lines[0] == "month,repo,merged_prs,additions,deletions"
+    # Per-repo rows leave additions/deletions blank (per-repo LOC not collected in v1).
+    assert lines[1] == "2025-04,api,2,,"
+    assert lines[2] == "2025-04,web,1,,"
+    # Per-month total carries the LOC totals.
+    assert lines[3] == "2025-04,(month total),3,157,51"
+    assert lines[-1] == "TOTAL,,3,157,51"
 
 
 def test_argument_parser_accepts_short_l_flag() -> None:
