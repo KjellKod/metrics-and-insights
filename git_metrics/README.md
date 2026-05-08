@@ -122,6 +122,45 @@ When cached repository results are reused, table and CSV runs print a reminder t
 Table and CSV output include likely responsible people based on recent distinct merged PR authors, with public profile names when available.
 JSON output includes per-repo scores, grade labels, responsible people, category evidence, skipped repositories, and rate-limit wait metadata.
 
+### org_merged_prs_per_month.py
+Counts merged PRs per month across an entire GitHub organization. Count-only mode uses GitHub Search `total_count`, so each month is one REST call. Optional modes can add per-repo counts and total additions/deletions for each month.
+
+```bash
+python3 -m git_metrics.org_merged_prs_per_month \
+  --owner example-org \
+  --from 2025-01-01 \
+  --to 2026-04-30
+```
+
+Verbose per-repo breakdown plus monthly LOC totals:
+
+```bash
+python3 -m git_metrics.org_merged_prs_per_month \
+  --owner example-org \
+  --from 2025-01-01 \
+  --to 2026-04-30 \
+  --verbose \
+  --loc
+```
+
+Options:
+- `--owner OWNER` GitHub organization login (falls back to `GITHUB_METRIC_OWNER_OR_ORGANIZATION`). Searches are org-scoped with `org:<owner>`; user accounts are not supported.
+- `--from YYYY-MM-DD` Inclusive start date.
+- `--to YYYY-MM-DD` Inclusive end date. Future dates are rejected to avoid misleading zero-data rows.
+- `--token-env ENV` Environment variable containing a GitHub token (default: `GITHUB_TOKEN_READONLY_WEB`).
+- `--format table|json|csv` Output format (default: `table`).
+- `-v, --verbose` Include per-repo merged PR counts for each month.
+- `-l, --loc` Include total additions and deletions for each month.
+- `--debug` Enable debug logging.
+
+Help and invocation notes:
+- Run `python3 -m git_metrics.org_merged_prs_per_month --help` from the repository root for full examples.
+- Direct script-path help also works: `python3 git_metrics/org_merged_prs_per_month.py --help`.
+- When using Python module mode, put the module name immediately after `-m`, then pass CLI flags: `python3 -m git_metrics.org_merged_prs_per_month --owner example-org ...`.
+- Use `-v` or `--verbose`; `--v` is not a valid flag.
+
+When GitHub Search returns more than 1000 results for a window, verbose and LOC modes recursively split the date range so counts stay attributable. Counts are token-scoped, so a token without private-repo access will under-report private repositories.
+
 ### active_devs_one_off.py
 One-time script to identify and analyze active developers in the repository.
 
