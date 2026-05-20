@@ -9,7 +9,7 @@ defusedxml==0.7.1
 dill==0.3.9
 gql==3.5.2
 graphql-core==3.2.4
-idna==3.7
+idna==3.15
 iniconfig==2.0.0
 isort==5.13.2
 jira==3.8.0
