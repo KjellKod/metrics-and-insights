@@ -15,6 +15,19 @@ Quest is opinionated: default to **thorough**, but be **progressive** and avoid 
 - **Timebox structure discovery:** Avoid full repo inventories. Do a quick top-level scan + targeted `rg` searches instead of browsing directory-by-directory.
 - **If the user wants speed:** Offer to proceed with minimal questions + explicit assumptions (fast intake).
 
+<!-- Heading text below drives four anchor references in this file (#ui-work-propagation-cross-cutting--applies-to-every-phase). If you rename, update the cross-references too. -->
+
+### UI Work Propagation (cross-cutting — applies to every phase)
+
+When the brief's router classification has `ui_work: true`, the dispatched agent auto-loads `.skills/ux-context/SKILL.md` (planner / builder / fixer) or `.skills/ux-review/SKILL.md` (plan-reviewer / code-reviewer). **The orchestrator does not inject UX skills; the agent role files enforce this directly from the brief.** The orchestrator's only job is to preserve the full router JSON in `.quest/<id>/quest_brief.md` so each agent can read it.
+
+When `ui_work_evidence` is non-empty, the named files are the primary surface for planning and review. When empty, the planner uses the inference table at `.skills/ux-context/resources/ux-guidebook.md §4.9`; reviewers run the UX pass against the full diff.
+
+Phase-specific notes (just pointers — the propagation rule itself does not vary):
+- Plan phase: plan-reviewer embeds UX findings inline in markdown using `[N]` format; arbiter synthesizes findings from the markdown.
+- Code review phase: code-reviewer writes canonical findings JSON with `kind: "ux"` and `principle_id`.
+- Fix phase: fixer cites `ux-guidebook§<n>` in commit messages for UX-resolved findings.
+
 ### Codex Availability Probe (Run Once Per Session — Applies to ALL Codex MCP calls)
 
 Tool naming is platform-specific (depends on the MCP server name in config):
@@ -237,7 +250,7 @@ This log is how we measure whether the handoff.json pattern is working. It is di
 
 ### Step 0: Resume Check
 
-If the user provides a quest ID (matches pattern `*_YYYY-MM-DD__HHMM`):
+If the user provides a quest ID matching either supported Quest ID format (`<slug>_YYYY-MM-DD__HHMM` or `YYYY-MM-DD_HHMM__<slug>`):
 
 1. Check if `.quest/<id>/state.json` exists
 2. If yes, read it and resume from the recorded phase
@@ -312,7 +325,7 @@ gates.max_plan_iterations (default: 4)
    - If matches exist, surface: `N deferred findings touch this code -- pull into scope?`
 
 2. **Invoke Planner** (default Codex `mcp__codex__codex`, Claude runtime fallback):
-   - Read `models.planner` from allowlist.
+   - Read `models.planner` from `.quest/<id>/orchestration.json`.
    - If planner model is Codex, invoke via `mcp__codex__codex` with `sandbox_permissions: "workspace-write"`.
    - If planner model is Claude, invoke through Claude runtime (native `Task(...)` when available, bridge in Codex-led sessions).
    - **Artifact preparation** (per Handoff File Polling §5): Resolve and prepare `plan.md` and `handoff.json` in `.quest/<id>/phase_01_plan/`.
@@ -346,7 +359,7 @@ gates.max_plan_iterations (default: 4)
 
    **If `quest_mode == "workflow"` (default):** Invoke BOTH Plan Reviewers IN PARALLEL.
 
-   Read `models.plan-reviewer-a` and `models.plan-reviewer-b` from allowlist to determine runtime for each slot. If model is Claude, use Claude runtime; if Codex, use `mcp__codex__codex`.
+   Read `models.plan-reviewer-a` and `models.plan-reviewer-b` from `.quest/<id>/orchestration.json` to determine runtime for each slot. If model is Claude, use Claude runtime; if Codex, use `mcp__codex__codex`.
 
    Two different models review independently for model diversity:
    - **Reviewer A**: dispatched by orchestrator → `.quest/<id>/phase_01_plan/review_plan-reviewer-a.md`
@@ -354,7 +367,7 @@ gates.max_plan_iterations (default: 4)
 
    **Artifact preparation** (per Handoff File Polling §5): Before issuing reviewer calls, resolve and prepare artifacts for both Reviewer A (`review_plan-reviewer-a.md`, `handoff_plan-reviewer-a.json`) and Reviewer B (`review_plan-reviewer-b.md`, `handoff_plan-reviewer-b.json`) in `.quest/<id>/phase_01_plan/`.
 
-   **Slot A** (runtime per `models.plan-reviewer-a`; full and fast modes):
+   **Slot A** (runtime per `models.plan-reviewer-a` from `.quest/<id>/orchestration.json`; full and fast modes):
    **Full mode** (default for plan review):
    ```
    Task(
@@ -404,7 +417,7 @@ gates.max_plan_iterations (default: 4)
    **Full mode** (default for plan review):
    ```
    mcp__codex__codex(
-     model: <models.plan-reviewer-b from allowlist>,
+     model: <models.plan-reviewer-b from .quest/<id>/orchestration.json>,
      sandbox_permissions: "workspace-write",
      prompt: "You are Plan Reviewer B.
      Non-interactive rule: do not ask questions and do not return STATUS: needs_human. If details are missing, make explicit assumptions and continue.
@@ -428,7 +441,7 @@ gates.max_plan_iterations (default: 4)
    **Fast mode** (only if `review_mode: fast`):
    ```
    mcp__codex__codex(
-     model: <models.plan-reviewer-b from allowlist>,
+     model: <models.plan-reviewer-b from .quest/<id>/orchestration.json>,
      sandbox_permissions: "workspace-write",
      prompt: "You are Plan Reviewer B.
      Non-interactive rule: do not ask questions and do not return STATUS: needs_human. If details are missing, make explicit assumptions and continue.
@@ -475,7 +488,7 @@ gates.max_plan_iterations (default: 4)
    - Do not require `review_backlog.json` for the solo transition path.
    - Log: `Plan review: arbiter=skipped (solo mode, using reviewer-a verdict)` to `.quest/<id>/logs/parallelism.log`
 
-   **If `quest_mode == "workflow"` (default):** Read `models.arbiter` from allowlist. Invoke Arbiter through the corresponding runtime:
+   **If `quest_mode == "workflow"` (default):** Read `models.arbiter` from `.quest/<id>/orchestration.json`. Invoke Arbiter through the corresponding runtime:
    - Contract-hardening rollout order (required when implementing this behavior): land workflow + helper CLI (`build-backlog --phase`) + runtime `.next` artifact wiring first; trim arbiter output contract second. This prevents transient mismatches during migration.
    - Before each arbiter attempt, remove stale scratch artifacts:
      - `.quest/<id>/phase_01_plan/review_findings.json.next`
@@ -546,6 +559,8 @@ gates.max_plan_iterations (default: 4)
      - If `auto_approve_phases.plan_refinement` is false: Ask user to approve refinement
      - Otherwise: Loop back to step 0 (stale handoff/scratch cleanup)
 
+- **UI work:** see [UI Work Propagation](#ui-work-propagation-cross-cutting--applies-to-every-phase) at the top of this file — the rule is uniform across phases.
+
 ### Step 3.5: Interactive Plan Presentation (MANDATORY HUMAN GATE)
 
 After plan approval, present the plan interactively before proceeding to build.
@@ -554,24 +569,69 @@ After plan approval, present the plan interactively before proceeding to build.
 
 **On entry:** Transition state atomically: `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition presenting --status in_progress --expect-phase plan_reviewed` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually.
 
-**1. Show Brief Summary:**
-   Extract a 1-3 sentence summary using this precedence:
-   - **Primary:** Extract from the plan's Overview section (the "Problem" and "Impact" lines)
-   - **Fallback 1:** If no Overview section exists, use the first non-heading paragraph of the plan (skip YAML frontmatter, skip lines starting with `#`)
-   - **Fallback 2:** If no suitable paragraph found, display: "See plan for details:"
+**1. Show Executive Summary:**
+   Extract a five-section executive summary from `.quest/<id>/phase_01_plan/plan.md`. Each section has a precedence chain — pull the first match. Omit any section whose source isn't present. Do NOT fabricate content for a missing section.
 
-   Then display:
-   - "Plan approved! Here's a brief summary:"
-   - The extracted summary (or fallback text)
-   - "Full plan available at: .quest/<id>/phase_01_plan/plan.md"
-   - Arbiter verdict summary (NEXT line only)
-   - Ask: "Would you like to see the detailed phase-by-phase walkthrough? (yes/no)"
+   a. **Problem (1–2 lines)** — pull from `## Overview` → `## Problem` → first non-heading paragraph of the plan (skip YAML frontmatter, skip lines starting with `#`).
+   b. **Approach (2–4 lines)** — pull from `## Approach` → `## Strategy` → `## Solution` → first paragraph of `## Implementation`.
+   c. **Scope (3–6 bullets)** — extract from `## Files`, the phase headers (`### Phase N:` / `## Phase N:` / `**Phase N:**`), or numbered change sections (`### Change N:` / `#### Change N:`). One bullet per file or phase title.
+   d. **Acceptance Criteria (top 3)** — first three items from `## Acceptance Criteria`. If more exist, append `+N more — see plan` as a fourth bullet.
+   e. **Risks / Open Questions (0–3 bullets)** — pull from `## Risks` → `## Open Questions` → `## Tradeoffs`. If no such section exists in the plan, omit this entire heading and append the line `Plan does not document risks — consider sharpening.` immediately after the Acceptance Criteria block.
 
-**2. Handle Response:**
-   - If user declines ("no", "n", "nope", "skip", "proceed", etc.) -> Transition state atomically: `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition presentation_complete --status complete --expect-phase presenting` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually. Then proceed to Step 4 (Build Phase)
-   - If user accepts ("yes", "y", "yeah", "sure", "detailed", etc.) -> Continue to phase extraction
+   Render as:
+   ```
+   ═══ Plan Summary: <quest title or slug> ═══
 
-**3. Extract Phases from Plan:**
+   Problem
+     <text>
+
+   Approach
+     <text>
+
+   Scope
+     • <bullet>
+     • ...
+
+   Acceptance Criteria (top 3)
+     • <ac>
+     • ...
+
+   Risks / Open Questions
+     • <bullet>
+     • ...
+
+   Full plan: .quest/<id>/phase_01_plan/plan.md
+   Verdict: <workflow mode: NEXT line from arbiter handoff; solo mode: Reviewer A next after solo remapping>
+   ═══════════════════════════════════════════
+   ```
+   Target ~150–300 words across the five sections combined. Always print the header bar and the artifact path footer. In workflow mode, print the arbiter NEXT line. In solo mode, print Reviewer A's next value after solo remapping. Always print the closing bar last.
+
+**2. Offer the Plan Presentation Menu:**
+   After the executive summary, ask exactly. Option 2's wording depends on whether the plan actually contains a `## UX Defaults` section (not just the brief's `ui_work` flag — render-layer guards may have suppressed emission on a false-positive). If the plan has the section, use the UX-aware wording; otherwise the generic wording.
+   ```
+   How would you like to proceed?
+     1. Walk me through it phase by phase
+     2. Sharpen the plan with me — I'll challenge assumptions and tradeoffs (Q&A, ~5–10 questions)
+   ```
+   When the plan contains a `## UX Defaults` section, substitute option 2 wording with:
+   ```
+     2. Sharpen UX defaults (mobile, gray ramp, density, ratio, accent, destructive actions) and the plan with me
+   ```
+   Then add option 3:
+   ```
+     3. Looks good, proceed to build
+   ```
+   STOP and wait for the human to respond. Do not assume a default.
+
+**3. Handle Menu Response:**
+   - **Option 1 (walkthrough)** — also matches `walk`, `walkthrough`, `phases`, `detail`, `detailed`, `yes`: Continue to substep 4 (Phase Extraction). After the walkthrough completes (substep 7's last-phase branch), return here and re-show the menu **with option 1 removed** (only options 2 and 3 remain). Repeat handling.
+   - **Option 2 (sharpen)** — also matches `sharpen`, `grill`, `stress`, `challenge`: Invoke the `/sharpen` skill (`.skills/sharpen/SKILL.md`). **When the plan contains a `## UX Defaults` section, pass `ux-defaults` as the argument so sharpen runs its six-question UX interview against the plan; otherwise invoke sharpen against `.quest/<id>/phase_01_plan/plan.md` for a generic sharpen pass.** When sharpen completes, read its structured exit summary (Resolved / Open / Next):
+     - If the **Next** field says `no changes needed` (or equivalent — no revisions listed): Transition state atomically `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition presentation_complete --status complete --expect-phase presenting` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually. Then proceed to Step 4. **Sharpen completion is terminal — do not re-show the menu.**
+     - If the **Next** field lists revisions (e.g. `re-plan with these revisions: …`): Jump to substep 8 (Change Handling) using the **sharpen entry path**. Substep 8(a) is skipped; substep 8(b) writes the sharpen-format block to user_feedback.md.
+   - **Option 3 (proceed)** — also matches `proceed`, `build`, `looks good`, `ship it`, `no`, `n`, `skip`: Transition state atomically `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition presentation_complete --status complete --expect-phase presenting` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually. Then proceed to Step 4 (Build Phase).
+   - **Unrecognized response:** Re-ask the menu once. If still unrecognized, treat as Option 3.
+
+**4. Extract Phases from Plan:**
    Parse plan.md to identify phases using these patterns (in order of precedence):
 
    a. **Explicit phase headers** - Look for:
@@ -591,7 +651,7 @@ After plan approval, present the plan interactively before proceeding to build.
       - Treat entire Implementation section as a single phase
       - Display with title "Implementation Overview"
 
-**4. Extract Per-Phase Acceptance Criteria:**
+**5. Extract Per-Phase Acceptance Criteria:**
    For each identified phase, extract acceptance criteria using these patterns:
 
    a. **Per-phase AC subheading** - Look within each phase section for:
@@ -606,39 +666,57 @@ After plan approval, present the plan interactively before proceeding to build.
       - Display global acceptance criteria from the plan's main `## Acceptance Criteria` section
       - Prefix with: "This phase contributes to the following acceptance criteria:"
 
-**5. Present Each Phase:**
+**6. Present Each Phase:**
    For each phase:
    a. Display phase title (e.g., "Phase 1: Add Presentation Logic")
    b. Display phase description/goal (first paragraph of phase section)
    c. Display key implementation details:
       - Files to change (look for file paths or "Files:" subsection)
       - Functions to add/modify (look for function names or "Key Functions:" subsection)
-   d. Display acceptance criteria for this phase (from step 4)
+   d. Display acceptance criteria for this phase (from substep 5)
    e. Ask: "Questions about this phase? Or changes you'd like to request? (continue/question/change)"
 
-**6. Handle Phase Response:**
-   - If "continue" (or "c", "next", "ok", "looks good", etc.) -> Move to next phase, or if last phase: Transition state atomically: `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition presentation_complete --status complete --expect-phase presenting` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually. Then proceed to Step 4
+**7. Handle Phase Response:**
+   - If "continue" (or "c", "next", "ok", "looks good", etc.) -> Move to next phase, or if last phase: walkthrough is complete — return to substep 2 (the menu) **with option 1 (walkthrough) removed** (only options 2 and 3 remain). Re-render the executive summary header is NOT required; jump straight to the reduced menu.
    - If "question" (or "q", "?", user asks a question directly) -> Answer the question using plan context, then re-ask: "Any other questions, or ready to continue? (continue/question/change)"
-   - If "change" (or "modify", "revise", "update", user requests a change directly) -> Proceed to Change Handling
+   - If "change" (or "modify", "revise", "update", user requests a change directly) -> Proceed to substep 8 (Change Handling) via the walkthrough entry path.
 
-**7. Change Handling:**
-   When user requests changes:
-   a. Prompt user: "Please describe the changes you'd like:"
-   b. Record the user's response
-   c. Create or append to `.quest/<id>/phase_01_plan/user_feedback.md`:
-      ```
-      ## Change Request (Iteration <plan_iteration + 1>)
-      Date: <timestamp>
-      Phase: <current phase number or "General">
-      Request: <user's change request verbatim>
-      ```
-   d. **Update state:** `phase: plan`, `status: in_progress`
-   e. Display: "Re-running plan with your feedback..."
-   f. Return to Step 3, item 1:
-      - Planner will be invoked with user_feedback.md referenced (per Step 3, item 2 -- Planner invocation above)
+**8. Change Handling:**
+   This substep has two entry paths:
+   - **Walkthrough entry** (from substep 7's "change" branch): the user describes changes interactively.
+   - **Sharpen entry** (from substep 3's option 2 when sharpen surfaced revisions): the structured sharpen output is the change request.
+
+   Steps:
+   a. (Walkthrough entry only) Prompt the user: "Please describe the changes you'd like:" and record their response verbatim.
+   b. Append to `.quest/<id>/phase_01_plan/user_feedback.md`:
+      - **Walkthrough format:**
+        ```
+        ## Change Request (Iteration <plan_iteration + 1>)
+        Date: <timestamp>
+        Phase: <current phase number or "General">
+        Request: <user's change request verbatim>
+        ```
+      - **Sharpen format:**
+        ```
+        ## Sharpen Outcome (Iteration <plan_iteration + 1>)
+        Date: <timestamp>
+
+        Resolved:
+        <sharpen "Resolved" block verbatim>
+
+        Open:
+        <sharpen "Open" block verbatim>
+
+        Next:
+        <sharpen "Next" block verbatim>
+        ```
+   c. **Update state:** `phase: plan`, `status: in_progress`
+   d. Display: "Re-running plan with your feedback..."
+   e. Return to Step 3, item 1:
+      - Planner will be invoked with user_feedback.md referenced (per Step 3, item 2 — Planner invocation above)
       - plan_iteration increments as normal
       - Full review cycle (Claude slot A + Codex slot B + Arbiter) runs
-      - After approval, Step 3.5 presentation starts fresh from step 1
+      - After approval, Step 3.5 presentation starts fresh from substep 1
 
 ### Step 4: Build Phase
 
@@ -653,7 +731,7 @@ After plan approval, present the plan interactively before proceeding to build.
 1. **Atomic transition:** `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition building --status in_progress --last-role builder_agent --expect-phase presentation_complete` — if this fails, report the validation error to the user and STOP. Do NOT modify state.json manually.
 
 2. **Invoke Builder** (default Codex `mcp__codex__codex`, Claude runtime fallback):
-   - Read `models.builder` from allowlist.
+   - Read `models.builder` from `.quest/<id>/orchestration.json`.
    - If builder model is Codex, invoke via `mcp__codex__codex` with `sandbox_permissions: "workspace-write"`.
    - If builder model is Claude, invoke through Claude runtime (native `Task(...)` when available, bridge in Codex-led sessions).
    - Run the builder from `source_workspace_root`. If this quest uses a separate worktree, source changes happen there while `.quest/<id>/...` artifacts still point at the original repo root.
@@ -690,6 +768,8 @@ After plan approval, present the plan interactively before proceeding to build.
 
 4. Proceed to Step 5
 
+- **UI work:** see [UI Work Propagation](#ui-work-propagation-cross-cutting--applies-to-every-phase) at the top of this file — the rule is uniform across phases.
+
 ### Step 5: Review Phase
 
 1. **Update state:** `status: in_progress`, `last_role: code_review_agent`
@@ -722,7 +802,7 @@ After plan approval, present the plan interactively before proceeding to build.
 
    **If `quest_mode == "workflow"` (default):** Invoke BOTH Code Reviewers IN PARALLEL.
 
-   Read `models.code-reviewer-a` and `models.code-reviewer-b` from allowlist to determine runtime for each slot. If model is Claude, use Claude runtime; if Codex, use `mcp__codex__codex`.
+   Read `models.code-reviewer-a` and `models.code-reviewer-b` from `.quest/<id>/orchestration.json` to determine runtime for each slot. If model is Claude, use Claude runtime; if Codex, use `mcp__codex__codex`.
 
    Two different models review independently for model diversity:
    - **Reviewer A**: dispatched by orchestrator → `.quest/<id>/phase_03_review/review_code-reviewer-a.md`
@@ -733,7 +813,7 @@ After plan approval, present the plan interactively before proceeding to build.
    - Reviewer B: `review_code-reviewer-b.md`, `review_findings_code-reviewer-b.json`, `handoff_code-reviewer-b.json`
    in `.quest/<id>/phase_03_review/` (Reviewer B only in workflow mode).
 
-   **Slot A** (runtime per `models.code-reviewer-a`; full and fast modes):
+   **Slot A** (runtime per `models.code-reviewer-a` from `.quest/<id>/orchestration.json`; full and fast modes):
    **Full mode**:
    ```
    Task(
@@ -798,7 +878,7 @@ After plan approval, present the plan interactively before proceeding to build.
    **Full mode**:
    ```
    mcp__codex__codex(
-     model: <models.code-reviewer-b from allowlist>,
+     model: <models.code-reviewer-b from .quest/<id>/orchestration.json>,
      sandbox_permissions: "workspace-write",
      prompt: "You are Code Reviewer B.
      Non-interactive rule: do not ask questions and do not return STATUS: needs_human. If details are missing, make explicit assumptions and continue.
@@ -830,7 +910,7 @@ After plan approval, present the plan interactively before proceeding to build.
    **Fast mode**:
    ```
    mcp__codex__codex(
-     model: <models.code-reviewer-b from allowlist>,
+     model: <models.code-reviewer-b from .quest/<id>/orchestration.json>,
      sandbox_permissions: "workspace-write",
      prompt: "You are Code Reviewer B.
      Non-interactive rule: do not ask questions and do not return STATUS: needs_human. If details are missing, make explicit assumptions and continue.
@@ -904,6 +984,8 @@ After plan approval, present the plan interactively before proceeding to build.
      - Transition atomically: `python3 scripts/quest_state.py --quest-dir .quest/<id> --transition complete --status complete --expect-phase reviewing`
      - Proceed to Step 7
 
+- **UI work:** see [UI Work Propagation](#ui-work-propagation-cross-cutting--applies-to-every-phase) at the top of this file — the rule is uniform across phases.
+
 ### Step 6: Fix Phase
 
 **Read allowlist:** `gates.max_fix_iterations` (default: 3)
@@ -921,7 +1003,7 @@ After plan approval, present the plan interactively before proceeding to build.
 1. **Update state:** `phase: fixing`, `fix_iteration += 1`, `last_role: fixer_agent`
 
 2. **Invoke Fixer** (default Codex `mcp__codex__codex`, Claude runtime fallback):
-   - Read `models.fixer` from allowlist.
+   - Read `models.fixer` from `.quest/<id>/orchestration.json`.
    - If fixer model is Codex, invoke via `mcp__codex__codex` with `sandbox_permissions: "workspace-write"`.
    - If fixer model is Claude, invoke through Claude runtime (native `Task(...)` when available, bridge in Codex-led sessions).
    - Run the fixer from `source_workspace_root`. If this quest uses a separate worktree, source fixes happen there while `.quest/<id>/...` artifacts remain in the original repo root.
@@ -976,6 +1058,8 @@ After plan approval, present the plan interactively before proceeding to build.
        - Convert remaining findings to `defer` (accepted debt rationale) or `needs_human_decision`
        - Append `defer` entries to `.quest/backlog/deferred_findings.jsonl`
        - Warn user, ask to proceed manually or accept remaining items as deferred debt
+
+- **UI work:** see [UI Work Propagation](#ui-work-propagation-cross-cutting--applies-to-every-phase) at the top of this file — the rule is uniform across phases.
 
 ### Step 7: Complete
 
@@ -1213,7 +1297,7 @@ If a Claude role returns `STATUS: needs_human`:
 | Code Reviewer B | `models.code-reviewer-b` | `gpt-5.5` | Claude runtime or Codex per config |
 | Fixer | `models.fixer` | `gpt-5.5` | Codex or Claude runtime per config |
 
-All role-to-model assignments are read from `.ai/allowlist.json` → `models`. The defaults above apply when a key is missing. **Model diversity** in review phases gives independent perspectives from different model families. If roles are executed through Codex-backed tools, runtime attribution in `context_health.log` must record `codex`.
+All role-to-model assignments are read from `.quest/<id>/orchestration.json` → `models` for the active quest. `.ai/allowlist.json` → `models` is consulted only at quest startup as the default source the chooser pre-fills; see `.skills/quest/SKILL.md` Step 3 sub-step 8.5 and Step 1 sub-step 1a. The defaults above are startup defaults only: once `orchestration.json` exists, dispatch must stop on missing active-role model keys or active-role model keys that are not non-empty strings instead of falling back. **Model diversity** in review phases gives independent perspectives from different model families. If roles are executed through Codex-backed tools, runtime attribution in `context_health.log` must record `codex`.
 
 ### Codex MCP Prompt Pattern
 
@@ -1272,7 +1356,7 @@ Codex MCP calls can be slower when each run must:
 **Example minimal prompt:**
 ```
 mcp__codex__codex(
-  model: <models.plan-reviewer-b from allowlist>,
+  model: <models.plan-reviewer-b from .quest/<id>/orchestration.json>,
   prompt: "Review .quest/<id>/phase_01_plan/plan.md
 
   List any issues (max 5 bullets). Write to .quest/<id>/phase_01_plan/review_plan-reviewer-b.md

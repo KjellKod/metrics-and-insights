@@ -77,6 +77,8 @@ Customize `.ai/allowlist.json` for your project's:
 - Test commands (pytest, npm test, etc.)
 - Approval gates (which phases need human sign-off)
 
+The `.ai/allowlist.json` `models.*` block is the **default** source for per-role model assignments. At each quest startup, the chooser in `.skills/quest/SKILL.md` Step 3 sub-step 8.5 writes `.quest/<id>/orchestration.json` from that block, and every role dispatch in `.skills/quest/delegation/workflow.md` reads `models.<role>` from the per-quest file rather than the repo allowlist.
+
 ## Where to Learn More
 
 | Topic | Location |
@@ -85,6 +87,7 @@ Customize `.ai/allowlist.json` for your project's:
 | SKILLs directory  | `.skills/SKILLS.md` |
 | Quest setup guide | `docs/guides/quest_setup.md` |
 | Architecture | `docs/architecture/` (if present) |
+| UX standards and review | `.skills/ux-context/resources/ux-guidebook.md` (canon) and `.skills/ux-review/SKILL.md` (`/ux-review` to invoke) |
 
 ## Quest Execution Discipline
 - For `$quest`, follow the full gate sequence: routing -> plan -> dual plan review -> arbiter -> walkthrough -> explicit approval -> build -> dual code review -> fixes.
