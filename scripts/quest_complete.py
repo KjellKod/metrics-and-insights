@@ -30,6 +30,8 @@ from quest_celebrate.quest_data import (
     friendly_model_name,
     load_quest_data,
 )
+from quest_celebrate.persist import CelebrationWriteResult, write_celebration_file
+from quest_runtime.quest_ids import parse_quest_id
 
 
 def _today() -> date:
@@ -71,6 +73,31 @@ def _build_celebration_json(data: QuestData) -> dict:
     }
 
 
+def _celebration_link_for_result(
+    celebration_result: CelebrationWriteResult,
+    data: QuestData,
+) -> Path | None:
+    """Return a journal link only for the current quest's celebration artifact."""
+    if not celebration_result.path.exists():
+        return None
+    if celebration_result.created:
+        return celebration_result.rel_path
+    if _celebration_file_matches_quest(celebration_result.path, data.quest_id):
+        return celebration_result.rel_path
+    return None
+
+
+def _celebration_file_matches_quest(path: Path, quest_id: str) -> bool:
+    if not quest_id:
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    match = re.search(r"<!--\s*quest-id:\s*(.*?)\s*-->", text)
+    return bool(match and match.group(1) == quest_id)
+
+
 def _journal_outcome(data: QuestData) -> str:
     """Return the best short journal outcome summary."""
     plan_summary = data.plan_summary.strip()
@@ -101,23 +128,32 @@ def build_quest_brief_section(data: QuestData) -> str:
     return "\n".join(lines)
 
 
-def build_celebration_section(journal_rel_path: Path | None) -> str:
+def build_celebration_section(
+    journal_rel_path: Path | None,
+    celebration_rel_path: Path | None = None,
+) -> str:
     """Build the reader-facing celebration section."""
     if journal_rel_path is None:
         return ""
 
     journal_ref = journal_rel_path.as_posix()
-    return "\n".join(
+    lines = [
+        "## Celebration",
+        "",
+        "This journal embeds the celebration payload used by `/celebrate`.",
+        "",
+    ]
+    if celebration_rel_path is not None:
+        celebration_ref = celebration_rel_path.as_posix()
+        lines.append(f"- Full celebration: [`{celebration_ref}`]({celebration_ref})")
+    lines.extend(
         [
-            "## Celebration",
-            "",
-            "This journal embeds the celebration payload used by `/celebrate`.",
-            "",
             "- [Jump to Celebration Data](#celebration-data)",
             f"- Replay locally: `/celebrate {journal_ref}`",
             "",
         ]
     )
+    return "\n".join(lines)
 
 
 def _build_carryover_journal_section(title: str, count: int, summaries: list[str]) -> str:
@@ -165,6 +201,7 @@ def build_journal_entry(
     data: QuestData,
     completion_date: date,
     journal_rel_path: Path | None = None,
+    celebration_rel_path: Path | None = None,
 ) -> str:
     """Generate a markdown journal entry from quest data."""
     lines = []
@@ -176,11 +213,16 @@ def build_journal_entry(
 
     # Metadata
     lines.append(f"- Quest ID: `{data.quest_id}`")
+    if data.slug:
+        lines.append(f"- Slug: {data.slug}")
     lines.append(f"- Completed: {completion_date.isoformat()}")
     if data.quest_mode:
         lines.append(f"- Mode: {data.quest_mode}")
     if data.quality_tier:
         lines.append(f"- Quality: {data.quality_tier}")
+    if celebration_rel_path is not None:
+        celebration_ref = celebration_rel_path.as_posix()
+        lines.append(f"- Celebration: [`{celebration_ref}`]({celebration_ref})")
     lines.append(f"- Outcome: {_journal_outcome(data)}")
     lines.append("")
 
@@ -241,7 +283,10 @@ def build_journal_entry(
         lines.append(_build_empty_carryover_journal_section().rstrip())
         lines.append("")
 
-    celebration_section = build_celebration_section(journal_rel_path)
+    celebration_section = build_celebration_section(
+        journal_rel_path,
+        celebration_rel_path,
+    )
     if celebration_section:
         lines.append(celebration_section.rstrip())
         lines.append("")
@@ -286,6 +331,13 @@ def _archive_quest(quest_dir: Path) -> Path:
     return dest
 
 
+def _slug_from_quest_dir(quest_dir: Path) -> str:
+    parsed = parse_quest_id(quest_dir.name)
+    if parsed is not None:
+        return parsed.slug
+    return quest_dir.name.split("_")[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Complete a quest: journal + archive")
     parser.add_argument("--quest-dir", required=True, help="Path to quest directory")
@@ -322,7 +374,8 @@ def main() -> int:
         return 1
 
     # Determine slug and outcome
-    slug = data.slug or state.get("slug", quest_dir.name.split("_")[0])
+    slug = data.slug or state.get("slug", _slug_from_quest_dir(quest_dir))
+    data.slug = slug
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
         print(f"Error: invalid slug '{slug}'. Must match [a-z0-9][a-z0-9-]*", file=sys.stderr)
         return 1
@@ -333,6 +386,7 @@ def main() -> int:
         outcome = outcome[:117] + "..."
 
     journal_path = None
+    celebration_path = None
     if not args.skip_journal:
         # Find journal directory (walk up to repo root)
         repo_root = quest_dir.resolve()
@@ -356,7 +410,27 @@ def main() -> int:
         if journal_file.exists():
             print(f"Journal entry already exists: {journal_file}")
         else:
-            entry = build_journal_entry(data, completion_date, journal_rel_path)
+            celebration_result = write_celebration_file(
+                journal_dir,
+                data,
+                completion_date,
+                journal_rel_path,
+            )
+            celebration_rel_path = _celebration_link_for_result(celebration_result, data)
+            if celebration_rel_path is not None:
+                celebration_path = str(celebration_result.path)
+            elif celebration_result.path.exists() and not celebration_result.created:
+                print(
+                    "Celebration link omitted: existing artifact does not match current quest-id"
+                )
+            print(celebration_result.message)
+
+            entry = build_journal_entry(
+                data,
+                completion_date,
+                journal_rel_path,
+                celebration_rel_path,
+            )
             journal_file.write_text(entry)
             print(f"Journal entry created: {journal_file}")
 
@@ -372,6 +446,7 @@ def main() -> int:
     print(json.dumps({
         "slug": slug,
         "journal": journal_path,
+        "celebration": celebration_path,
         "archived": not args.skip_archive,
         "quality_tier": data.quality_tier,
     }))

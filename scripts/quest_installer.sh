@@ -133,7 +133,12 @@ OLD_SCRIPT_NAMES=(
   "scripts/validate-quest-state.sh"
 )
 
-LEGACY_INSTALLED_SOURCE_ONLY_TESTS=(
+LEGACY_INSTALLED_TESTS=(
+  "tests/integration/test-enforce-allowlist.sh"
+  "tests/test-quest-preflight.sh"
+  "tests/test-quest-runtime.sh"
+  "tests/test-validate-handoff-contracts.sh"
+  "tests/test-validate-quest-state.sh"
   "tests/unit/test_allowlist_matcher.py"
   "tests/unit/test_codex_skill_wrappers.py"
   "tests/unit/test_review_intelligence.py"
@@ -209,6 +214,19 @@ log_action() {
   else
     echo -e "${GREEN}[ACTION]${NC} $1"
   fi
+}
+
+next_available_update_branch_name() {
+  local base_name="$1"
+  local candidate="$base_name"
+  local suffix=2
+
+  while git show-ref --verify --quiet "refs/heads/$candidate"; do
+    candidate="${base_name}-${suffix}"
+    suffix=$((suffix + 1))
+  done
+
+  printf '%s\n' "$candidate"
 }
 
 # Show a markdown file with best available local renderer.
@@ -779,14 +797,14 @@ cleanup_removed_managed_files() {
   done
 }
 
-cleanup_legacy_source_only_tests() {
+cleanup_legacy_installed_tests() {
   local filepath
   local stored_checksum
   local current_checksum
   local upstream_checksum
   local temp_file
 
-  for filepath in "${LEGACY_INSTALLED_SOURCE_ONLY_TESTS[@]}"; do
+  for filepath in "${LEGACY_INSTALLED_TESTS[@]}"; do
     remove_updated_checksum "$filepath"
     if [ ! -e "$filepath" ]; then
       continue
@@ -796,7 +814,7 @@ cleanup_legacy_source_only_tests() {
 
     if stored_checksum=$(get_stored_checksum "$filepath" 2>/dev/null); then
       if [ "$current_checksum" != "$stored_checksum" ]; then
-        log_warn "Leaving modified legacy Quest source-only test in place for manual cleanup: $filepath"
+        log_warn "Leaving modified legacy Quest-installed test in place for manual cleanup: $filepath"
         continue
       fi
     else
@@ -811,18 +829,18 @@ cleanup_legacy_source_only_tests() {
       rm -f "$temp_file"
 
       if [ "$current_checksum" != "$upstream_checksum" ]; then
-        log_warn "Leaving locally modified legacy Quest source-only test in place for manual cleanup: $filepath"
+        log_warn "Leaving locally modified legacy Quest-installed test in place for manual cleanup: $filepath"
         continue
       fi
     fi
 
     if $DRY_RUN; then
-      log_action "Remove legacy Quest source-only test: $filepath"
+      log_action "Remove legacy Quest-installed test: $filepath"
       continue
     fi
 
     rm -f "$filepath"
-    log_success "Removed legacy Quest source-only test: $filepath"
+    log_success "Removed legacy Quest-installed test: $filepath"
   done
 }
 
@@ -1865,7 +1883,8 @@ run_install() {
 
     if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ]; then
       if prompt_yn "Create a new branch for Quest changes?" "y"; then
-        local branch_name="quest-update-$(date +%Y%m%d)"
+        local branch_name
+        branch_name=$(next_available_update_branch_name "quest-update-$(date +%Y%m%d)")
         git checkout -b "$branch_name"
         log_success "Created branch: $branch_name"
       fi
@@ -1884,7 +1903,7 @@ run_install() {
   migrate_legacy_validation_hook
   cleanup_renamed_scripts
   cleanup_removed_managed_files
-  cleanup_legacy_source_only_tests
+  cleanup_legacy_installed_tests
 
   # Set executable bits
   set_executable_bits
