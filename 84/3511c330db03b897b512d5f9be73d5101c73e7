@@ -1,0 +1,19 @@
+.github/workflows/python-ci.yml
+  s_13a8a9e811b628::t_5610c53b01c339 46-48,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "843511c330db03b897b512d5f9be73d5101c73e7",
+  "prompts": {},
+  "sessions": {
+    "s_13a8a9e811b628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2aec1e25-5bcb-4f1e-aa3a-342c601ef0b1",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
