@@ -1,0 +1,23 @@
+.quest-manifest
+  s_13a8a9e811b628::t_f250a07018aa33 95,97-98
+  s_13a8a9e811b628::t_4758c01109bc96 8-9
+  s_13a8a9e811b628::t_70bb60f199da8e 36-37
+  s_13a8a9e811b628::t_537f614f3dde16 66-70
+  s_13a8a9e811b628::t_13fafe469de266 78,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "5d5e6d1fb15485688b182742cf38e9ac832ea2af",
+  "prompts": {},
+  "sessions": {
+    "s_13a8a9e811b628": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2aec1e25-5bcb-4f1e-aa3a-342c601ef0b1",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
