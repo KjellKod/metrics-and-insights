@@ -242,6 +242,20 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
         mock_get_tickets.assert_called_once()
         self.assertIn('issueType in ("Bug")', mock_get_tickets.call_args.args[0])
 
+    @patch("development_time.get_tickets_from_jira")
+    @patch("builtins.print")
+    def test_calculate_monthly_development_time_prints_validation_jql(self, mock_print, mock_get_tickets):
+        mock_get_tickets.return_value = []
+
+        calculate_monthly_development_time(["PROJ"], "2024-01-01", "2024-12-31", ["Bug"])
+
+        printed_lines = [call.args[0] for call in mock_print.call_args_list if call.args]
+        self.assertIn(
+            "JQL Query: project in (PROJ) AND updated >= 2024-01-01 "
+            'AND updated <= 2024-12-31 AND issueType in ("Bug") ORDER BY updated ASC\n',
+            printed_lines,
+        )
+
     def test_process_development_time_metrics_outputs_median_p75_ticket_and_skip_counts(self):
         bucket = MonthlyDevelopmentTimeBucket(
             development_times=[

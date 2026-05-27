@@ -217,6 +217,7 @@ def calculate_monthly_development_time(
     issue_types: list[str],
 ) -> defaultdict[str, defaultdict[str, MonthlyDevelopmentTimeBucket]]:
     jql_query = build_development_time_jql(projects, issue_types, start_date, end_date)
+    print(f"JQL Query: {jql_query}\n")
     tickets = get_tickets_from_jira(jql_query)
     verbose_print(f"Retrieved {len(tickets)} total tickets from API")
     metrics_by_team_month = defaultdict(lambda: defaultdict(MonthlyDevelopmentTimeBucket))
