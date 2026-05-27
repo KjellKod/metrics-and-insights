@@ -142,27 +142,41 @@ def _issue_created_month(issue: object) -> str:
     return _month_key_from_jira_datetime(created)
 
 
-def find_first_development_window(issue: object) -> DevelopmentWindowResult:
+def calculate_total_development_window(issue: object) -> DevelopmentWindowResult:
     issue_id = getattr(issue, "key", "unknown")
     transitions = _status_transitions_chronological(issue)
+    current_start: datetime | None = None
+    saw_in_progress = False
+    completed_intervals = 0
+    total_business_seconds = 0.0
+    last_exit_timestamp: datetime | None = None
 
-    for index, transition in enumerate(transitions):
-        if transition.status.strip().lower() != "in progress":
+    for transition in transitions:
+        if transition.status.strip().lower() == "in progress":
+            saw_in_progress = True
+            current_start = transition.timestamp
             continue
 
-        if index + 1 >= len(transitions):
-            return DevelopmentWindowResult(
-                issue_id=issue_id,
-                month_key=transition.timestamp.strftime("%Y-%m"),
-                reason=NO_NEXT_STATUS,
-            )
+        if current_start is None:
+            continue
 
-        next_transition = transitions[index + 1]
-        business_seconds = business_time_spent_in_seconds(transition.timestamp, next_transition.timestamp)
+        total_business_seconds += business_time_spent_in_seconds(current_start, transition.timestamp)
+        completed_intervals += 1
+        last_exit_timestamp = transition.timestamp
+        current_start = None
+
+    if completed_intervals and last_exit_timestamp:
         return DevelopmentWindowResult(
             issue_id=issue_id,
-            month_key=next_transition.timestamp.strftime("%Y-%m"),
-            business_seconds=business_seconds,
+            month_key=last_exit_timestamp.strftime("%Y-%m"),
+            business_seconds=total_business_seconds,
+        )
+
+    if saw_in_progress and current_start:
+        return DevelopmentWindowResult(
+            issue_id=issue_id,
+            month_key=current_start.strftime("%Y-%m"),
+            reason=NO_NEXT_STATUS,
         )
 
     return DevelopmentWindowResult(
@@ -231,11 +245,12 @@ def calculate_monthly_development_time(
     metrics_by_team_month = defaultdict(lambda: defaultdict(MonthlyDevelopmentTimeBucket))
 
     for issue in tickets:
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
         if not _month_key_in_date_range(result.month_key, start_date, end_date):
-            verbose_print(
+            skip_message = (
                 f"Skipping {result.issue_id}: result month {result.month_key} " f"is outside {start_date} to {end_date}"
             )
+            verbose_print(skip_message)
             continue
 
         team = get_development_time_team(issue)
@@ -257,14 +272,14 @@ def process_development_time_metrics(
     for month, bucket in sorted(months.items()):
         development_seconds = [seconds for seconds, _ in bucket.development_times]
         median_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.50))
-        p75_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.75))
+        p85_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.85))
         if development_seconds:
             monthly_median_days.append(median_days)
         metric = {
             "Team": team,
             "Month": month,
             "Median Development Time (days)": f"{median_days:.2f}",
-            "P75 Development Time (days)": f"{p75_days:.2f}",
+            "P85 Development Time (days)": f"{p85_days:.2f}",
             "Ticket Count": len(bucket.development_times),
             "Skipped: missing in-progress": bucket.skipped_missing_in_progress,
             "Skipped: no next status after in-progress": bucket.skipped_no_next_status,
@@ -272,7 +287,7 @@ def process_development_time_metrics(
         metrics.append(metric)
         print(
             f"Month: {month}, Median Development Time: {median_days:.2f} days, "
-            f"P75 Development Time: {p75_days:.2f} days, "
+            f"P85 Development Time: {p85_days:.2f} days, "
             f"Ticket Count: {len(bucket.development_times)}, "
             f"Skipped missing in-progress: {bucket.skipped_missing_in_progress}, "
             f"Skipped no next status after in-progress: {bucket.skipped_no_next_status}"
@@ -303,7 +318,7 @@ def show_development_time_metrics(
                 "Team",
                 "Month",
                 "Median Development Time (days)",
-                "P75 Development Time (days)",
+                "P85 Development Time (days)",
                 "Ticket Count",
                 "Skipped: missing in-progress",
                 "Skipped: no next status after in-progress",
@@ -339,8 +354,8 @@ def main() -> None:
     end_date = f"{target_year}-12-31"
     projects = os.environ.get("JIRA_PROJECTS").split(",")
 
-    print("Measuring development time between: FIRST In Progress entry and immediately next status.")
-    print("P75 means 75% of measured tickets finished at or below that many business days.")
+    print("Measuring development time as total completed time spent in In Progress.")
+    print("P85 means 85% of measured tickets finished at or below that many business days.")
     print(f"Date range: {start_date} to {end_date}")
     print(f"Projects: {projects}")
     print(f"Issue types: {args.issue_types}")
@@ -352,7 +367,7 @@ def main() -> None:
         args.issue_types,
     )
     show_development_time_metrics(args.csv, metrics_by_team_month)
-    print("Completed development time measurement using: FIRST In Progress entry and immediately next status.")
+    print("Completed development time measurement using total completed time spent in In Progress.")
 
 
 if __name__ == "__main__":

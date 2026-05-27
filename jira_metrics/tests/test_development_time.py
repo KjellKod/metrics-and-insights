@@ -15,7 +15,7 @@ from development_time import (
     build_development_time_jql,
     calculate_monthly_development_time,
     calculate_percentile,
-    find_first_development_window,
+    calculate_total_development_window,
     get_development_time_team,
     main,
     parse_issue_types,
@@ -60,7 +60,7 @@ def create_issue(
 
 
 class TestDevelopmentWindow(unittest.TestCase):
-    def test_find_first_development_window_measures_first_in_progress_to_next_status(self):
+    def test_calculate_total_development_window_measures_single_in_progress_interval(self):
         issue = create_issue(
             histories=[
                 create_changelog_entry("2024-01-03T10:00:00.000-0800", "Open", "In Progress"),
@@ -68,13 +68,13 @@ class TestDevelopmentWindow(unittest.TestCase):
             ]
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
 
         self.assertIsNone(result.reason)
         self.assertEqual(result.month_key, "2024-01")
         self.assertEqual(result.business_seconds, 4 * 3600)
 
-    def test_find_first_development_window_ignores_later_in_progress_ranges(self):
+    def test_calculate_total_development_window_sums_repeated_in_progress_ranges(self):
         issue = create_issue(
             histories=[
                 create_changelog_entry("2024-01-02T10:00:00.000-0800", "Open", "In Progress"),
@@ -84,12 +84,28 @@ class TestDevelopmentWindow(unittest.TestCase):
             ]
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
 
         self.assertIsNone(result.reason)
-        self.assertEqual(result.business_seconds, 2 * 3600)
+        self.assertEqual(result.business_seconds, 6 * 3600)
 
-    def test_find_first_development_window_counts_missing_in_progress_skip(self):
+    def test_calculate_total_development_window_uses_last_in_progress_exit_month(self):
+        issue = create_issue(
+            histories=[
+                create_changelog_entry("2024-01-31T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2024-01-31T12:00:00.000-0800", "In Progress", "Blocked"),
+                create_changelog_entry("2024-02-02T10:00:00.000-0800", "Blocked", "In Progress"),
+                create_changelog_entry("2024-02-02T12:00:00.000-0800", "In Progress", "Code Review"),
+            ]
+        )
+
+        result = calculate_total_development_window(issue)
+
+        self.assertIsNone(result.reason)
+        self.assertEqual(result.month_key, "2024-02")
+        self.assertEqual(result.business_seconds, 4 * 3600)
+
+    def test_calculate_total_development_window_counts_missing_in_progress_skip(self):
         issue = create_issue(
             histories=[
                 create_changelog_entry("2024-02-02T10:00:00.000-0800", "Open", "Selected"),
@@ -98,26 +114,26 @@ class TestDevelopmentWindow(unittest.TestCase):
             created="2024-02-01T09:00:00.000-0800",
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
 
         self.assertEqual(result.reason, MISSING_IN_PROGRESS)
         self.assertEqual(result.month_key, "2024-02")
         self.assertIsNone(result.business_seconds)
 
-    def test_find_first_development_window_counts_no_next_status_skip(self):
+    def test_calculate_total_development_window_counts_no_next_status_skip(self):
         issue = create_issue(
             histories=[
                 create_changelog_entry("2024-03-02T10:00:00.000-0800", "Open", "In Progress"),
             ]
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
 
         self.assertEqual(result.reason, NO_NEXT_STATUS)
         self.assertEqual(result.month_key, "2024-03")
         self.assertIsNone(result.business_seconds)
 
-    def test_find_first_development_window_matches_in_progress_case_insensitively(self):
+    def test_calculate_total_development_window_matches_in_progress_case_insensitively(self):
         issue = create_issue(
             histories=[
                 create_changelog_entry("2024-04-02T10:00:00.000-0800", "Open", "in progress"),
@@ -125,7 +141,7 @@ class TestDevelopmentWindow(unittest.TestCase):
             ]
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
 
         self.assertIsNone(result.reason)
         self.assertEqual(result.business_seconds, 90 * 60)
@@ -138,7 +154,7 @@ class TestDevelopmentWindow(unittest.TestCase):
             ]
         )
 
-        result = find_first_development_window(issue)
+        result = calculate_total_development_window(issue)
         bucket = MonthlyDevelopmentTimeBucket(development_times=[(result.business_seconds, result.issue_id)])
         metrics = process_development_time_metrics("All", {"2024-01": bucket})
 
@@ -279,6 +295,26 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
         self.assertEqual(len(metrics["All"]["2026-01"].development_times), 1)
 
     @patch("development_time.get_tickets_from_jira")
+    def test_calculate_monthly_development_time_counts_full_interval_that_started_before_date_range(
+        self, mock_get_tickets
+    ):
+        issue = create_issue(
+            key="PROJ-6",
+            histories=[
+                create_changelog_entry("2025-12-31T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2026-01-01T10:00:00.000-0800", "In Progress", "Code Review"),
+            ],
+            team_value="Alpha",
+        )
+        mock_get_tickets.return_value = [issue]
+
+        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
+            metrics = calculate_monthly_development_time(["PROJ"], "2026-01-01", "2026-12-31", ["Bug"])
+
+        self.assertEqual(set(metrics["All"].keys()), {"2026-01"})
+        self.assertEqual(metrics["All"]["2026-01"].development_times, [(16 * 3600, "PROJ-6")])
+
+    @patch("development_time.get_tickets_from_jira")
     @patch("builtins.print")
     def test_calculate_monthly_development_time_prints_validation_jql(self, mock_print, mock_get_tickets):
         mock_get_tickets.return_value = []
@@ -293,7 +329,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
             printed_lines,
         )
 
-    def test_process_development_time_metrics_outputs_median_p75_ticket_and_skip_counts(self):
+    def test_process_development_time_metrics_outputs_median_p85_ticket_and_skip_counts(self):
         bucket = MonthlyDevelopmentTimeBucket(
             development_times=[
                 (1 * 8 * 3600, "PROJ-1"),
@@ -313,7 +349,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
                     "Team": "All",
                     "Month": "2024-07",
                     "Median Development Time (days)": "2.00",
-                    "P75 Development Time (days)": "3.00",
+                    "P85 Development Time (days)": "3.40",
                     "Ticket Count": 3,
                     "Skipped: missing in-progress": 2,
                     "Skipped: no next status after in-progress": 1,
@@ -371,7 +407,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
 
     def test_calculate_percentile_uses_linear_interpolation(self):
         self.assertEqual(calculate_percentile([1.0, 2.0, 4.0], 0.50), 2.0)
-        self.assertEqual(calculate_percentile([1.0, 2.0, 4.0], 0.75), 3.0)
+        self.assertEqual(calculate_percentile([1.0, 2.0, 4.0], 0.85), 3.4)
 
 
 if __name__ == "__main__":
