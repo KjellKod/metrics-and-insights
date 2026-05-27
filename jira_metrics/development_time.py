@@ -340,6 +340,7 @@ def main() -> None:
     projects = os.environ.get("JIRA_PROJECTS").split(",")
 
     print("Measuring development time between: FIRST In Progress entry and immediately next status.")
+    print("P75 means 75% of measured tickets finished at or below that many business days.")
     print(f"Date range: {start_date} to {end_date}")
     print(f"Projects: {projects}")
     print(f"Issue types: {args.issue_types}")
