@@ -66,6 +66,7 @@ If you only need local analysis artifacts, MCP/Sheets access is not required. If
 │   ├── epic_tracking.py                # Track epic completion metrics with time-based analysis
 │   ├── engineering_excellence.py       # Track engineering excellence vs product work
 │   ├── cycle_time.py                   # Analyze time from code review to release
+│   ├── development_time.py             # Analyze time from first In Progress to next status
 │   ├── bug_health.py                   # Track bug flow, backlog, priority, and SLA health
 │   ├── release_failure.py              # Analyze release failures and impact
 │   ├── individual.py                   # Individual contributor metrics analysis
@@ -117,6 +118,7 @@ Scripts for extracting and analyzing Jira metrics:
 - `epic_tracking.py`: Track epic completion metrics with time-based analysis
 - `engineering_excellence.py`: Track engineering excellence vs product work
 - `cycle_time.py`: Calculate cycle time metrics
+- `development_time.py`: Calculate development time metrics from first `In Progress` to the immediately next status transition
 - `bug_health.py`: Generate monthly bug flow, backlog, priority, and SLA health CSVs
 - `release_failure.py`: Analyze release failures and impact
 - `individual.py`: Individual contributor metrics analysis
@@ -262,6 +264,12 @@ python3 jira_metrics/engineering_excellence.py
 To analyze cycle times:
 ```bash
 python3 jira_metrics/cycle_time.py
+```
+
+To analyze development time for selected Jira issue types:
+```bash
+python3 jira_metrics/development_time.py --issue-types Story,Task,Bug
+python3 jira_metrics/development_time.py --issue-types Bug
 ```
 
 To generate monthly bug health dashboard CSVs:
