@@ -138,6 +138,25 @@ def build_development_time_jql(
     )
 
 
+def resolve_reporting_date_range(
+    args: argparse.Namespace,
+    current_year: int | None = None,
+) -> tuple[str, str]:
+    has_year_range = args.start_year is not None or args.end_year is not None
+    if args.year is not None and has_year_range:
+        raise ValueError("--year cannot be combined with --start-year or --end-year")
+
+    if has_year_range:
+        if args.start_year is None or args.end_year is None:
+            raise ValueError("--start-year and --end-year must be provided together")
+        if args.start_year > args.end_year:
+            raise ValueError("--start-year must be less than or equal to --end-year")
+        return f"{args.start_year}-01-01", f"{args.end_year}-12-31"
+
+    target_year = args.year or current_year or datetime.now().year
+    return f"{target_year}-01-01", f"{target_year}-12-31"
+
+
 def parse_jira_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -410,6 +429,16 @@ def main() -> None:
         help="Year (YYYY) for development time metrics; defaults to the current year.",
     )
     parser.add_argument(
+        "--start-year",
+        type=int,
+        help="Start year (YYYY) for a multi-year development time range.",
+    )
+    parser.add_argument(
+        "--end-year",
+        type=int,
+        help="End year (YYYY) for a multi-year development time range.",
+    )
+    parser.add_argument(
         "--issue-types",
         required=True,
         type=parse_issue_types,
@@ -418,9 +447,11 @@ def main() -> None:
     args = parse_common_arguments(parser)
     print_env_variables()
 
-    target_year = args.year or datetime.now().year
-    start_date = f"{target_year}-01-01"
-    end_date = f"{target_year}-12-31"
+    try:
+        start_date, end_date = resolve_reporting_date_range(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     try:
         projects = parse_projects_from_env()
     except ValueError as exc:

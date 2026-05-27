@@ -24,6 +24,7 @@ from development_time import (
     parse_issue_types,
     parse_projects_from_env,
     process_development_time_metrics,
+    resolve_reporting_date_range,
     show_development_time_metrics,
     validate_issue_types_exist,
 )
@@ -271,6 +272,41 @@ class TestIssueTypeFiltering(unittest.TestCase):
         with patch.object(sys, "argv", ["development_time.py"]):
             with self.assertRaises(SystemExit):
                 main()
+
+
+class TestReportingDateRange(unittest.TestCase):
+    def test_resolve_reporting_date_range_defaults_to_current_year(self):
+        args = SimpleNamespace(year=None, start_year=None, end_year=None)
+
+        self.assertEqual(resolve_reporting_date_range(args, current_year=2026), ("2026-01-01", "2026-12-31"))
+
+    def test_resolve_reporting_date_range_uses_single_year(self):
+        args = SimpleNamespace(year=2024, start_year=None, end_year=None)
+
+        self.assertEqual(resolve_reporting_date_range(args, current_year=2026), ("2024-01-01", "2024-12-31"))
+
+    def test_resolve_reporting_date_range_uses_multi_year_range(self):
+        args = SimpleNamespace(year=None, start_year=2024, end_year=2026)
+
+        self.assertEqual(resolve_reporting_date_range(args, current_year=2026), ("2024-01-01", "2026-12-31"))
+
+    def test_resolve_reporting_date_range_rejects_year_mixed_with_range(self):
+        args = SimpleNamespace(year=2024, start_year=2023, end_year=2025)
+
+        with self.assertRaisesRegex(ValueError, "--year cannot be combined"):
+            resolve_reporting_date_range(args, current_year=2026)
+
+    def test_resolve_reporting_date_range_rejects_partial_range(self):
+        args = SimpleNamespace(year=None, start_year=2024, end_year=None)
+
+        with self.assertRaisesRegex(ValueError, "--start-year and --end-year"):
+            resolve_reporting_date_range(args, current_year=2026)
+
+    def test_resolve_reporting_date_range_rejects_reversed_range(self):
+        args = SimpleNamespace(year=None, start_year=2026, end_year=2024)
+
+        with self.assertRaisesRegex(ValueError, "--start-year must be less than or equal"):
+            resolve_reporting_date_range(args, current_year=2026)
 
 
 class TestDevelopmentTimeTeam(unittest.TestCase):

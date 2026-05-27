@@ -270,8 +270,9 @@ To analyze development time for selected Jira issue types:
 ```bash
 python3 jira_metrics/development_time.py --issue-types Story,Task,Bug
 python3 jira_metrics/development_time.py --issue-types Bug
+python3 jira_metrics/development_time.py --issue-types Bug --start-year 2024 --end-year 2026
 ```
-When `--year` is omitted, development time defaults to the current calendar year. The report prints the Jira validation query, monthly median/P85/ticket/skip metrics for `All` and available team groups, plus selected-period median/P85/ticket-count summaries over all measured tickets.
+When `--year` is omitted, development time defaults to the current calendar year. Use `--start-year` and `--end-year` together to report a multi-year range. The report prints the Jira validation query, monthly median/P85/ticket/skip metrics for `All` and available team groups, plus selected-period median/P85/ticket-count summaries over all measured tickets.
 
 To generate monthly bug health dashboard CSVs:
 ```bash
