@@ -163,8 +163,10 @@ class TestIssueTypeFiltering(unittest.TestCase):
 
         self.assertIn("project in (ABC, DEF)", jql)
         self.assertIn('issueType in ("Story", "Task", "Bug \\"Escalated\\"")', jql)
-        self.assertIn("updated >= 2024-01-01", jql)
-        self.assertIn("updated <= 2024-12-31", jql)
+        self.assertIn('status CHANGED FROM "In Progress" DURING (2024-01-01, 2024-12-31)', jql)
+        self.assertIn('status CHANGED TO "In Progress" DURING (2024-01-01, 2024-12-31)', jql)
+        self.assertNotIn("updated >= 2024-01-01", jql)
+        self.assertNotIn("updated <= 2024-12-31", jql)
         self.assertNotIn("Task, Bug, Story, Spike", jql)
 
     def test_main_requires_issue_types(self):
@@ -243,6 +245,39 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
         self.assertIn('issueType in ("Bug")', mock_get_tickets.call_args.args[0])
 
     @patch("development_time.get_tickets_from_jira")
+    def test_calculate_monthly_development_time_reports_only_result_months_in_date_range(self, mock_get_tickets):
+        old_missing_issue = create_issue(
+            key="PROJ-3",
+            histories=[create_changelog_entry("2021-08-04T10:00:00.000-0800", "Open", "Selected")],
+            created="2021-08-01T09:00:00.000-0800",
+            team_value="Alpha",
+        )
+        old_window_issue = create_issue(
+            key="PROJ-4",
+            histories=[
+                create_changelog_entry("2025-12-04T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2025-12-05T10:00:00.000-0800", "In Progress", "Done"),
+            ],
+            team_value="Alpha",
+        )
+        current_window_issue = create_issue(
+            key="PROJ-5",
+            histories=[
+                create_changelog_entry("2026-01-04T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2026-01-05T10:00:00.000-0800", "In Progress", "Done"),
+            ],
+            team_value="Alpha",
+        )
+        mock_get_tickets.return_value = [old_missing_issue, old_window_issue, current_window_issue]
+
+        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
+            metrics = calculate_monthly_development_time(["PROJ"], "2026-01-01", "2026-12-31", ["Bug"])
+
+        self.assertEqual(set(metrics["All"].keys()), {"2026-01"})
+        self.assertEqual(metrics["All"]["2026-01"].skipped_missing_in_progress, 0)
+        self.assertEqual(len(metrics["All"]["2026-01"].development_times), 1)
+
+    @patch("development_time.get_tickets_from_jira")
     @patch("builtins.print")
     def test_calculate_monthly_development_time_prints_validation_jql(self, mock_print, mock_get_tickets):
         mock_get_tickets.return_value = []
@@ -251,8 +286,9 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
 
         printed_lines = [call.args[0] for call in mock_print.call_args_list if call.args]
         self.assertIn(
-            "JQL Query: project in (PROJ) AND updated >= 2024-01-01 "
-            'AND updated <= 2024-12-31 AND issueType in ("Bug") ORDER BY updated ASC\n',
+            'JQL Query: project in (PROJ) AND (status CHANGED FROM "In Progress" '
+            'DURING (2024-01-01, 2024-12-31) OR status CHANGED TO "In Progress" '
+            'DURING (2024-01-01, 2024-12-31)) AND issueType in ("Bug") ORDER BY updated ASC\n',
             printed_lines,
         )
 

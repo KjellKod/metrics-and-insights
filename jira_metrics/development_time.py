@@ -67,8 +67,8 @@ def build_development_time_jql(
 ) -> str:
     return (
         f"project in ({', '.join(projects)}) "
-        f"AND updated >= {start_date} "
-        f"AND updated <= {end_date} "
+        f'AND (status CHANGED FROM "In Progress" DURING ({start_date}, {end_date}) '
+        f'OR status CHANGED TO "In Progress" DURING ({start_date}, {end_date})) '
         f"AND issueType in ({quote_jql_values(issue_types)}) "
         "ORDER BY updated ASC"
     )
@@ -210,6 +210,14 @@ def _record_development_time_result(
         _add_result_to_bucket(bucket, result)
 
 
+def _month_key_in_date_range(month_key: str, start_date: str, end_date: str) -> bool:
+    try:
+        datetime.strptime(month_key, "%Y-%m")
+    except ValueError:
+        return False
+    return start_date[:7] <= month_key <= end_date[:7]
+
+
 def calculate_monthly_development_time(
     projects: list[str],
     start_date: str,
@@ -223,8 +231,14 @@ def calculate_monthly_development_time(
     metrics_by_team_month = defaultdict(lambda: defaultdict(MonthlyDevelopmentTimeBucket))
 
     for issue in tickets:
-        team = get_development_time_team(issue)
         result = find_first_development_window(issue)
+        if not _month_key_in_date_range(result.month_key, start_date, end_date):
+            verbose_print(
+                f"Skipping {result.issue_id}: result month {result.month_key} " f"is outside {start_date} to {end_date}"
+            )
+            continue
+
+        team = get_development_time_team(issue)
         _record_development_time_result(metrics_by_team_month, team, result)
 
     return metrics_by_team_month
