@@ -17,10 +17,12 @@ from development_time import (
     calculate_percentile,
     calculate_total_development_window,
     get_development_time_team,
+    get_jira_issue_type_names,
     main,
     parse_issue_types,
     process_development_time_metrics,
     show_development_time_metrics,
+    validate_issue_types_exist,
 )
 
 TEAM_FIELD_ID = "10075"
@@ -168,6 +170,52 @@ class TestIssueTypeFiltering(unittest.TestCase):
 
     def test_parse_issue_types_splits_and_trims_values(self):
         self.assertEqual(parse_issue_types(" Story,Task, Bug "), ["Story", "Task", "Bug"])
+
+    @patch("development_time.requests.get")
+    def test_get_jira_issue_type_names_fetches_names(self, mock_get):
+        response = SimpleNamespace(
+            status_code=200,
+            url="https://jira.example/rest/api/3/issuetype",
+            text="",
+        )
+        response.json = lambda: [{"name": "Bug"}, {"name": "Story"}, {"id": "10000"}]
+        response.raise_for_status = lambda: None
+        mock_get.return_value = response
+
+        with patch.dict(
+            os.environ,
+            {
+                "JIRA_LINK": "https://jira.example",
+                "USER_EMAIL": "user@example.com",
+                "JIRA_API_KEY": "token",
+            },
+        ):
+            self.assertEqual(get_jira_issue_type_names(), ["Bug", "Story"])
+
+        mock_get.assert_called_once()
+
+    def test_get_jira_issue_type_names_requires_jira_credentials(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "Missing required environment variables"):
+                get_jira_issue_type_names()
+
+    @patch("development_time.get_jira_issue_type_names")
+    def test_validate_issue_types_exist_allows_case_insensitive_matches(self, mock_issue_types):
+        mock_issue_types.return_value = ["Bug", "Story", "Task"]
+
+        validate_issue_types_exist(["bug", "story"])
+
+        mock_issue_types.assert_called_once()
+
+    @patch("development_time.get_jira_issue_type_names")
+    def test_validate_issue_types_exist_rejects_unknown_issue_types(self, mock_issue_types):
+        mock_issue_types.return_value = ["Bug", "Story", "Task"]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Unknown Jira issue type\\(s\\): typo. Available issue types: Bug, Story, Task",
+        ):
+            validate_issue_types_exist(["Bug", "typo"])
 
     def test_build_development_time_jql_filters_to_provided_issue_types(self):
         jql = build_development_time_jql(

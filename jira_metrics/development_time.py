@@ -5,6 +5,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import requests
+
 # pylint: disable=import-error
 from cycle_time import business_time_spent_in_seconds
 from jira_utils import (
@@ -49,6 +51,52 @@ def parse_issue_types(value: str) -> list[str]:
     if not issue_types:
         raise argparse.ArgumentTypeError("--issue-types must include at least one issue type")
     return issue_types
+
+
+def get_jira_issue_type_names() -> list[str]:
+    jira_link = os.environ.get("JIRA_LINK")
+    user_email = os.environ.get("USER_EMAIL")
+    api_key = os.environ.get("JIRA_API_KEY")
+
+    if not all([jira_link, user_email, api_key]):
+        raise ValueError("Missing required environment variables for Jira issue type validation")
+
+    api_issue_types_url = f"{jira_link.rstrip('/')}/rest/api/3/issuetype"
+    response = requests.get(
+        api_issue_types_url,
+        auth=(user_email, api_key),
+        headers={"Accept": "application/json"},
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        print(f"ERROR: Issue type validation failed with status {response.status_code}")
+        print(f"URL: {response.url}")
+        print(f"Response: {response.text[:500]}")
+
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, list):
+        raise ValueError(f"Unexpected issue type response format: expected list, got {type(data).__name__}")
+
+    return [
+        issue_type["name"]
+        for issue_type in data
+        if isinstance(issue_type, dict) and isinstance(issue_type.get("name"), str)
+    ]
+
+
+def validate_issue_types_exist(issue_types: list[str]) -> None:
+    available_issue_types = get_jira_issue_type_names()
+    available_by_name = {issue_type.casefold(): issue_type for issue_type in available_issue_types}
+    missing_issue_types = [issue_type for issue_type in issue_types if issue_type.casefold() not in available_by_name]
+
+    if missing_issue_types:
+        available_display = ", ".join(sorted(available_issue_types, key=str.casefold))
+        missing_display = ", ".join(missing_issue_types)
+        raise ValueError(f"Unknown Jira issue type(s): {missing_display}. Available issue types: {available_display}")
+
+    print(f"Validated Jira issue types: {', '.join(issue_types)}")
 
 
 def quote_jql_values(values: list[str]) -> str:
@@ -359,6 +407,10 @@ def main() -> None:
     print(f"Date range: {start_date} to {end_date}")
     print(f"Projects: {projects}")
     print(f"Issue types: {args.issue_types}")
+    try:
+        validate_issue_types_exist(args.issue_types)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     metrics_by_team_month = calculate_monthly_development_time(
         projects,
