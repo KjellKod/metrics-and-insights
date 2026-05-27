@@ -256,7 +256,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
             printed_lines,
         )
 
-    def test_process_development_time_metrics_outputs_median_p75_ticket_and_skip_counts(self):
+    def test_process_development_time_metrics_outputs_average_median_p75_ticket_and_skip_counts(self):
         bucket = MonthlyDevelopmentTimeBucket(
             development_times=[
                 (1 * 8 * 3600, "PROJ-1"),
@@ -275,6 +275,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
                 {
                     "Team": "All",
                     "Month": "2024-07",
+                    "Average Development Time (days)": "2.33",
                     "Median Development Time (days)": "2.00",
                     "P75 Development Time (days)": "3.00",
                     "Ticket Count": 3,
