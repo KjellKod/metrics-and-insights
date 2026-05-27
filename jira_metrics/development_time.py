@@ -239,16 +239,16 @@ def process_development_time_metrics(
     months: dict[str, MonthlyDevelopmentTimeBucket],
 ) -> list[dict[str, str | int]]:
     metrics = []
+    monthly_median_days = []
     for month, bucket in sorted(months.items()):
         development_seconds = [seconds for seconds, _ in bucket.development_times]
-        average_seconds = sum(development_seconds) / len(development_seconds) if development_seconds else 0
-        average_days = _business_seconds_to_days(average_seconds)
         median_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.50))
         p75_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.75))
+        if development_seconds:
+            monthly_median_days.append(median_days)
         metric = {
             "Team": team,
             "Month": month,
-            "Average Development Time (days)": f"{average_days:.2f}",
             "Median Development Time (days)": f"{median_days:.2f}",
             "P75 Development Time (days)": f"{p75_days:.2f}",
             "Ticket Count": len(bucket.development_times),
@@ -257,13 +257,14 @@ def process_development_time_metrics(
         }
         metrics.append(metric)
         print(
-            f"Month: {month}, Average Development Time: {average_days:.2f} days, "
-            f"Median Development Time: {median_days:.2f} days, "
+            f"Month: {month}, Median Development Time: {median_days:.2f} days, "
             f"P75 Development Time: {p75_days:.2f} days, "
             f"Ticket Count: {len(bucket.development_times)}, "
             f"Skipped missing in-progress: {bucket.skipped_missing_in_progress}, "
             f"Skipped no next status after in-progress: {bucket.skipped_no_next_status}"
         )
+    average_median_days = sum(monthly_median_days) / len(monthly_median_days) if monthly_median_days else 0
+    print(f"Average monthly median Development Time for selected period: {average_median_days:.2f} days")
     return metrics
 
 
@@ -287,7 +288,6 @@ def show_development_time_metrics(
             fieldnames = [
                 "Team",
                 "Month",
-                "Average Development Time (days)",
                 "Median Development Time (days)",
                 "P75 Development Time (days)",
                 "Ticket Count",

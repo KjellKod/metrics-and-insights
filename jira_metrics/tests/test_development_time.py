@@ -256,7 +256,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
             printed_lines,
         )
 
-    def test_process_development_time_metrics_outputs_average_median_p75_ticket_and_skip_counts(self):
+    def test_process_development_time_metrics_outputs_median_p75_ticket_and_skip_counts(self):
         bucket = MonthlyDevelopmentTimeBucket(
             development_times=[
                 (1 * 8 * 3600, "PROJ-1"),
@@ -275,7 +275,6 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
                 {
                     "Team": "All",
                     "Month": "2024-07",
-                    "Average Development Time (days)": "2.33",
                     "Median Development Time (days)": "2.00",
                     "P75 Development Time (days)": "3.00",
                     "Ticket Count": 3,
@@ -283,6 +282,36 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
                     "Skipped: no next status after in-progress": 1,
                 }
             ],
+        )
+
+    @patch("builtins.print")
+    def test_process_development_time_metrics_prints_average_of_monthly_medians(self, mock_print):
+        january_bucket = MonthlyDevelopmentTimeBucket(
+            development_times=[
+                (1 * 8 * 3600, "PROJ-1"),
+                (3 * 8 * 3600, "PROJ-2"),
+            ]
+        )
+        february_bucket = MonthlyDevelopmentTimeBucket(
+            development_times=[
+                (4 * 8 * 3600, "PROJ-3"),
+            ]
+        )
+        skip_only_bucket = MonthlyDevelopmentTimeBucket(skipped_missing_in_progress=1)
+
+        process_development_time_metrics(
+            "All",
+            {
+                "2024-01": january_bucket,
+                "2024-02": february_bucket,
+                "2024-03": skip_only_bucket,
+            },
+        )
+
+        printed_lines = [call.args[0] for call in mock_print.call_args_list if call.args]
+        self.assertIn(
+            "Average monthly median Development Time for selected period: 3.00 days",
+            printed_lines,
         )
 
     def test_show_development_time_metrics_includes_all_and_team_rows(self):
