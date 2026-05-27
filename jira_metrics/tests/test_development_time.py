@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import requests
+
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
@@ -20,6 +22,7 @@ from development_time import (
     get_jira_issue_type_names,
     main,
     parse_issue_types,
+    parse_projects_from_env,
     process_development_time_metrics,
     show_development_time_metrics,
     validate_issue_types_exist,
@@ -199,6 +202,27 @@ class TestIssueTypeFiltering(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Missing required environment variables"):
                 get_jira_issue_type_names()
 
+    @patch("development_time.requests.get")
+    def test_get_jira_issue_type_names_wraps_http_errors(self, mock_get):
+        response = SimpleNamespace(
+            status_code=500,
+            url="https://jira.example/rest/api/3/issuetype",
+            text="server error",
+        )
+        response.raise_for_status = lambda: (_ for _ in ()).throw(requests.HTTPError("500 error"))
+        mock_get.return_value = response
+
+        with patch.dict(
+            os.environ,
+            {
+                "JIRA_LINK": "https://jira.example",
+                "USER_EMAIL": "user@example.com",
+                "JIRA_API_KEY": "token",
+            },
+        ):
+            with self.assertRaisesRegex(ValueError, "Unable to validate Jira issue types"):
+                get_jira_issue_type_names()
+
     @patch("development_time.get_jira_issue_type_names")
     def test_validate_issue_types_exist_allows_case_insensitive_matches(self, mock_issue_types):
         mock_issue_types.return_value = ["Bug", "Story", "Task"]
@@ -216,6 +240,15 @@ class TestIssueTypeFiltering(unittest.TestCase):
             "Unknown Jira issue type\\(s\\): typo. Available issue types: Bug, Story, Task",
         ):
             validate_issue_types_exist(["Bug", "typo"])
+
+    def test_parse_projects_from_env_requires_projects(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "JIRA_PROJECTS must be set"):
+                parse_projects_from_env()
+
+    def test_parse_projects_from_env_splits_and_trims_projects(self):
+        with patch.dict(os.environ, {"JIRA_PROJECTS": " ABC, DEF , ,GHI "}):
+            self.assertEqual(parse_projects_from_env(), ["ABC", "DEF", "GHI"])
 
     def test_build_development_time_jql_filters_to_provided_issue_types(self):
         jql = build_development_time_jql(
@@ -406,7 +439,7 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
         )
 
     @patch("builtins.print")
-    def test_process_development_time_metrics_prints_average_of_monthly_medians(self, mock_print):
+    def test_process_development_time_metrics_prints_selected_period_median_and_p85(self, mock_print):
         january_bucket = MonthlyDevelopmentTimeBucket(
             development_times=[
                 (1 * 8 * 3600, "PROJ-1"),
@@ -431,7 +464,8 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
 
         printed_lines = [call.args[0] for call in mock_print.call_args_list if call.args]
         self.assertIn(
-            "Average monthly median Development Time for selected period: 3.00 days",
+            "Selected period summary: Median Development Time: 3.00 days, "
+            "P85 Development Time: 3.70 days, Ticket Count: 3",
             printed_lines,
         )
 

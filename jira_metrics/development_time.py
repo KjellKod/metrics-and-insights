@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 import requests
+from requests import RequestException
 
 # pylint: disable=import-error
 from cycle_time import business_time_spent_in_seconds
@@ -62,19 +63,26 @@ def get_jira_issue_type_names() -> list[str]:
         raise ValueError("Missing required environment variables for Jira issue type validation")
 
     api_issue_types_url = f"{jira_link.rstrip('/')}/rest/api/3/issuetype"
-    response = requests.get(
-        api_issue_types_url,
-        auth=(user_email, api_key),
-        headers={"Accept": "application/json"},
-        timeout=30,
-    )
+    try:
+        response = requests.get(
+            api_issue_types_url,
+            auth=(user_email, api_key),
+            headers={"Accept": "application/json"},
+            timeout=30,
+        )
+    except RequestException as exc:
+        raise ValueError(f"Unable to validate Jira issue types: {exc}") from exc
 
     if response.status_code != 200:
         print(f"ERROR: Issue type validation failed with status {response.status_code}")
         print(f"URL: {response.url}")
         print(f"Response: {response.text[:500]}")
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except RequestException as exc:
+        raise ValueError(f"Unable to validate Jira issue types: {exc}") from exc
+
     data = response.json()
     if not isinstance(data, list):
         raise ValueError(f"Unexpected issue type response format: expected list, got {type(data).__name__}")
@@ -97,6 +105,14 @@ def validate_issue_types_exist(issue_types: list[str]) -> None:
         raise ValueError(f"Unknown Jira issue type(s): {missing_display}. Available issue types: {available_display}")
 
     print(f"Validated Jira issue types: {', '.join(issue_types)}")
+
+
+def parse_projects_from_env() -> list[str]:
+    raw_projects = os.environ.get("JIRA_PROJECTS", "")
+    projects = [project.strip() for project in raw_projects.split(",") if project.strip()]
+    if not projects:
+        raise ValueError("JIRA_PROJECTS must be set to a comma-separated list of Jira project keys")
+    return projects
 
 
 def quote_jql_values(values: list[str]) -> str:
@@ -316,13 +332,12 @@ def process_development_time_metrics(
     months: dict[str, MonthlyDevelopmentTimeBucket],
 ) -> list[dict[str, str | int]]:
     metrics = []
-    monthly_median_days = []
+    period_development_seconds = []
     for month, bucket in sorted(months.items()):
         development_seconds = [seconds for seconds, _ in bucket.development_times]
         median_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.50))
         p85_days = _business_seconds_to_days(calculate_percentile(development_seconds, 0.85))
-        if development_seconds:
-            monthly_median_days.append(median_days)
+        period_development_seconds.extend(development_seconds)
         metric = {
             "Team": team,
             "Month": month,
@@ -340,8 +355,14 @@ def process_development_time_metrics(
             f"Skipped missing in-progress: {bucket.skipped_missing_in_progress}, "
             f"Skipped no next status after in-progress: {bucket.skipped_no_next_status}"
         )
-    average_median_days = sum(monthly_median_days) / len(monthly_median_days) if monthly_median_days else 0
-    print(f"Average monthly median Development Time for selected period: {average_median_days:.2f} days")
+
+    period_median_days = _business_seconds_to_days(calculate_percentile(period_development_seconds, 0.50))
+    period_p85_days = _business_seconds_to_days(calculate_percentile(period_development_seconds, 0.85))
+    print(
+        f"Selected period summary: Median Development Time: {period_median_days:.2f} days, "
+        f"P85 Development Time: {period_p85_days:.2f} days, "
+        f"Ticket Count: {len(period_development_seconds)}"
+    )
     return metrics
 
 
@@ -400,7 +421,10 @@ def main() -> None:
     target_year = args.year or datetime.now().year
     start_date = f"{target_year}-01-01"
     end_date = f"{target_year}-12-31"
-    projects = os.environ.get("JIRA_PROJECTS").split(",")
+    try:
+        projects = parse_projects_from_env()
+    except ValueError as exc:
+        parser.error(str(exc))
 
     print("Measuring development time as total completed time spent in In Progress.")
     print("P85 means 85% of measured tickets finished at or below that many business days.")

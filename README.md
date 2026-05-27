@@ -271,7 +271,7 @@ To analyze development time for selected Jira issue types:
 python3 jira_metrics/development_time.py --issue-types Story,Task,Bug
 python3 jira_metrics/development_time.py --issue-types Bug
 ```
-When `--year` is omitted, development time defaults to the current calendar year. The report prints the Jira validation query, monthly median/P85/ticket/skip metrics for `All` and available team groups, and the average of monthly medians for the selected period.
+When `--year` is omitted, development time defaults to the current calendar year. The report prints the Jira validation query, monthly median/P85/ticket/skip metrics for `All` and available team groups, plus selected-period median/P85/ticket-count summaries over all measured tickets.
 
 To generate monthly bug health dashboard CSVs:
 ```bash
