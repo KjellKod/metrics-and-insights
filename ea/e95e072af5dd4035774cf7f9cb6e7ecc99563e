@@ -1,0 +1,29 @@
+jira_metrics/tests/test_development_time.py
+  s_91715ca111d94a::t_2153fd15769a05 298-316
+  s_91715ca111d94a::t_cf99a51897616b 332,352,410
+  s_91715ca111d94a::t_b6f9cbbb245c6c 18,63,71,77,87,90,92-108,117,123,130,136,144,157
+jira_metrics/development_time.py
+  s_91715ca111d94a::t_d63957d7b5a550 250,253
+  s_91715ca111d94a::t_e56b419954252d 145,148-158,160,163-173,175,178-179,248,357,370
+  s_91715ca111d94a::t_a1155d786316b3 275,282,290,321,358
+README.md
+  s_91715ca111d94a::t_f8dca50e8262e6 121
+  s_91715ca111d94a::t_4289b1de8728fc 274
+  s_91715ca111d94a::t_b190c842aafe41 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "eae95e072af5dd4035774cf7f9cb6e7ecc99563e",
+  "prompts": {},
+  "sessions": {
+    "s_91715ca111d94a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e6658-1634-7d81-811e-5afb07a45e69",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
