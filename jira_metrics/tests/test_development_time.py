@@ -163,8 +163,9 @@ class TestIssueTypeFiltering(unittest.TestCase):
 
         self.assertIn("project in (ABC, DEF)", jql)
         self.assertIn('issueType in ("Story", "Task", "Bug \\"Escalated\\"")', jql)
-        self.assertIn('status CHANGED FROM "In Progress" DURING (2024-01-01, 2024-12-31)', jql)
-        self.assertIn('status CHANGED TO "In Progress" DURING (2024-01-01, 2024-12-31)', jql)
+        self.assertIn('status CHANGED FROM "In Progress" DURING ("2024-01-01", "2024-12-31")', jql)
+        self.assertIn('status != "In Progress"', jql)
+        self.assertNotIn('status CHANGED TO "In Progress"', jql)
         self.assertNotIn("updated >= 2024-01-01", jql)
         self.assertNotIn("updated <= 2024-12-31", jql)
         self.assertNotIn("Task, Bug, Story, Spike", jql)
@@ -286,9 +287,9 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
 
         printed_lines = [call.args[0] for call in mock_print.call_args_list if call.args]
         self.assertIn(
-            'JQL Query: project in (PROJ) AND (status CHANGED FROM "In Progress" '
-            'DURING (2024-01-01, 2024-12-31) OR status CHANGED TO "In Progress" '
-            'DURING (2024-01-01, 2024-12-31)) AND issueType in ("Bug") ORDER BY updated ASC\n',
+            'JQL Query: project in (PROJ) AND status CHANGED FROM "In Progress" '
+            'DURING ("2024-01-01", "2024-12-31") AND status != "In Progress" '
+            'AND issueType in ("Bug") ORDER BY updated ASC\n',
             printed_lines,
         )
 

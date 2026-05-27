@@ -67,8 +67,8 @@ def build_development_time_jql(
 ) -> str:
     return (
         f"project in ({', '.join(projects)}) "
-        f'AND (status CHANGED FROM "In Progress" DURING ({start_date}, {end_date}) '
-        f'OR status CHANGED TO "In Progress" DURING ({start_date}, {end_date})) '
+        f'AND status CHANGED FROM "In Progress" DURING ("{start_date}", "{end_date}") '
+        'AND status != "In Progress" '
         f"AND issueType in ({quote_jql_values(issue_types)}) "
         "ORDER BY updated ASC"
     )
