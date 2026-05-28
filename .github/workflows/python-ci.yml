@@ -25,10 +25,10 @@ jobs:
       CUSTOM_FIELD_WORK_TYPE: "10079"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Set up Python 3.13
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v6
       with:
         python-version: "3.13"
 
@@ -46,7 +46,7 @@ jobs:
       # Skip on Dependabot PRs: they don't get access to Actions secrets,
       # so CODECOV_TOKEN is empty and the upload would fail.
       if: ${{ !cancelled() && github.actor != 'dependabot[bot]' }}
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
