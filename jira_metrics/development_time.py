@@ -142,6 +142,14 @@ def resolve_reporting_date_range(
     args: argparse.Namespace,
     current_year: int | None = None,
 ) -> tuple[str, str]:
+    date_ranges = resolve_reporting_date_ranges(args, current_year)
+    return date_ranges[0][0], date_ranges[-1][1]
+
+
+def resolve_reporting_date_ranges(
+    args: argparse.Namespace,
+    current_year: int | None = None,
+) -> list[tuple[str, str]]:
     has_year_range = args.start_year is not None or args.end_year is not None
     if args.year is not None and has_year_range:
         raise ValueError("--year cannot be combined with --start-year or --end-year")
@@ -151,10 +159,10 @@ def resolve_reporting_date_range(
             raise ValueError("--start-year and --end-year must be provided together")
         if args.start_year > args.end_year:
             raise ValueError("--start-year must be less than or equal to --end-year")
-        return f"{args.start_year}-01-01", f"{args.end_year}-12-31"
+        return [(f"{year}-01-01", f"{year}-12-31") for year in range(args.start_year, args.end_year + 1)]
 
     target_year = args.year or current_year or datetime.now().year
-    return f"{target_year}-01-01", f"{target_year}-12-31"
+    return [(f"{target_year}-01-01", f"{target_year}-12-31")]
 
 
 def parse_jira_datetime(value: str | None) -> datetime | None:
@@ -342,6 +350,30 @@ def calculate_monthly_development_time(
     return metrics_by_team_month
 
 
+def _merge_development_time_metrics(
+    target: defaultdict[str, defaultdict[str, MonthlyDevelopmentTimeBucket]],
+    source: defaultdict[str, defaultdict[str, MonthlyDevelopmentTimeBucket]],
+) -> None:
+    for team, months in source.items():
+        for month, bucket in months.items():
+            target_bucket = target[team][month]
+            target_bucket.development_times.extend(bucket.development_times)
+            target_bucket.skipped_missing_in_progress += bucket.skipped_missing_in_progress
+            target_bucket.skipped_no_next_status += bucket.skipped_no_next_status
+
+
+def calculate_development_time_for_date_ranges(
+    projects: list[str],
+    date_ranges: list[tuple[str, str]],
+    issue_types: list[str],
+) -> defaultdict[str, defaultdict[str, MonthlyDevelopmentTimeBucket]]:
+    metrics_by_team_month = defaultdict(lambda: defaultdict(MonthlyDevelopmentTimeBucket))
+    for start_date, end_date in date_ranges:
+        range_metrics = calculate_monthly_development_time(projects, start_date, end_date, issue_types)
+        _merge_development_time_metrics(metrics_by_team_month, range_metrics)
+    return metrics_by_team_month
+
+
 def _business_seconds_to_days(seconds: float) -> float:
     return seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS)
 
@@ -448,9 +480,12 @@ def main() -> None:
     print_env_variables()
 
     try:
-        start_date, end_date = resolve_reporting_date_range(args)
+        date_ranges = resolve_reporting_date_ranges(args)
     except ValueError as exc:
         parser.error(str(exc))
+
+    start_date = date_ranges[0][0]
+    end_date = date_ranges[-1][1]
 
     try:
         projects = parse_projects_from_env()
@@ -460,6 +495,8 @@ def main() -> None:
     print("Measuring development time as total completed time spent in In Progress.")
     print("P85 means 85% of measured tickets finished at or below that many business days.")
     print(f"Date range: {start_date} to {end_date}")
+    if len(date_ranges) > 1:
+        print(f"Query slices: {', '.join(start[:4] for start, _ in date_ranges)}")
     print(f"Projects: {projects}")
     print(f"Issue types: {args.issue_types}")
     try:
@@ -467,10 +504,9 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
-    metrics_by_team_month = calculate_monthly_development_time(
+    metrics_by_team_month = calculate_development_time_for_date_ranges(
         projects,
-        start_date,
-        end_date,
+        date_ranges,
         args.issue_types,
     )
     show_development_time_metrics(args.csv, metrics_by_team_month)

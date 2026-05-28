@@ -14,6 +14,7 @@ from development_time import (
     MISSING_IN_PROGRESS,
     NO_NEXT_STATUS,
     MonthlyDevelopmentTimeBucket,
+    calculate_development_time_for_date_ranges,
     build_development_time_jql,
     calculate_monthly_development_time,
     calculate_percentile,
@@ -25,6 +26,7 @@ from development_time import (
     parse_projects_from_env,
     process_development_time_metrics,
     resolve_reporting_date_range,
+    resolve_reporting_date_ranges,
     show_development_time_metrics,
     validate_issue_types_exist,
 )
@@ -290,6 +292,18 @@ class TestReportingDateRange(unittest.TestCase):
 
         self.assertEqual(resolve_reporting_date_range(args, current_year=2026), ("2024-01-01", "2026-12-31"))
 
+    def test_resolve_reporting_date_ranges_uses_annual_slices_for_multi_year_range(self):
+        args = SimpleNamespace(year=None, start_year=2024, end_year=2026)
+
+        self.assertEqual(
+            resolve_reporting_date_ranges(args, current_year=2026),
+            [
+                ("2024-01-01", "2024-12-31"),
+                ("2025-01-01", "2025-12-31"),
+                ("2026-01-01", "2026-12-31"),
+            ],
+        )
+
     def test_resolve_reporting_date_range_rejects_year_mixed_with_range(self):
         args = SimpleNamespace(year=2024, start_year=2023, end_year=2025)
 
@@ -445,6 +459,37 @@ class TestDevelopmentTimeAggregation(unittest.TestCase):
             'AND issueType in ("Bug") ORDER BY updated ASC\n',
             printed_lines,
         )
+
+    @patch("development_time.get_tickets_from_jira")
+    def test_calculate_development_time_for_date_ranges_queries_and_merges_annual_slices(self, mock_get_tickets):
+        issue_2025 = create_issue(
+            key="PROJ-2025",
+            histories=[
+                create_changelog_entry("2025-01-06T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2025-01-06T12:00:00.000-0800", "In Progress", "Done"),
+            ],
+        )
+        issue_2026 = create_issue(
+            key="PROJ-2026",
+            histories=[
+                create_changelog_entry("2026-01-06T10:00:00.000-0800", "Open", "In Progress"),
+                create_changelog_entry("2026-01-06T12:00:00.000-0800", "In Progress", "Done"),
+            ],
+        )
+        mock_get_tickets.side_effect = [[issue_2025], [issue_2026]]
+
+        metrics = calculate_development_time_for_date_ranges(
+            ["PROJ"],
+            [("2025-01-01", "2025-12-31"), ("2026-01-01", "2026-12-31")],
+            ["Bug"],
+        )
+
+        first_jql = mock_get_tickets.call_args_list[0].args[0]
+        second_jql = mock_get_tickets.call_args_list[1].args[0]
+        self.assertIn('DURING ("2025-01-01", "2025-12-31")', first_jql)
+        self.assertIn('DURING ("2026-01-01", "2026-12-31")', second_jql)
+        self.assertEqual(metrics["All"]["2025-01"].development_times, [(2 * 3600, "PROJ-2025")])
+        self.assertEqual(metrics["All"]["2026-01"].development_times, [(2 * 3600, "PROJ-2026")])
 
     def test_process_development_time_metrics_outputs_median_p85_ticket_and_skip_counts(self):
         bucket = MonthlyDevelopmentTimeBucket(
