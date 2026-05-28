@@ -16,17 +16,17 @@
 
 ## Files Changed
 
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/plan.md`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/arbiter_verdict.md.next`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_findings.json.next`
-- `.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_plan-reviewer-a.md`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_plan-reviewer-b.md`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_02_implementation/pr_description.md`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_02_implementation/builder_feedback_discussion.md`
-- `.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_code-reviewer-a.md`
-- `.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_findings_code-reviewer-a.json`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_code-reviewer-b.md`
-- `/Users/kjell/ws/extra/metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_findings_code-reviewer-b.json`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/plan.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/arbiter_verdict.md.next`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_findings.json.next`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_plan-reviewer-a.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_01_plan/review_plan-reviewer-b.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_02_implementation/pr_description.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_02_implementation/builder_feedback_discussion.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_code-reviewer-a.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_findings_code-reviewer-a.json`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_code-reviewer-b.md`
+- `metrics-and-insights/.quest/development-time-jira-metrics_2026-05-26__1620/phase_03_review/review_findings_code-reviewer-b.json`
 
 ## Iterations
 
