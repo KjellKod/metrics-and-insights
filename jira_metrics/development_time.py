@@ -11,9 +11,12 @@ from requests import RequestException
 # pylint: disable=import-error
 from cycle_time import business_time_spent_in_seconds
 from jira_utils import (
-    extract_status_timestamps,
+    calculate_total_time_in_status,
     get_common_parser,
+    get_issue_created_month_key,
+    get_team_or_project_unknown,
     get_tickets_from_jira,
+    is_month_key_in_date_range,
     parse_common_arguments,
     print_env_variables,
     verbose_print,
@@ -24,12 +27,6 @@ HOURS_TO_DAYS = 8
 SECONDS_TO_HOURS = 3600
 MISSING_IN_PROGRESS = "missing in-progress"
 NO_NEXT_STATUS = "no next status after in-progress"
-
-
-@dataclass(frozen=True)
-class StatusTransition:
-    status: str
-    timestamp: datetime
 
 
 @dataclass(frozen=True)
@@ -165,114 +162,30 @@ def resolve_reporting_date_ranges(
     return [(f"{target_year}-01-01", f"{target_year}-12-31")]
 
 
-def parse_jira_datetime(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    for date_format in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
-        try:
-            return datetime.strptime(value, date_format)
-        except ValueError:
-            continue
-    return None
-
-
-def _month_key_from_jira_datetime(value: str | None) -> str:
-    parsed_date = parse_jira_datetime(value)
-    if not parsed_date:
-        return "unknown"
-    return parsed_date.strftime("%Y-%m")
-
-
-def _get_project_key(issue: object) -> str:
-    fields = getattr(issue, "fields", None)
-    project = getattr(fields, "project", None)
-    project_key = getattr(project, "key", None)
-    if isinstance(project_key, str) and project_key.strip():
-        return project_key.strip().upper()
-
-    issue_key = getattr(issue, "key", "")
-    if isinstance(issue_key, str) and "-" in issue_key:
-        return issue_key.split("-", 1)[0].strip().upper()
-    return "UNKNOWN"
-
-
-def _get_team_field_value(team_field: object) -> str | None:
-    value = getattr(team_field, "value", team_field)
-    if isinstance(value, str) and value.strip():
-        return value.strip().lower().capitalize()
-    return None
-
-
-def get_development_time_team(issue: object) -> str:
-    configured_field = os.environ.get("CUSTOM_FIELD_TEAM")
-    fields = getattr(issue, "fields", None)
-    if configured_field and fields:
-        team_field = getattr(fields, f"customfield_{configured_field}", None)
-        if team_field:
-            team = _get_team_field_value(team_field)
-            if team:
-                return team
-
-    return f"{_get_project_key(issue)}/unknown-team"
-
-
-def _status_transitions_chronological(issue: object) -> list[StatusTransition]:
-    status_timestamps = extract_status_timestamps(issue)
-    transitions = []
-    for entry in reversed(status_timestamps):
-        status = entry["status"]
-        timestamp = entry["timestamp"]
-        if isinstance(status, str) and isinstance(timestamp, datetime):
-            transitions.append(StatusTransition(status=status, timestamp=timestamp))
-    return transitions
-
-
-def _issue_created_month(issue: object) -> str:
-    fields = getattr(issue, "fields", None)
-    created = getattr(fields, "created", None)
-    return _month_key_from_jira_datetime(created)
-
-
 def calculate_total_development_window(issue: object) -> DevelopmentWindowResult:
-    issue_id = getattr(issue, "key", "unknown")
-    transitions = _status_transitions_chronological(issue)
-    current_start: datetime | None = None
-    saw_in_progress = False
-    completed_intervals = 0
-    total_business_seconds = 0.0
-    last_exit_timestamp: datetime | None = None
+    time_in_status = calculate_total_time_in_status(
+        issue,
+        "In Progress",
+        business_time_spent_in_seconds,
+    )
 
-    for transition in transitions:
-        if transition.status.strip().lower() == "in progress":
-            saw_in_progress = True
-            current_start = transition.timestamp
-            continue
-
-        if current_start is None:
-            continue
-
-        total_business_seconds += business_time_spent_in_seconds(current_start, transition.timestamp)
-        completed_intervals += 1
-        last_exit_timestamp = transition.timestamp
-        current_start = None
-
-    if completed_intervals and last_exit_timestamp:
+    if time_in_status.completed_intervals and time_in_status.last_exit_timestamp:
         return DevelopmentWindowResult(
-            issue_id=issue_id,
-            month_key=last_exit_timestamp.strftime("%Y-%m"),
-            business_seconds=total_business_seconds,
+            issue_id=time_in_status.issue_id,
+            month_key=time_in_status.last_exit_timestamp.strftime("%Y-%m"),
+            business_seconds=time_in_status.total_seconds,
         )
 
-    if saw_in_progress and current_start:
+    if time_in_status.saw_status and time_in_status.open_start_timestamp:
         return DevelopmentWindowResult(
-            issue_id=issue_id,
-            month_key=current_start.strftime("%Y-%m"),
+            issue_id=time_in_status.issue_id,
+            month_key=time_in_status.open_start_timestamp.strftime("%Y-%m"),
             reason=NO_NEXT_STATUS,
         )
 
     return DevelopmentWindowResult(
-        issue_id=issue_id,
-        month_key=_issue_created_month(issue),
+        issue_id=time_in_status.issue_id,
+        month_key=get_issue_created_month_key(issue),
         reason=MISSING_IN_PROGRESS,
     )
 
@@ -315,14 +228,6 @@ def _record_development_time_result(
         _add_result_to_bucket(bucket, result)
 
 
-def _month_key_in_date_range(month_key: str, start_date: str, end_date: str) -> bool:
-    try:
-        datetime.strptime(month_key, "%Y-%m")
-    except ValueError:
-        return False
-    return start_date[:7] <= month_key <= end_date[:7]
-
-
 def calculate_monthly_development_time(
     projects: list[str],
     start_date: str,
@@ -337,14 +242,14 @@ def calculate_monthly_development_time(
 
     for issue in tickets:
         result = calculate_total_development_window(issue)
-        if not _month_key_in_date_range(result.month_key, start_date, end_date):
+        if not is_month_key_in_date_range(result.month_key, start_date, end_date):
             skip_message = (
                 f"Skipping {result.issue_id}: result month {result.month_key} " f"is outside {start_date} to {end_date}"
             )
             verbose_print(skip_message)
             continue
 
-        team = get_development_time_team(issue)
+        team = get_team_or_project_unknown(issue)
         _record_development_time_result(metrics_by_team_month, team, result)
 
     return metrics_by_team_month

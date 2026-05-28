@@ -19,7 +19,6 @@ from development_time import (
     calculate_monthly_development_time,
     calculate_percentile,
     calculate_total_development_window,
-    get_development_time_team,
     get_jira_issue_type_names,
     main,
     parse_issue_types,
@@ -321,32 +320,6 @@ class TestReportingDateRange(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "--start-year must be less than or equal"):
             resolve_reporting_date_range(args, current_year=2026)
-
-
-class TestDevelopmentTimeTeam(unittest.TestCase):
-    def test_get_development_time_team_uses_configured_team_field_when_present(self):
-        issue = create_issue(team_value=" Platform ")
-
-        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
-            self.assertEqual(get_development_time_team(issue), "Platform")
-
-    def test_get_development_time_team_uses_project_unknown_team_when_team_empty(self):
-        issue = create_issue(team_value=" ", project_key="ENG")
-
-        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
-            self.assertEqual(get_development_time_team(issue), "ENG/unknown-team")
-
-    def test_get_development_time_team_uses_project_unknown_team_when_team_field_missing(self):
-        issue = create_issue(project_key="OPS")
-
-        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
-            self.assertEqual(get_development_time_team(issue), "OPS/unknown-team")
-
-    def test_get_development_time_team_uses_issue_project_key_in_unknown_team_fallback(self):
-        issue = create_issue(key="DATA-123", project_key="")
-
-        with patch.dict(os.environ, {"CUSTOM_FIELD_TEAM": "10075"}):
-            self.assertEqual(get_development_time_team(issue), "DATA/unknown-team")
 
 
 class TestDevelopmentTimeAggregation(unittest.TestCase):
