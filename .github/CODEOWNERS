@@ -1,0 +1,8 @@
+# Ownership for CI/CD and repository governance files.
+* @KjellKod
+/.github/ @KjellKod
+/.github/workflows/ @KjellKod
+/.github/dependabot.yml @KjellKod
+/.github/CODEOWNERS @KjellKod
+/requirements.txt @KjellKod
+/pyproject.toml @KjellKod
