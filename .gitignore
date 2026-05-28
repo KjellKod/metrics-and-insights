@@ -177,6 +177,7 @@ cython_debug/
 #.idea/
 
 # Quest ephemeral state
+.quest
 .quest/
 .worktrees/
 .ws/

@@ -1,6 +1,8 @@
 import argparse
 import os
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -63,6 +65,22 @@ class JiraStatus(Enum):
     CODE_REVIEW = "code review"
     RELEASED = "released"
     DONE = "done"
+
+
+@dataclass(frozen=True)
+class StatusTransition:
+    status: str
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class TimeInStatusResult:
+    issue_id: str
+    saw_status: bool
+    completed_intervals: int
+    total_seconds: float
+    last_exit_timestamp: datetime | None
+    open_start_timestamp: datetime | None
 
 
 def get_common_parser():
@@ -751,6 +769,60 @@ def get_children_for_epic(epic_key: str):
     return get_tickets_from_jira(jql)
 
 
+def parse_jira_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    for date_format in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            return datetime.strptime(value, date_format)
+        except ValueError:
+            continue
+    return None
+
+
+def month_key_from_jira_datetime(value: str | None) -> str:
+    parsed_date = parse_jira_datetime(value)
+    if not parsed_date:
+        return "unknown"
+    return parsed_date.strftime("%Y-%m")
+
+
+def get_project_key(issue: object) -> str:
+    fields = getattr(issue, "fields", None)
+    project = getattr(fields, "project", None)
+    project_key = getattr(project, "key", None)
+    if isinstance(project_key, str) and project_key.strip():
+        return project_key.strip().upper()
+
+    issue_key = getattr(issue, "key", "")
+    if isinstance(issue_key, str) and "-" in issue_key:
+        return issue_key.split("-", 1)[0].strip().upper()
+    return "UNKNOWN"
+
+
+def _get_field_value(field: object) -> str | None:
+    value = getattr(field, "value", field)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _format_team_name(value: str) -> str:
+    return value.strip().lower().capitalize()
+
+
+def get_team_or_project_unknown(issue: object) -> str:
+    configured_field = os.environ.get("CUSTOM_FIELD_TEAM")
+    fields = getattr(issue, "fields", None)
+    if configured_field and fields:
+        team_field = getattr(fields, f"customfield_{configured_field}", None)
+        team = _get_field_value(team_field)
+        if team:
+            return _format_team_name(team)
+
+    return f"{get_project_key(issue)}/unknown-team"
+
+
 def extract_status_timestamps(issue):
     # Extract the status change timestamps and normalize them to newest-first.
     # This makes the downstream interpretation deterministic even if the API
@@ -768,6 +840,68 @@ def extract_status_timestamps(issue):
                 )
     status_timestamps.sort(key=lambda entry: entry["timestamp"], reverse=True)
     return status_timestamps
+
+
+def get_status_transitions_chronological(issue: object) -> list[StatusTransition]:
+    status_timestamps = extract_status_timestamps(issue)
+    transitions = []
+    for entry in reversed(status_timestamps):
+        status = entry["status"]
+        timestamp = entry["timestamp"]
+        if isinstance(status, str) and isinstance(timestamp, datetime):
+            transitions.append(StatusTransition(status=status, timestamp=timestamp))
+    return transitions
+
+
+def get_issue_created_month_key(issue: object) -> str:
+    fields = getattr(issue, "fields", None)
+    created = getattr(fields, "created", None)
+    return month_key_from_jira_datetime(created)
+
+
+def is_month_key_in_date_range(month_key: str, start_date: str, end_date: str) -> bool:
+    try:
+        datetime.strptime(month_key, "%Y-%m")
+    except ValueError:
+        return False
+    return start_date[:7] <= month_key <= end_date[:7]
+
+
+def calculate_total_time_in_status(
+    issue: object,
+    status_name: str,
+    seconds_between: Callable[[datetime, datetime], float],
+) -> TimeInStatusResult:
+    issue_id = getattr(issue, "key", "unknown")
+    target_status = status_name.strip().casefold()
+    current_start = None
+    saw_status = False
+    completed_intervals = 0
+    total_seconds = 0.0
+    last_exit_timestamp = None
+
+    for transition in get_status_transitions_chronological(issue):
+        if transition.status.strip().casefold() == target_status:
+            saw_status = True
+            current_start = transition.timestamp
+            continue
+
+        if current_start is None:
+            continue
+
+        total_seconds += seconds_between(current_start, transition.timestamp)
+        completed_intervals += 1
+        last_exit_timestamp = transition.timestamp
+        current_start = None
+
+    return TimeInStatusResult(
+        issue_id=issue_id,
+        saw_status=saw_status,
+        completed_intervals=completed_intervals,
+        total_seconds=total_seconds,
+        last_exit_timestamp=last_exit_timestamp,
+        open_start_timestamp=current_start,
+    )
 
 
 def interpret_status_timestamps(status_timestamps):
