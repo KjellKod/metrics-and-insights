@@ -1,0 +1,21 @@
+.github/dependabot.yml
+  s_bcecb9337e85c0::t_f72d003152397b 1-24
+.github/CODEOWNERS
+  s_bcecb9337e85c0::t_565f9f6ec7c4b4 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1926651579ec6e307e69e31cc3797d2922f168a9",
+  "prompts": {},
+  "sessions": {
+    "s_bcecb9337e85c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e6f53-7646-7293-a02a-3e3b5029de84",
+        "model": "gpt-5.3-codex"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
