@@ -1,0 +1,23 @@
+jira_metrics/development_time.py
+  s_91715ca111d94a::t_8ecb7e391ada5b 145-152,162,165,353-376,483,487-489,498-499,507,509
+jira_metrics/tests/test_development_time.py
+  s_91715ca111d94a::t_8a83b2e07b23c4 17,29,295-306,463-492
+README.md
+  s_91715ca111d94a::t_8936052b4c4036 275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e3fed35e19425cfb09db45a53ae2692fd857731d",
+  "prompts": {},
+  "sessions": {
+    "s_91715ca111d94a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e6658-1634-7d81-811e-5afb07a45e69",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
