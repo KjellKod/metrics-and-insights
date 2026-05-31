@@ -23,7 +23,7 @@ pillow==12.2.0
 platformdirs==4.10.0
 pluggy==1.6.0
 propcache==0.5.2
-pylint==3.3.1
+pylint==4.0.5
 pytest==9.0.3
 pytest-cov==7.1.0
 python-dotenv==1.2.2
