@@ -8,8 +8,8 @@ click==8.4.1
 defusedxml==0.7.1
 dill==0.4.1
 gql==4.0.0
-graphql-core==3.2.8
-idna==3.17
+graphql-core==3.2.11
+idna==3.18
 iniconfig==2.3.0
 isort==5.13.2
 jira==3.10.5
