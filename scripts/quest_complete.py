@@ -18,6 +18,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -31,6 +32,7 @@ from quest_celebrate.quest_data import (
     load_quest_data,
 )
 from quest_celebrate.persist import CelebrationWriteResult, write_celebration_file
+from quest_runtime.claude_runner import sweep_left_survivor
 from quest_runtime.quest_ids import parse_quest_id
 
 
@@ -40,21 +42,33 @@ def _today() -> date:
 
 def _build_celebration_json(data: QuestData) -> dict:
     """Build the celebration_data JSON block from QuestData."""
+    metrics = [
+        {"icon": "📊", "label": f"Plan iterations: {data.plan_iterations}"},
+        {"icon": "🔧", "label": f"Fix iterations: {data.fix_iterations}"},
+        {"icon": "📝", "label": f"Review rounds: {data.review_count}"},
+    ]
+    if data.claude_transport_counts:
+        # Only when Codex called Claude — silent empty state otherwise.
+        breakdown = ", ".join(
+            f"{transport} ×{count}"
+            for transport, count in sorted(data.claude_transport_counts.items())
+        )
+        metrics.append({"icon": "🚌", "label": f"Claude transport: {breakdown}"})
     return {
         "quest_mode": data.quest_mode or "unknown",
         "agents": [
-            {"name": a.name, "model": a.model, "role": a.role_title}
+            (
+                {"name": a.name, "model": a.model, "role": a.role_title}
+                | ({"transport": a.transport} if a.transport else {})
+            )
             for a in data.agents
         ],
+        "claude_transport_counts": data.claude_transport_counts,
         "achievements": [
             {"icon": a.icon, "title": a.title, "desc": a.description}
             for a in data.achievements
         ],
-        "metrics": [
-            {"icon": "📊", "label": f"Plan iterations: {data.plan_iterations}"},
-            {"icon": "🔧", "label": f"Fix iterations: {data.fix_iterations}"},
-            {"icon": "📝", "label": f"Review findings: {data.review_count}"},
-        ],
+        "metrics": metrics,
         "quality": {
             "tier": data.quality_tier,
             "grade": data.quality_tier[0] if data.quality_tier else "?",
@@ -320,6 +334,47 @@ def _update_readme_index(journal_dir: Path, slug: str, completion_date: date, ou
     readme.write_text(content)
 
 
+def _handoff_status_stats(archive_root: Path) -> dict:
+    """Aggregate status= fields across archived quests' context_health logs.
+
+    Counting contract: only lines that explicitly carry status= participate —
+    legacy lines (which predate the field) are excluded from both numerator
+    and denominator, never inferred as complete or needs_human.
+    """
+    status_counts: dict[str, int] = {}
+    instrumented_quests = 0
+    archived_quests = 0
+    if archive_root.is_dir():
+        for quest in sorted(archive_root.iterdir()):
+            if not quest.is_dir():
+                continue
+            archived_quests += 1
+            try:
+                lines = (quest / "logs" / "context_health.log").read_text(
+                    encoding="utf-8"
+                ).splitlines()
+            except (OSError, UnicodeDecodeError):
+                # A malformed (non-UTF-8) archived log must not crash this
+                # optional rollup; skip it, matching the graceful-degradation
+                # contract used for celebration metadata.
+                continue
+            quest_has_status = False
+            for line in lines:
+                match = re.search(r"\bstatus=(\S+)", line)
+                if not match:
+                    continue
+                quest_has_status = True
+                status_counts[match.group(1)] = status_counts.get(match.group(1), 0) + 1
+            if quest_has_status:
+                instrumented_quests += 1
+    return {
+        "archived_quests": archived_quests,
+        "status_instrumented_quests": instrumented_quests,
+        "status_counts": status_counts,
+        "needs_human": status_counts.get("needs_human", 0),
+    }
+
+
 def _archive_quest(quest_dir: Path) -> Path:
     """Move quest directory to archive. Returns archive path."""
     archive_root = quest_dir.parent / "archive"
@@ -329,6 +384,44 @@ def _archive_quest(quest_dir: Path) -> Path:
         raise FileExistsError(f"Archive already exists: {dest}. Remove it manually to re-archive.")
     shutil.move(str(quest_dir), str(dest))
     return dest
+
+
+def _sweep_parked_bg_sessions(quest_dir: Path) -> subprocess.CompletedProcess | None:
+    """Best-effort cleanup for parked Claude background sessions before archive."""
+    runner = Path(__file__).resolve().parent / "claude_bg_run.py"
+    if not runner.exists():
+        print(f"Claude bg sweep skipped: runner not found at {runner}", file=sys.stderr)
+        return None
+    prefix = f"quest-{quest_dir.name}-"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(runner), "--sweep", prefix],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        print(f"Claude bg sweep failed before archive: {exc}", file=sys.stderr)
+        return None
+    if sweep_left_survivor(result.returncode, result.stdout):
+        # Prominent, actionable, on STDOUT: after archive nothing ever
+        # re-sweeps this quest's sessions, so an unverified cleanup leaks
+        # until the human runs the command themselves.
+        print(
+            f"WARNING: Claude bg sweep before archive incomplete (exit {result.returncode}); "
+            "session(s) may remain live and will NOT be cleaned up automatically. "
+            f"If they are this quest's own leftovers, run: "
+            f"python3 {runner} --sweep {prefix} --sweep-include-active"
+        )
+        if result.stdout.strip():
+            print(result.stdout.strip())
+        if result.stderr.strip():
+            print(result.stderr.strip(), file=sys.stderr)
+    else:
+        print(f"Claude bg sweep before archive complete: {prefix}")
+        if result.stdout.strip():
+            print(result.stdout.strip())
+    return result
 
 
 def _slug_from_quest_dir(quest_dir: Path) -> str:
@@ -356,7 +449,11 @@ def main() -> int:
         print(f"Error: no state.json in {quest_dir}", file=sys.stderr)
         return 1
 
-    state = json.loads(state_file.read_text())
+    try:
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        print(f"Error: could not read state.json in {quest_dir}: {exc}", file=sys.stderr)
+        return 1
     if state.get("status") != "complete":
         print(f"Error: quest status is '{state.get('status')}', not 'complete'. "
               "Transition to complete or abandoned first.", file=sys.stderr)
@@ -439,9 +536,21 @@ def main() -> int:
             print(f"README index updated")
         journal_path = str(journal_file)
 
+    archive_root = quest_dir.parent / "archive"
     if not args.skip_archive:
+        _sweep_parked_bg_sessions(quest_dir)
         archive_path = _archive_quest(quest_dir)
         print(f"Quest archived: {archive_path}")
+
+    # Historical needs_human rollup (runs after archival so this quest counts).
+    # Feeds the measurement gate in ideas/2026-07-05-bg-claude-ask-policy-relaxation.md.
+    status_stats = _handoff_status_stats(archive_root)
+    print(
+        f"needs_human across archive: {status_stats['needs_human']} occurrence(s) "
+        f"in {status_stats['status_instrumented_quests']} status-instrumented "
+        f"quest(s) of {status_stats['archived_quests']} archived "
+        "(lines without status= are not counted)"
+    )
 
     print(json.dumps({
         "slug": slug,
@@ -449,6 +558,7 @@ def main() -> int:
         "celebration": celebration_path,
         "archived": not args.skip_archive,
         "quality_tier": data.quality_tier,
+        "needs_human_stats": status_stats,
     }))
 
     return 0

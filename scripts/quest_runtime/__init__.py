@@ -2,6 +2,8 @@
 
 from .orchestration import (
     CANONICAL_ROLES,
+    CLAUDE_ROLE_TRANSPORTS,
+    DEFAULT_CLAUDE_ROLE_TRANSPORT,
     ORCHESTRATION_VERSION,
     SOLO_UNUSED_ROLES,
     Override,
@@ -11,6 +13,7 @@ from .orchestration import (
     build_default_models,
     build_snapshot_models,
     is_claude_model,
+    runtime_for_model,
     is_model_available,
     is_model_available_for_orchestrator,
     load_codex_available_from_cache,
@@ -44,6 +47,8 @@ from .quest_ids import (
 
 __all__ = [
     "CANONICAL_ROLES",
+    "CLAUDE_ROLE_TRANSPORTS",
+    "DEFAULT_CLAUDE_ROLE_TRANSPORT",
     "DATE_FIRST",
     "DEFAULT_QUEST_ID_FORMAT",
     "ORCHESTRATION_VERSION",
@@ -64,6 +69,7 @@ __all__ = [
     "expected_artifacts_for_role",
     "format_quest_id",
     "is_claude_model",
+    "runtime_for_model",
     "is_model_available",
     "is_model_available_for_orchestrator",
     "is_quest_id",
