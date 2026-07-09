@@ -1119,6 +1119,29 @@ install_copy_as_is_file() {
   fi
 
   # Case 3: File exists and has local modifications
+
+  # Special case: .quest-manifest is bookkeeping that must always match the
+  # installed file set — a stale copy makes manifest validation fail in the
+  # target repo. Overwrite it with upstream unconditionally (no prompt), but
+  # first preserve the local copy as a .quest_updated sidecar so an intentional
+  # customization stays recoverable.
+  if [ "$filepath" = ".quest-manifest" ]; then
+    local backup_path="${filepath}.quest_updated"
+    # Clear progress line before logging
+    printf "\r%-80s\r" "" >&2
+    if $DRY_RUN; then
+      rm -f "$temp_file"
+      log_action "Overwrite $filepath with upstream (backing up local copy to $backup_path)"
+      ((DRY_RUN_WOULD_UPDATE++))
+      return 0
+    fi
+    cp "$filepath" "$backup_path"
+    mv "$temp_file" "$filepath"
+    set_updated_checksum "$filepath" "$upstream_checksum"
+    log_warn "Overwrote $filepath with upstream; saved your previous copy as $backup_path (delete it if you made no manual edits)"
+    return 0
+  fi
+
   if $DRY_RUN; then
     rm -f "$temp_file"
     # Clear progress line before warning
@@ -1622,8 +1645,12 @@ SETTINGS
   if command -v jq &>/dev/null; then
     local tmp_file
     tmp_file=$(mktemp)
-    jq '.permissions.allow += ["mcp__codex-cli__*"]' "$settings_file" > "$tmp_file" && mv "$tmp_file" "$settings_file"
-    log_success "Added mcp__codex-cli__* permission to $settings_file"
+    if jq '.permissions.allow += ["mcp__codex-cli__*"]' "$settings_file" > "$tmp_file" && mv "$tmp_file" "$settings_file"; then
+      log_success "Added mcp__codex-cli__* permission to $settings_file"
+    else
+      rm -f "$tmp_file"
+      log_warn "Could not update $settings_file automatically — please add \"mcp__codex-cli__*\" to permissions.allow"
+    fi
   else
     log_warn "jq not found — please add \"mcp__codex-cli__*\" to permissions.allow in $settings_file"
   fi

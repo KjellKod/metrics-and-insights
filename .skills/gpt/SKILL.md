@@ -1,18 +1,24 @@
 ---
 name: gpt
-description: Delegate a task to OpenAI Codex via MCP. Use when the user invokes /gpt, asks to "use codex", "ask codex", "have codex do X", or when a second opinion or parallel implementation from a different model would be valuable.
+description: Delegate a task to OpenAI Codex via MCP from Claude-led sessions. Use when the user invokes /gpt, asks to "use codex", "ask codex", "have codex do X", or when a second opinion or parallel implementation from a different model would be valuable.
 ---
 
 # Skill: GPT (Codex)
 
-Delegate tasks to OpenAI Codex via the `mcp__codex-cli__codex` MCP tool.
+Delegate tasks to OpenAI Codex via the `mcp__codex-cli__codex` MCP tool from Claude-led sessions.
 
 ## When to Use
 
 - User types `/gpt` or `/gpt <task>`
 - User asks to "use codex", "ask codex", "have codex review/write/analyze..."
 - User wants a second opinion from a different model
-- Quest workflow routes a role to Codex (builder, fixer, code-reviewer-b, plan-reviewer-b)
+- Claude-led Quest workflow routes a role to Codex (builder, fixer, code-reviewer-b, plan-reviewer-b)
+
+## Not for Codex-Led Quest Role Dispatch
+
+If you are already Codex and a Quest role is assigned to Codex, do not call Codex MCP to create another Codex role. Codex-led Quest dispatch must use local Codex subagents (the `spawn_agent` tool family — versioned namespace varies by Codex CLI release — or the repo-supported equivalent) and inherit the active Codex model unless the user explicitly requested a model override.
+
+Codex MCP is only the cross-runtime path when the orchestrator is Claude-led and needs to dispatch a Codex runtime role. A Codex-led attempt to use `mcp__codex*`, `codex_codex`, `codex mcp-server`, or Codex CLI model aliases for a Codex role is an orchestration violation, not a model-selection problem.
 
 ## Prerequisites
 
@@ -24,13 +30,13 @@ If Codex isn't connecting, also run `claude mcp add codex-cli -- codex mcp-serve
 
 If the tool `mcp__codex-cli__codex` is not available, tell the user to add the config above and restart Claude Code.
 
-## Step 1: Confirm Before Calling
+## Step 1: Confirm Before Calling From Claude
 
-Before invoking Codex, **always tell the user what you're about to do** and wait for confirmation:
+Before invoking Codex from a Claude-led session, **always tell the user what you're about to do** and wait for confirmation:
 
 ```
 I'll delegate this to Codex with:
-- **Model:** gpt-5.4
+- **Model:** gpt-5.5
 - **Reasoning:** high
 - **Sandbox:** workspace-write
 
@@ -45,33 +51,35 @@ Adjust the defaults based on task complexity:
 
 If the user specifies reasoning or model in their request, use what they asked for.
 
-## Step 2: Call via MCP
+## Step 2: Call via MCP From Claude
 
-Always use the MCP tool. **Never shell out to `codex exec`.**
+For this Claude-led skill, use the MCP tool. **Never shell out to `codex exec`.** Do not use this step for Codex-led Quest role dispatch; use local Codex subagents there.
 
 ```
 mcp__codex-cli__codex({
   prompt: "<task description>",
-  model: "gpt-5.4",
-  reasoningEffort: "high",
+  model: "gpt-5.5",
   sandbox: "workspace-write",
-  fullAuto: true
+  fullAuto: true,
+  config: { model_reasoning_effort: "high" }   // low | medium | high | xhigh
 })
 ```
 
+> Reasoning effort is **not** a top-level `reasoningEffort` param — the MCP schema doesn't accept one. It must be passed inside `config` as `model_reasoning_effort`. Passing `reasoningEffort` at top level is silently ignored.
+
 ## Available Models
 
-Use `gpt-5.4` unless the user requests otherwise. The MCP tool schema may lag behind — `gpt-5.4` works even if not listed in the schema's enum.
+Use `gpt-5.5` unless the user requests otherwise. The MCP tool schema may lag behind — `gpt-5.5` works even if not listed in the schema's enum.
 
 Known working models:
-`gpt-5.4`, `gpt-5.3-codex`
+`gpt-5.5`, `gpt-5.4`, `gpt-5.3-codex`
 
 ## Parameters
 
 | Parameter | Default | When to change |
 |-----------|---------|----------------|
-| `model` | `gpt-5.4` | Only if user requests a specific model |
-| `reasoningEffort` | `high` | `low`/`medium` for simple tasks, `xhigh` for complex architecture |
+| `model` | `gpt-5.5` | Only if user requests a specific model |
+| `config.model_reasoning_effort` | `high` | `low`/`medium` for simple tasks, `xhigh` for complex architecture. Pass inside `config`, not as a top-level `reasoningEffort` |
 | `sandbox` | `workspace-write` | `read-only` for pure Q&A with no file output. `danger-full-access` **only with explicit user permission** — needed for network access, system commands, or out-of-workspace writes |
 | `fullAuto` | `true` | Leave true unless user wants approval prompts |
 | `sessionId` | (none) | Set to continue a previous Codex conversation within the same task |
@@ -82,7 +90,7 @@ Known working models:
 - **`read-only`** — Pure analysis, explanation, Q&A. No file writes at all.
 - **`danger-full-access`** — Full system access. **Always ask the user before using this.** Needed when: installing dependencies, network calls, accessing files outside the workspace.
 
-When called from Quest orchestration, match the sandbox to the role:
+When called from Claude-led Quest orchestration, match the sandbox to the role:
 - Builder/Fixer: `workspace-write`
 - Reviewers: `workspace-write` (may write review artifacts)
 - Analysis-only: `read-only`

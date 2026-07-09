@@ -10,6 +10,47 @@ Generate a pull request title and description from the current branch, then crea
 
 ---
 
+## Sync with the default branch (before creating the PR)
+
+Before pushing or running `gh pr create`, sync the PR branch with the remote
+default branch from the source worktree:
+
+1. Run `python3 scripts/pr_sync_default_branch.py --json`.
+2. If the payload is `status: "up_to_date"`, continue with the normal PR
+   creation flow.
+3. If the payload is `status: "clean"`, run
+   `python3 scripts/pr_sync_default_branch.py --apply --json`, parse the apply
+   payload, and continue only when it reports `status: "synced"` or
+   `status: "up_to_date"`. The inspect result is a best-effort merge-based
+   estimate; the `--apply` result is the source of truth for the default rebase
+   strategy.
+4. If either payload is `status: "conflict"`, surface the listed
+   `conflict_files`. The inspect path can be filename-only; when hunks or
+   conflict markers are not available, pause instead of guessing. Attempt a
+   resolution only when the hunks are available and the fix is clearly safe and
+   non-destructive: additive / adjacent / whitespace / import-or-list ordering,
+   where both sides' intent is preserved and nothing from `main` is dropped. If
+   the correct resolution would overwrite or delete code/instructions from
+   `main`, or the right resolution is ambiguous, pause and ask the human. When
+   in doubt, pause.
+5. If either payload is `status: "error"`, stop and surface the `reason` and
+   `message` fields before any push or PR mutation.
+6. Never use blanket `-X theirs` or `-X ours` resolution.
+7. If the applied sync reports `force_with_lease: true`, push with
+   `git push --force-with-lease -u origin HEAD` on the first push, or
+   `git push --force-with-lease` when the branch already has an upstream;
+   otherwise push normally.
+
+### Force-with-lease exception
+
+Syncing the author's own not-yet-merged PR branch onto the default branch with
+`git push --force-with-lease` is the narrow, lease-protected exception to the
+general force-push caution. It does not require a permission prompt or allowlist
+entry because `--force-with-lease` refuses to clobber remote work that appeared
+since the last fetch, and the branch is the author's PR branch.
+
+---
+
 ## Before Writing
 
 1. Run `git log --oneline main..HEAD` (or the appropriate base branch) to see all commits on this branch.
@@ -36,6 +77,12 @@ Generate a pull request title and description from the current branch, then crea
 Use this format:
 
 ```
+## ⭐ Why this matters
+<1–3 sentences in plain language that make a busy human immediately see the VALUE — the problem this removes or the capability it unlocks — before any technical detail. Lead with impact, not mechanics.>
+<Optionally follow with 2–3 bold one-line benefit bullets.>
+
+---
+
 ## Summary
 <Single sentence capturing the full intent — what this PR does and why.>
 - Supporting bullet with additional context if needed.
@@ -60,6 +107,16 @@ Watch for: <known risk or edge case, if any>
 - Important implementation/deployment/reviewer context that is not obvious from the diff.
 - Do not repeat the Summary; only include unique, high-signal details reviewers should know.
 ```
+
+### Why this matters section (required — first thing in the body)
+
+This is the value-first executive summary. It sits at the very top so a busy human grasps **why they should care** at a glance, before any technical detail.
+
+- **Lead with impact, not mechanics.** State the problem this removes or the capability it unlocks in human terms — what was painful/risky/impossible before, and what is true now.
+- Keep it to 1–3 sentences, optionally followed by 2–3 bold one-line benefit bullets. A reader who stops after this section should still understand why the PR is worth merging.
+- Do **not** restate the file-by-file changes here (that's `## Changes`) and do **not** hedge with implementation caveats (that's `## Notes`).
+- Close the section with a `---` horizontal rule before `## Summary`.
+- Every PR gets this section. For a tiny/mechanical PR, one honest sentence is enough — never pad it.
 
 ### Summary section
 
@@ -177,7 +234,7 @@ When updating an existing PR body, preserve bot-managed sections exactly:
 
 - Create: `gh pr create --draft --title "..." --body "..."`
 - Update: `gh pr edit <number> --title "..." --body "..."`
-- Push first if the remote branch is behind: `git push -u origin HEAD`
+- Push only after the default-branch sync above. Use `git push --force-with-lease -u origin HEAD` for a first push when the sync payload reports `force_with_lease: true`, or `git push --force-with-lease` when the branch already has an upstream; otherwise use `git push -u origin HEAD`.
 - Run `gh` directly — do not wrap in `bash -lc` or `sh -c`. Permission prefixes only match when `gh` is the top-level command.
 
 ### Truthfulness
@@ -240,4 +297,4 @@ Always show the intended PR title and full body to the user and wait for explici
 
 ## Output
 
-Output only the final PR title and body. Do not use emojis.
+Output only the final PR title and body. Do not use emojis beyond the template's fixed `## ⭐ Why this matters` header.

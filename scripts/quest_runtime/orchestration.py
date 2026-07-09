@@ -30,6 +30,7 @@ CANONICAL_ROLES: tuple[str, ...] = (
     "builder",
     "code-reviewer-a",
     "code-reviewer-b",
+    "review-arbiter",
     "fixer",
 )
 
@@ -41,16 +42,27 @@ DEFAULT_MODELS: dict[str, str] = {
     "builder": "gpt-5.5",
     "code-reviewer-a": "claude",
     "code-reviewer-b": "gpt-5.5",
+    "review-arbiter": "claude",
     "fixer": "gpt-5.5",
 }
 
+# Roles added after early snapshots/existing orchestration files were already
+# written. These keys may be backfilled from DEFAULT_MODELS during resume.
+LEGACY_COMPAT_BACKFILL_ROLES: frozenset[str] = frozenset({"review-arbiter"})
+
 # Roles that may legitimately be unused (and therefore null) in solo mode.
 SOLO_UNUSED_ROLES: frozenset[str] = frozenset(
-    {"plan-reviewer-b", "code-reviewer-b", "arbiter"}
+    {"plan-reviewer-b", "code-reviewer-b", "arbiter", "review-arbiter"}
 )
 
 ORCHESTRATION_VERSION = 1
 CODEX_NATIVE_FALLBACK_MODEL = "gpt-5.5"
+
+# Transport for Codex-led Claude roles (.ai/allowlist.json claude_role_transport).
+# "auto" resolves to background-agent when the preflight bg probe succeeds.
+# If it fails, Quest asks the user; bridge is an explicit API-metered opt-in.
+CLAUDE_ROLE_TRANSPORTS: tuple[str, ...] = ("auto", "background-agent", "bridge")
+DEFAULT_CLAUDE_ROLE_TRANSPORT = "auto"
 
 
 class OverrideParseError(ValueError):
@@ -118,6 +130,24 @@ def is_claude_model(model: str) -> bool:
     return model == "claude" or model.startswith("claude-")
 
 
+def runtime_for_model(model: str) -> str:
+    """Map a persisted `models.<role>` model ID to its runtime family.
+
+    `models.*` stores model IDs (for example `claude`, `claude-opus-4-6`,
+    `gpt-5.5`), not runtime names. The Quest contract is binary: Claude-family
+    IDs run on the Claude runtime; every other ID runs on Codex tooling.
+    Provider-qualified IDs (for example `opencode/claude-opus-4-6`) are
+    classified on the segment after the final `/`.
+    """
+    normalized = model.strip().lower()
+    if not normalized:
+        raise ValueError("model must be a non-empty string")
+    unqualified = normalized.rsplit("/", 1)[-1]
+    if not unqualified:
+        raise ValueError(f"model ID has no name after provider prefix: {model!r}")
+    return "claude" if is_claude_model(unqualified) else "codex"
+
+
 def is_model_available(model: str, *, codex_available: bool) -> bool:
     """Return True if the requested model can run with the current preflight.
 
@@ -142,9 +172,12 @@ def is_model_available_for_orchestrator(
     normalized_orchestrator = orchestrator.strip().lower()
     if normalized_orchestrator not in {"claude", "codex"}:
         raise ValueError(f"Unknown orchestrator: {orchestrator!r}")
+    # Classify through the same canonical mapping dispatch uses, so
+    # provider-qualified IDs (opencode/claude-*) gate consistently.
+    model_runtime = runtime_for_model(model)
     if normalized_orchestrator == "claude":
-        return True if is_claude_model(model) else codex_available
-    return claude_available if is_claude_model(model) else True
+        return True if model_runtime == "claude" else codex_available
+    return claude_available if model_runtime == "claude" else True
 
 
 def active_roles_for_mode(quest_mode: str) -> tuple[str, ...]:
@@ -184,6 +217,14 @@ def validate_or_remap_models_for_orchestrator(
     for role in active_roles_for_mode(quest_mode):
         model = result.get(role)
         if not isinstance(model, str) or not model:
+            # An unset/empty model on an ACTIVE role is unavailable by
+            # definition — remap or reject now instead of persisting config
+            # that can only fail later at dispatch time.
+            if remap_unavailable:
+                result[role] = fallback_model
+                remapped_roles.append(role)
+            else:
+                unavailable_roles.append(role)
             continue
         if is_model_available_for_orchestrator(
             model,
@@ -230,7 +271,7 @@ def load_codex_available_from_cache(cache_path: Path) -> bool:
 
 
 def build_default_models(allowlist_models: dict[str, str | None]) -> dict[str, str | None]:
-    """Return a fresh copy of an allowlist `models` block with all 8 keys.
+    """Return a fresh copy of an allowlist `models` block with all 9 keys.
 
     Missing keys are filled from the documented workflow defaults so older or
     customized allowlists that omit a role do not write unusable null entries.
@@ -242,18 +283,35 @@ def build_default_models(allowlist_models: dict[str, str | None]) -> dict[str, s
     }
 
 
+def _backfill_legacy_compatible_roles(
+    models: dict[str, str | None],
+) -> tuple[dict[str, str | None], list[str]]:
+    """Backfill known legacy-compatible missing roles with defaults."""
+    merged = dict(models)
+    backfilled: list[str] = []
+    for role in CANONICAL_ROLES:
+        if role in merged:
+            continue
+        if role in LEGACY_COMPAT_BACKFILL_ROLES:
+            merged[role] = DEFAULT_MODELS[role]
+            backfilled.append(role)
+    return merged, backfilled
+
+
 def build_snapshot_models(snapshot_models: dict[str, str | None]) -> dict[str, str | None]:
     """Return a shape-stable model block from a saved snapshot.
 
-    Unlike fresh allowlist defaults, resume migration must not silently invent
-    values for roles that were absent from the saved snapshot baseline.
+    Unlike fresh allowlist defaults, resume migration stays fail-closed for
+    genuinely missing roles. The only exception is explicitly legacy-compatible
+    role introductions listed in LEGACY_COMPAT_BACKFILL_ROLES.
     """
-    missing = [role for role in CANONICAL_ROLES if role not in snapshot_models]
+    merged, _ = _backfill_legacy_compatible_roles(snapshot_models)
+    missing = [role for role in CANONICAL_ROLES if role not in merged]
     if missing:
         raise ValueError(
             "Snapshot models missing required role(s): " + ", ".join(missing)
         )
-    return {role: snapshot_models.get(role) for role in CANONICAL_ROLES}
+    return {role: merged.get(role) for role in CANONICAL_ROLES}
 
 
 def apply_overrides(
@@ -288,15 +346,27 @@ def write_orchestration_json(
     source: str,
     overridden_roles: list[str],
     preflight_validated_at: str | None = None,
+    claude_role_transport: str = DEFAULT_CLAUDE_ROLE_TRANSPORT,
+    claude_transport_resolved: str | None = None,
 ) -> None:
     """Write the orchestration.json artifact with canonical key order."""
     if source not in {"default", "overridden"}:
         raise ValueError(
             f"source must be 'default' or 'overridden' (got {source!r})"
         )
+    if claude_role_transport not in CLAUDE_ROLE_TRANSPORTS:
+        raise ValueError(
+            f"claude_role_transport must be one of {CLAUDE_ROLE_TRANSPORTS} "
+            f"(got {claude_role_transport!r})"
+        )
     payload = {
         "version": ORCHESTRATION_VERSION,
         "models": {role: models.get(role) for role in CANONICAL_ROLES},
+        "claude_role_transport": claude_role_transport,
+        "claude_transport_resolved": claude_transport_resolved,
+        # Compatibility field for consumers created during the downgrade era.
+        # New auto runs block for user choice instead of downgrading.
+        "claude_transport_downgraded": False,
         "source": source,
         "overridden_roles": list(overridden_roles),
         "preflight_validated_at": preflight_validated_at or _now_iso(),
@@ -317,6 +387,8 @@ def write_default_from_allowlist(
     claude_available: bool = True,
     quest_mode: str = "workflow",
     remap_unavailable: bool = False,
+    claude_role_transport: str = DEFAULT_CLAUDE_ROLE_TRANSPORT,
+    claude_transport_resolved: str | None = None,
 ) -> None:
     """Default-path writer: copy allowlist models into orchestration.json."""
     defaults = build_default_models(allowlist_models)
@@ -335,6 +407,8 @@ def write_default_from_allowlist(
         source="default",
         overridden_roles=[],
         preflight_validated_at=preflight_validated_at,
+        claude_role_transport=claude_role_transport,
+        claude_transport_resolved=claude_transport_resolved,
     )
 
 
@@ -345,13 +419,71 @@ def migrate_from_snapshot(
 ) -> bool:
     """Resume migration: copy snapshot models into orchestration.json.
 
-    Returns True if a new orchestration.json was written, False if the file
-    already existed (in which case it is left untouched per SKILL.md Step 1
-    sub-step 1a — `Never prompt the chooser on resume`).
+    Returns True if orchestration.json was written or legacy-backfilled.
+    Existing files are preserved unless they are missing known
+    legacy-compatible role introductions.
     """
     orch_path = quest_dir / "orchestration.json"
     if orch_path.exists():
-        return False
+        try:
+            with orch_path.open("r", encoding="utf-8") as handle:
+                existing = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(existing, dict):
+            return False
+        existing_models = existing.get("models")
+        if not isinstance(existing_models, dict):
+            return False
+        merged_models, backfilled = _backfill_legacy_compatible_roles(existing_models)
+        # Transport keys were introduced after early quests; backfill in place
+        # (same legacy-compat contract as newly-introduced roles).
+        transport_backfilled = False
+        if "claude_role_transport" not in existing:
+            # Absent: legacy file predating the transport key — backfill the default.
+            existing["claude_role_transport"] = DEFAULT_CLAUDE_ROLE_TRANSPORT
+            transport_backfilled = True
+        elif existing["claude_role_transport"] not in CLAUDE_ROLE_TRANSPORTS:
+            # Present but invalid: a mistyped/forced transport must fail closed,
+            # never be silently coerced to "auto" (that would resume under a
+            # different transport than the per-quest config demanded).
+            raise ValueError(
+                "orchestration.json has an invalid claude_role_transport "
+                f"{existing['claude_role_transport']!r}; expected one of "
+                f"{CLAUDE_ROLE_TRANSPORTS}. Fix or remove the key — resume will "
+                "not coerce a forced transport."
+            )
+        if "claude_transport_resolved" not in existing:
+            existing["claude_transport_resolved"] = None
+            transport_backfilled = True
+        if "claude_transport_downgraded" not in existing:
+            existing["claude_transport_downgraded"] = False
+            transport_backfilled = True
+        if not backfilled and not transport_backfilled:
+            return False
+        # Fail closed BEFORE writing: a role missing from the merged models
+        # would be written as null and rejected by the very validation this
+        # migration feeds — never persist a file we know is invalid.
+        missing_roles = [
+            role for role in CANONICAL_ROLES if not merged_models.get(role)
+        ]
+        if missing_roles:
+            raise ValueError(
+                "orchestration.json migration would write null model(s) for "
+                f"role(s) {missing_roles}; the existing file is malformed — "
+                "fix models.<role> entries before resuming."
+            )
+        existing["models"] = {
+            role: merged_models.get(role) for role in CANONICAL_ROLES
+        }
+        if not isinstance(existing.get("preflight_validated_at"), str) or not existing.get(
+            "preflight_validated_at"
+        ):
+            existing["preflight_validated_at"] = preflight_validated_at or _now_iso()
+        with orch_path.open("w", encoding="utf-8") as handle:
+            json.dump(existing, handle, indent=2)
+            handle.write("\n")
+        return True
     snapshot_path = quest_dir / "logs" / "allowlist_snapshot.json"
     try:
         with snapshot_path.open("r", encoding="utf-8") as handle:
