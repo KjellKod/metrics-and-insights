@@ -1,16 +1,21 @@
 import argparse
+import json
 import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 import requests
 from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from jira import JIRA
+
+# Raw Jira JSON is intentionally dynamic only at this deserialization boundary.
+# pylint: disable=too-many-lines
 
 load_dotenv()
 
@@ -81,6 +86,368 @@ class TimeInStatusResult:
     total_seconds: float
     last_exit_timestamp: datetime | None
     open_start_timestamp: datetime | None
+
+
+@dataclass(frozen=True)
+class JiraSearchResult:
+    """Raw Jira issue search pages plus completeness diagnostics."""
+
+    issues: list[dict[str, Any]]
+    complete: bool
+    limitations: list[str] = field(default_factory=list)
+    page_count: int = 0
+
+
+@dataclass(frozen=True)
+class JiraFieldResult:
+    """Jira field metadata plus completeness diagnostics."""
+
+    fields: list[dict[str, Any]]
+    complete: bool
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ChangelogFetchResult:
+    """Complete raw changelogs grouped by issue key."""
+
+    records_by_issue: dict[str, list[dict[str, Any]]]
+    method: str
+    complete: bool
+    limitations: list[str] = field(default_factory=list)
+    page_count: int = 0
+
+
+def _jira_rest_config() -> tuple[str, tuple[str, str], dict[str, str]]:
+    """Return validated Jira REST configuration without exposing its values."""
+    jira_link = os.environ.get("JIRA_LINK")
+    user_email = os.environ.get("USER_EMAIL")
+    api_key = os.environ.get("JIRA_API_KEY")
+    missing = [
+        name
+        for name, value in (("JIRA_LINK", jira_link), ("USER_EMAIL", user_email), ("JIRA_API_KEY", api_key))
+        if not value
+    ]
+    if missing:
+        raise ValueError(f"Missing required Jira environment variables: {', '.join(missing)}")
+
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    return jira_link.rstrip("/"), (user_email, api_key), headers
+
+
+def _request_jira_json(method, url, *, auth, headers, params=None, payload=None):  # pylint: disable=too-many-arguments
+    """Request a Jira JSON page with bounded retries and sanitized failures."""
+    request = requests.get if method == "GET" else requests.post
+    response = None
+    for attempt in range(5):
+        try:
+            kwargs = {"auth": auth, "headers": headers, "timeout": 30}
+            if params is not None:
+                kwargs["params"] = params
+            if payload is not None:
+                kwargs["json"] = payload
+            response = request(url, **kwargs)
+        except requests.exceptions.RequestException:
+            if attempt == 4:
+                return None, None, f"{method} request failed after retries"
+            time.sleep(min(2**attempt, 10))
+            continue
+
+        if response.status_code in (429, 500, 502, 503, 504) and attempt < 4:
+            time.sleep(min(2**attempt, 10))
+            continue
+        if response.status_code != 200:
+            return None, response.status_code, f"{method} request returned status {response.status_code}"
+        try:
+            return response.json(), response.status_code, None
+        except ValueError:
+            return None, response.status_code, f"{method} request returned invalid JSON"
+
+    return None, getattr(response, "status_code", None), f"{method} request failed"
+
+
+def search_jira_issues_raw(  # pylint: disable=too-many-locals,too-many-return-statements
+    jql: str, fields: list[str]
+) -> JiraSearchResult:
+    """Return all raw issues from Jira's token-paginated v3 search endpoint."""
+    jira_link, auth, headers = _jira_rest_config()
+    endpoint = f"{jira_link}/rest/api/3/search/jql"
+    issues: list[dict[str, Any]] = []
+    limitations: list[str] = []
+    next_page_token = None
+    seen_tokens: set[str] = set()
+    page_count = 0
+
+    while True:
+        params = {"jql": jql, "fields": ",".join(fields), "maxResults": 100}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        data, _, error = _request_jira_json("GET", endpoint, auth=auth, headers=headers, params=params)
+        if error:
+            limitations.append(f"Candidate search page {page_count + 1} failed: {error}.")
+            return JiraSearchResult(issues, False, limitations, page_count)
+        page_count += 1
+        if not isinstance(data, dict):
+            limitations.append(f"Candidate search page {page_count} had an unexpected response shape.")
+            return JiraSearchResult(issues, False, limitations, page_count)
+
+        page_issues = data.get("issues", [])
+        if not isinstance(page_issues, list):
+            limitations.append(f"Candidate search page {page_count} did not contain an issue list.")
+            return JiraSearchResult(issues, False, limitations, page_count)
+        if any(not isinstance(issue, dict) for issue in page_issues):
+            limitations.append(f"Candidate search page {page_count} contained an invalid issue entry.")
+            return JiraSearchResult(issues, False, limitations, page_count)
+        issues.extend(page_issues)
+
+        token = data.get("nextPageToken")
+        if token:
+            token = str(token)
+            if token in seen_tokens:
+                limitations.append("Candidate search returned a repeated next-page token.")
+                return JiraSearchResult(issues, False, limitations, page_count)
+            seen_tokens.add(token)
+            next_page_token = token
+            continue
+        if data.get("isLast", True):
+            return JiraSearchResult(issues, True, limitations, page_count)
+        limitations.append("Candidate search ended before Jira marked the final page.")
+        return JiraSearchResult(issues, False, limitations, page_count)
+
+
+def get_jira_field_metadata() -> JiraFieldResult:
+    """Fetch raw Jira field metadata used to discover relationship field IDs."""
+    jira_link, auth, headers = _jira_rest_config()
+    data, _, error = _request_jira_json("GET", f"{jira_link}/rest/api/3/field", auth=auth, headers=headers)
+    if error:
+        return JiraFieldResult([], False, [f"Jira field metadata retrieval failed: {error}."])
+    if not isinstance(data, list):
+        return JiraFieldResult([], False, ["Jira field metadata had an unexpected response shape."])
+    if any(not isinstance(item, dict) for item in data):
+        return JiraFieldResult(
+            [item for item in data if isinstance(item, dict)],
+            False,
+            ["Jira field metadata contained an invalid field entry."],
+        )
+    return JiraFieldResult(data, True)
+
+
+def _history_identity(history: dict[str, Any]) -> str:
+    """Return a deterministic identity for exact raw-history deduplication."""
+    return json.dumps(history, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _merge_history_records(target: list[dict[str, Any]], additions: list[dict[str, Any]]) -> None:
+    identities = {_history_identity(record) for record in target}
+    for record in additions:
+        identity = _history_identity(record)
+        if identity not in identities:
+            target.append(record)
+            identities.add(identity)
+
+
+def _validate_changelog_page_range(
+    data: dict[str, Any], requested_start: int, value_count: int
+) -> tuple[int, str | None]:
+    """Validate Jira pagination metadata and return the proven page end."""
+    response_start = data.get("startAt")
+    if not isinstance(response_start, int) or isinstance(response_start, bool) or response_start != requested_start:
+        returned_start = response_start if isinstance(response_start, int) else "missing or invalid"
+        return (
+            requested_start,
+            f"requested startAt {requested_start} but Jira returned {returned_start}; "
+            "pagination did not make reliable forward progress",
+        )
+
+    total = data.get("total")
+    if total is not None and (not isinstance(total, int) or isinstance(total, bool) or total < 0):
+        return requested_start, "returned invalid total pagination metadata"
+
+    is_last = data.get("isLast")
+    if is_last is not None and not isinstance(is_last, bool):
+        return requested_start, "returned invalid isLast pagination metadata"
+
+    page_end = response_start + value_count
+    if isinstance(total, int):
+        terminal_conflict = (is_last is True and page_end != total) or (is_last is False and page_end >= total)
+        if page_end > total or terminal_conflict:
+            return (
+                requested_start,
+                "returned contradictory pagination metadata: "
+                f"isLast={is_last}, page range {response_start}:{page_end}, total={total}",
+            )
+    return page_end, None
+
+
+def _fetch_issue_changelog(  # pylint: disable=too-many-locals,too-many-return-statements
+    issue_key: str, jira_link, auth, headers
+):
+    endpoint = f"{jira_link}/rest/api/3/issue/{issue_key}/changelog"
+    records: list[dict[str, Any]] = []
+    start_at = 0
+    page_count = 0
+
+    while True:
+        params = {"startAt": start_at, "maxResults": 100}
+        data, _, error = _request_jira_json("GET", endpoint, auth=auth, headers=headers, params=params)
+        if error:
+            return records, False, page_count, f"Changelog fallback for {issue_key} failed: {error}."
+        page_count += 1
+        if not isinstance(data, dict) or not isinstance(data.get("values", []), list):
+            return records, False, page_count, f"Changelog fallback for {issue_key} had an unexpected response shape."
+        raw_values = data.get("values", [])
+        if any(not isinstance(item, dict) for item in raw_values):
+            return records, False, page_count, f"Changelog fallback for {issue_key} had an invalid history entry."
+        values = list(raw_values)
+        _merge_history_records(records, values)
+
+        page_end, pagination_error = _validate_changelog_page_range(data, start_at, len(values))
+        if pagination_error:
+            return records, False, page_count, f"Changelog fallback for {issue_key} {pagination_error}."
+        total = data.get("total")
+        is_last = data.get("isLast")
+        if is_last is True:
+            return records, True, page_count, None
+        if isinstance(total, int) and page_end == total:
+            return records, True, page_count, None
+        if not values:
+            return (
+                records,
+                False,
+                page_count,
+                f"Changelog fallback for {issue_key} ended before the final page and made no forward progress.",
+            )
+        if is_last is None and not isinstance(total, int):
+            return (
+                records,
+                False,
+                page_count,
+                f"Changelog fallback for {issue_key} did not provide reliable pagination termination.",
+            )
+        start_at = page_end
+
+
+def _bulk_page_records(data, id_to_key):
+    """Extract issue-keyed histories from one bulk changelog page."""
+    containers = data.get("issueChangeLogs", []) if isinstance(data, dict) else []
+    if not isinstance(containers, list):
+        return None
+    page_records: dict[str, list[dict[str, Any]]] = {}
+    confirmed: set[str] = set()
+    for container in containers:
+        if not isinstance(container, dict):
+            return None
+        raw_identity = container.get("issueId") or container.get("issueKey")
+        if raw_identity is None:
+            return None
+        identity = str(raw_identity)
+        issue_key = id_to_key.get(identity, identity)
+        histories = container.get("changeHistories", [])
+        if not isinstance(histories, list) or any(not isinstance(item, dict) for item in histories):
+            return None
+        confirmed.add(issue_key)
+        page_records.setdefault(issue_key, []).extend(histories)
+    return page_records, confirmed
+
+
+def fetch_complete_changelogs(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    issue_ids_or_keys: list[str], id_to_key: dict[str, str] | None = None
+) -> ChangelogFetchResult:
+    """Fetch complete raw changelogs using bulk pages with per-issue fallback."""
+    if not issue_ids_or_keys:
+        return ChangelogFetchResult({}, "bulk", True)
+
+    jira_link, auth, headers = _jira_rest_config()
+    endpoint = f"{jira_link}/rest/api/3/changelog/bulkfetch"
+    lookup = dict(id_to_key or {})
+    requested_keys = {lookup.get(value, value) for value in issue_ids_or_keys}
+    records_by_issue = {key: [] for key in requested_keys}
+    limitations: list[str] = []
+    methods: set[str] = set()
+    complete = True
+    page_count = 0
+    bulk_supported = True
+
+    for offset in range(0, len(issue_ids_or_keys), 1000):
+        batch = issue_ids_or_keys[offset : offset + 1000]
+        batch_keys = {lookup.get(value, value) for value in batch}
+        confirmed: set[str] = set()
+        batch_failed = False
+        next_page_token = None
+        seen_tokens: set[str] = set()
+
+        if bulk_supported:
+            while True:
+                payload = {"issueIdsOrKeys": batch, "maxResults": 1000}
+                if next_page_token:
+                    payload["nextPageToken"] = next_page_token
+                data, status, error = _request_jira_json("POST", endpoint, auth=auth, headers=headers, payload=payload)
+                if error:
+                    if status in (400, 404, 405):
+                        bulk_supported = False
+                        limitations.append(
+                            "Bulk changelog retrieval is unavailable; complete per-issue fallback was used."
+                        )
+                    else:
+                        complete = False
+                        limitations.append(f"Bulk changelog page failed: {error}; per-issue fallback was attempted.")
+                    batch_failed = True
+                    break
+                methods.add("bulk")
+                page_count += 1
+                extracted = _bulk_page_records(data, lookup)
+                if extracted is None:
+                    complete = False
+                    limitations.append(
+                        "Bulk changelog page had an unexpected response shape; per-issue fallback was attempted."
+                    )
+                    batch_failed = True
+                    break
+                page_records, page_confirmed = extracted
+                confirmed.update(page_confirmed)
+                for issue_key, histories in page_records.items():
+                    records_by_issue.setdefault(issue_key, [])
+                    _merge_history_records(records_by_issue[issue_key], histories)
+
+                token = data.get("nextPageToken") if isinstance(data, dict) else None
+                if not token:
+                    break
+                token = str(token)
+                if token in seen_tokens:
+                    complete = False
+                    limitations.append("Bulk changelog retrieval returned a repeated next-page token.")
+                    batch_failed = True
+                    break
+                seen_tokens.add(token)
+                next_page_token = token
+        else:
+            batch_failed = True
+
+        fallback_keys = batch_keys if batch_failed else batch_keys - confirmed
+        if fallback_keys and not batch_failed:
+            limitations.append(
+                "Bulk changelog response omitted requested issues; complete per-issue fallback was used for those issues."
+            )
+        for issue_key in sorted(fallback_keys):
+            methods.add("per-issue fallback")
+            histories, issue_complete, fallback_pages, limitation = _fetch_issue_changelog(
+                issue_key, jira_link, auth, headers
+            )
+            page_count += fallback_pages
+            records_by_issue.setdefault(issue_key, [])
+            _merge_history_records(records_by_issue[issue_key], histories)
+            if not issue_complete:
+                complete = False
+                if limitation:
+                    limitations.append(limitation)
+
+    if methods == {"bulk"}:
+        method = "bulk"
+    elif methods == {"per-issue fallback"}:
+        method = "per-issue fallback"
+    else:
+        method = "mixed bulk and per-issue fallback"
+    return ChangelogFetchResult(records_by_issue, method, complete, limitations, page_count)
 
 
 def get_common_parser():
