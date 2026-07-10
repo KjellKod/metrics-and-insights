@@ -1,0 +1,24 @@
+README.md
+  s_90a71300035d4f::t_0177e4855352b7 294-295
+jira_metrics/tests/test_epic_membership_history.py
+  s_90a71300035d4f::t_5e55ff2b8c3c09 11,337-348,473-485
+  s_90a71300035d4f::t_98e1b9f0650e52 486
+jira_metrics/epic_membership_history.py
+  s_90a71300035d4f::t_0177e4855352b7 36,266-273,512-519,580,660-670
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a6b9b6a96ca39e85e0ec93d05a9021d2aa1fbf67",
+  "prompts": {},
+  "sessions": {
+    "s_90a71300035d4f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4952-eb8e-7340-adc1-212c273ad8f4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
