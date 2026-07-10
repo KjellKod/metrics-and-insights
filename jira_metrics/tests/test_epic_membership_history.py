@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -333,6 +334,18 @@ class TestClassification(unittest.TestCase):
         self.assertEqual([event.event_type for event in events].count("removed"), 2)
         self.assertEqual(len(events), 3)
 
+    def test_same_timestamp_histories_sort_numeric_ids_numerically(self):
+        timestamp = "2024-01-02T00:00:00Z"
+        records = [
+            history("10", timestamp, "EPIC-1", None),
+            history("2", timestamp, None, "EPIC-1"),
+        ]
+
+        events, _ = classify(records)
+
+        self.assertEqual([event.evidence.history_id for event in events], ["2", "10"])
+        self.assertEqual([event.event_type for event in events], ["added", "removed"])
+
     def test_currently_assigned_issue_without_removal_evidence_is_not_reported(self):
         events, _ = classify([])
         self.assertEqual(events, [])
@@ -456,6 +469,20 @@ class TestReportingAndOrchestration(unittest.TestCase):
         message = "Complete per-issue fallback was used."
 
         self.assertEqual(audit.unique_messages([message, "Different note.", message]), [message, "Different note."])
+
+    def test_csv_prefixes_formula_like_untrusted_jira_text(self):
+        result = self._eventful_result()
+        unsafe_issue = replace(result.events[0].issue, summary='=HYPERLINK("https://example.invalid")')
+        unsafe_event = replace(result.events[0], issue=unsafe_issue)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.csv"
+            audit.write_csv([unsafe_event], path)
+            with path.open(encoding="utf-8", newline="") as source:
+                csv_row = next(csv.DictReader(source))
+
+        self.assertEqual(audit.event_to_row(unsafe_event)["Issue summary"][0], "=")
+        self.assertTrue(csv_row["Issue summary"].startswith("'="))
 
     def test_all_per_epic_and_overall_summary_counts(self):
         result = self._eventful_result()

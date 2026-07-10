@@ -291,7 +291,8 @@ label now; an Epic whose label was removed earlier cannot be discovered that way
 or issue security can hide issues or history. Current parent and status columns are execution-time
 snapshots. Failed pages, unresolved histories, or unknown relationship snapshots are reported as
 limitations with a nonzero exit status. CSV fields contain untrusted Jira text; review them before
-opening an export in spreadsheet software.
+opening an export in spreadsheet software. Formula-like cells are prefixed with an apostrophe so
+spreadsheet applications treat them as text instead of evaluating them.
 
 To analyze engineering excellence:
 ```bash

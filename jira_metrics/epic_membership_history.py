@@ -33,6 +33,7 @@ DEFAULT_INPUT_TIMEZONE = "America/Denver"
 KNOWN_RELATIONSHIP_NAMES = {"parent", "epiclink", "issueparentassociation"}
 EMPTY_RELATIONSHIP_VALUES = {"", "none", "null", "no epic", "no parent"}
 JIRA_KEY_AT_START = re.compile(r"^\s*\[?([A-Za-z][A-Za-z0-9_]*-\d+)\b")
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 EVENT_COLUMNS = (
     "Epic key",
@@ -260,6 +261,14 @@ def parse_jira_timestamp(value: Any) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("Jira timestamp is not timezone-aware")
     return parsed
+
+
+def _history_id_sort_key(history_id: str) -> tuple[int, int | str]:
+    """Sort Jira's numeric history IDs numerically with a stable text fallback."""
+    stripped = history_id.strip()
+    if stripped.isdecimal():
+        return (0, int(stripped))
+    return (1, stripped.casefold())
 
 
 def _quote_jql(value: str) -> str:
@@ -500,7 +509,14 @@ def normalize_changelog_records(
             if record.identity not in seen:
                 evidence.append(record)
                 seen.add(record.identity)
-    evidence.sort(key=lambda record: (record.timestamp, record.history_id, record.field_id, record.field_name))
+    evidence.sort(
+        key=lambda record: (
+            record.timestamp,
+            _history_id_sort_key(record.history_id),
+            record.field_id,
+            record.field_name,
+        )
+    )
     return evidence, limitations
 
 
@@ -561,7 +577,7 @@ def classify_membership_events(  # pylint: disable=too-many-arguments,too-many-p
         key=lambda event: (
             event.evidence.timestamp,
             event.issue.key,
-            event.evidence.history_id,
+            _history_id_sort_key(event.evidence.history_id),
             event.epic_key,
             event.event_type,
         )
@@ -641,7 +657,17 @@ def write_csv(events: list[MembershipEvent], path: Path) -> None:
     with path.open("w", encoding="utf-8", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=EVENT_COLUMNS)
         writer.writeheader()
-        writer.writerows(event_to_row(event) for event in events)
+        for event in events:
+            row = event_to_row(event)
+            writer.writerow({column: _spreadsheet_safe_cell(value) for column, value in row.items()})
+
+
+def _spreadsheet_safe_cell(value: str) -> str:
+    """Prevent untrusted Jira text from being evaluated as a spreadsheet formula."""
+    meaningful = value.lstrip()
+    if meaningful.startswith(CSV_FORMULA_PREFIXES):
+        return "'" + value
+    return value
 
 
 def _summary_for_events(
