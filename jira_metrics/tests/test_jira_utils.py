@@ -12,19 +12,38 @@ from jira_utils import (
     SimpleNamespace,
     calculate_total_time_in_status,
     convert_raw_issue_to_simple_object,
+    fetch_complete_changelogs,
     get_completion_statuses,
     get_excluded_statuses,
     get_issue_created_month_key,
+    get_jira_field_metadata,
     get_project_key,
     get_status_transitions_chronological,
     get_team_or_project_unknown,
     is_month_key_in_date_range,
     month_key_from_jira_datetime,
     parse_jira_datetime,
+    search_jira_issues_raw,
 )
 
 
 TEAM_FIELD_ID = "10075"
+REST_ENV = {
+    "JIRA_LINK": "https://jira.example.test",
+    "USER_EMAIL": "user@example.test",
+    "JIRA_API_KEY": "test-token",
+}
+
+
+class FakeResponse:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        if isinstance(self._payload, ValueError):
+            raise self._payload
+        return self._payload
 
 
 def create_changelog_entry(created, from_status, to_status):
@@ -236,3 +255,236 @@ class TestStatusTransitionHelpers(unittest.TestCase):
         self.assertEqual(result.completed_intervals, 0)
         self.assertEqual(result.total_seconds, 0)
         self.assertEqual(result.open_start_timestamp.strftime("%Y-%m-%d %H:%M"), "2024-01-03 09:00")
+
+
+class TestRawJiraRetrieval(unittest.TestCase):
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_search_jira_issues_raw_paginates_next_page_tokens(self, mock_get):
+        mock_get.side_effect = [
+            FakeResponse(200, {"issues": [{"id": "1", "key": "A-1"}], "nextPageToken": "next-1"}),
+            FakeResponse(200, {"issues": [], "nextPageToken": "next-2"}),
+            FakeResponse(200, {"issues": [{"id": "2", "key": "A-2"}], "isLast": True}),
+        ]
+
+        result = search_jira_issues_raw("updated >= '2024-01-01'", ["summary"])
+
+        self.assertTrue(result.complete)
+        self.assertEqual([issue["key"] for issue in result.issues], ["A-1", "A-2"])
+        self.assertEqual(result.page_count, 3)
+        self.assertNotIn("nextPageToken", mock_get.call_args_list[0].kwargs["params"])
+        self.assertEqual(mock_get.call_args_list[1].kwargs["params"]["nextPageToken"], "next-1")
+        self.assertEqual(mock_get.call_args_list[2].kwargs["params"]["nextPageToken"], "next-2")
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_search_result_surfaces_partial_page_failure(self, mock_get):
+        mock_get.side_effect = [
+            FakeResponse(200, {"issues": [{"id": "1", "key": "A-1"}], "nextPageToken": "next"}),
+            FakeResponse(403, {}),
+        ]
+
+        result = search_jira_issues_raw("updated >= '2024-01-01'", ["summary"])
+
+        self.assertFalse(result.complete)
+        self.assertEqual([issue["key"] for issue in result.issues], ["A-1"])
+        self.assertIn("page 2 failed", result.limitations[0])
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_get_jira_field_metadata_retains_ids_and_names(self, mock_get):
+        mock_get.return_value = FakeResponse(
+            200,
+            [{"id": "parent", "name": "Parent"}, {"id": "customfield_1", "name": "Epic Link"}],
+        )
+
+        result = get_jira_field_metadata()
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.fields[1]["id"], "customfield_1")
+        self.assertEqual(result.fields[1]["name"], "Epic Link")
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.post")
+    def test_bulk_changelog_fetch_splits_issue_batches_at_1000(self, mock_post):
+        def respond(_url, **kwargs):
+            containers = [
+                {"issueId": issue_key, "changeHistories": []} for issue_key in kwargs["json"]["issueIdsOrKeys"]
+            ]
+            return FakeResponse(200, {"issueChangeLogs": containers})
+
+        mock_post.side_effect = respond
+        issue_keys = [f"PROJ-{number}" for number in range(1, 1002)]
+
+        result = fetch_complete_changelogs(issue_keys)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(len(mock_post.call_args_list[0].kwargs["json"]["issueIdsOrKeys"]), 1000)
+        self.assertEqual(len(mock_post.call_args_list[1].kwargs["json"]["issueIdsOrKeys"]), 1)
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.post")
+    def test_bulk_changelog_fetch_paginates_every_next_page_token(self, mock_post):
+        history = {
+            "id": "h-1",
+            "created": "2024-01-01T00:00:00.000+0000",
+            "author": {"displayName": "Alice", "accountId": "account-1"},
+            "items": [
+                {
+                    "field": "Parent",
+                    "fieldId": "parent",
+                    "from": None,
+                    "fromString": None,
+                    "to": "100",
+                    "toString": "EPIC-1",
+                }
+            ],
+        }
+        mock_post.side_effect = [
+            FakeResponse(
+                200,
+                {
+                    "issueChangeLogs": [{"issueId": "1", "changeHistories": [history]}],
+                    "nextPageToken": "page-2",
+                },
+            ),
+            FakeResponse(200, {"issueChangeLogs": [{"issueId": "1", "changeHistories": []}]}),
+        ]
+
+        result = fetch_complete_changelogs(["1"], {"1": "PROJ-1"})
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.method, "bulk")
+        self.assertEqual(mock_post.call_args_list[1].kwargs["json"]["nextPageToken"], "page-2")
+        retained = result.records_by_issue["PROJ-1"][0]
+        self.assertEqual(retained["author"]["accountId"], "account-1")
+        self.assertEqual(retained["items"][0]["to"], "100")
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_bulk_unavailable_falls_back_to_paginated_per_issue_fetch(self, mock_post, mock_get):
+        mock_post.return_value = FakeResponse(404, {})
+        mock_get.side_effect = [
+            FakeResponse(200, {"values": [{"id": "one"}], "startAt": 0, "maxResults": 1, "total": 2}),
+            FakeResponse(200, {"values": [{"id": "two"}], "startAt": 1, "maxResults": 1, "total": 2}),
+        ]
+
+        result = fetch_complete_changelogs(["PROJ-1"])
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.method, "per-issue fallback")
+        self.assertEqual([item["id"] for item in result.records_by_issue["PROJ-1"]], ["one", "two"])
+        self.assertEqual(mock_get.call_args_list[1].kwargs["params"]["startAt"], 1)
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_per_issue_fallback_rejects_repeated_or_regressed_pages(self, mock_post, mock_get):
+        mock_post.return_value = FakeResponse(404, {})
+
+        for returned_start in (0, 1):
+            with self.subTest(returned_start=returned_start):
+                mock_get.reset_mock()
+                mock_get.side_effect = [
+                    FakeResponse(
+                        200,
+                        {
+                            "values": [{"id": "one"}, {"id": "two"}],
+                            "startAt": 0,
+                            "total": 3,
+                        },
+                    ),
+                    FakeResponse(
+                        200,
+                        {
+                            "values": [{"id": "repeated"}],
+                            "startAt": returned_start,
+                            "total": 3,
+                        },
+                    ),
+                ]
+
+                result = fetch_complete_changelogs(["PROJ-1"])
+
+                self.assertFalse(result.complete)
+                self.assertEqual(mock_get.call_count, 2)
+                self.assertIn("requested startAt 2", " ".join(result.limitations))
+                self.assertIn(f"returned {returned_start}", " ".join(result.limitations))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_per_issue_fallback_rejects_contradictory_terminal_metadata(self, mock_post, mock_get):
+        mock_post.return_value = FakeResponse(404, {})
+
+        contradictory_pages = (
+            {"values": [{"id": "one"}], "startAt": 0, "total": 2, "isLast": True},
+            {"values": [{"id": "one"}], "startAt": 0, "total": 1, "isLast": False},
+        )
+        for page in contradictory_pages:
+            with self.subTest(page=page):
+                mock_get.reset_mock()
+                mock_get.return_value = FakeResponse(200, page)
+
+                result = fetch_complete_changelogs(["PROJ-1"])
+
+                self.assertFalse(result.complete)
+                self.assertEqual(mock_get.call_count, 1)
+                self.assertIn("contradictory pagination metadata", " ".join(result.limitations))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_per_issue_fallback_requires_reliable_page_termination(self, mock_post, mock_get):
+        mock_post.return_value = FakeResponse(404, {})
+        mock_get.return_value = FakeResponse(200, {"values": [], "startAt": 0, "isLast": False})
+
+        result = fetch_complete_changelogs(["PROJ-1"])
+
+        self.assertFalse(result.complete)
+        self.assertIn("before the final page", " ".join(result.limitations))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_later_bulk_page_failure_preserves_records_and_falls_back_without_duplicates(self, mock_post, mock_get):
+        history = {"id": "one", "created": "2024-01-01T00:00:00.000+0000", "items": []}
+        mock_post.side_effect = [
+            FakeResponse(
+                200,
+                {
+                    "issueChangeLogs": [{"issueId": "PROJ-1", "changeHistories": [history]}],
+                    "nextPageToken": "next",
+                },
+            ),
+            FakeResponse(403, {}),
+        ]
+        mock_get.return_value = FakeResponse(
+            200,
+            {"values": [history], "startAt": 0, "total": 1, "isLast": True},
+        )
+
+        result = fetch_complete_changelogs(["PROJ-1"])
+
+        self.assertFalse(result.complete)
+        self.assertEqual(result.method, "mixed bulk and per-issue fallback")
+        self.assertEqual(result.records_by_issue["PROJ-1"], [history])
+        self.assertIn("Bulk changelog page failed", " ".join(result.limitations))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    @patch("jira_utils.requests.post")
+    def test_missing_requested_issue_uses_fallback_and_unresolved_failure_is_incomplete(self, mock_post, mock_get):
+        mock_post.return_value = FakeResponse(
+            200,
+            {"issueChangeLogs": [{"issueId": "PROJ-1", "changeHistories": []}]},
+        )
+        mock_get.return_value = FakeResponse(403, {})
+
+        result = fetch_complete_changelogs(["PROJ-1", "PROJ-2"])
+
+        self.assertFalse(result.complete)
+        self.assertEqual(mock_get.call_count, 1)
+        self.assertIn("PROJ-2", " ".join(result.limitations))

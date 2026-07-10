@@ -256,6 +256,43 @@ The output includes:
   - Helps identify completion patterns and velocity
 ```
 
+To audit historical epic membership changes from issue changelogs, use the separate
+`epic_membership_history.py` tool. Date-only boundaries default to `America/Denver`
+(Mountain time with daylight-saving transitions); override that default with `--timezone`.
+Full timestamps must still include an explicit UTC offset or `Z`:
+
+```bash
+# Audit one epic over an inclusive interval
+python3 jira_metrics/epic_membership_history.py \
+  --epic <EPIC_KEY> \
+  --since <YYYY-MM-DD> \
+  --until <YYYY-MM-DD>
+
+# Audit every accessible Epic currently carrying a label and export event rows
+python3 jira_metrics/epic_membership_history.py \
+  --label <LABEL> \
+  --since <ISO_8601_TIMESTAMP_WITH_OFFSET> \
+  --timezone <IANA_TIMEZONE> \
+  --csv <OUTPUT_PATH> \
+  --verbose
+```
+
+A date-only `--since` resolves to the start of that day, while a date-only `--until`
+resolves to the end of that day. The CLI prints the resolved inclusive interval and offsets
+before making its first Jira request. Naive clock timestamps such as
+`2026-07-06T12:00:00` remain invalid because they do not identify an unambiguous instant.
+
+The audit uses the Jira credentials loaded from the root `.env`, searches all accessible
+projects using a broad current `updated` boundary, fetches complete changelogs, and filters
+events locally to the exact interval. Terminal events are shown as width-limited chronological
+cards so every evidence field remains readable without horizontal scrolling; CSV exports retain
+the same data as flat event rows. Label selection finds only accessible Epics that carry the
+label now; an Epic whose label was removed earlier cannot be discovered that way. Jira permissions
+or issue security can hide issues or history. Current parent and status columns are execution-time
+snapshots. Failed pages, unresolved histories, or unknown relationship snapshots are reported as
+limitations with a nonzero exit status. CSV fields contain untrusted Jira text; review them before
+opening an export in spreadsheet software.
+
 To analyze engineering excellence:
 ```bash
 python3 jira_metrics/engineering_excellence.py
