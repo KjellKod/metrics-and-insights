@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 import requests
 
 from git_metrics.ci_maturity_report import (
@@ -16,10 +17,11 @@ from git_metrics.ci_maturity_report import (
     emit_report,
     filter_repositories,
     format_responsible_people,
-    merge_external_ci_evidence,
+    load_cache,
     load_token,
-    parse_patterns,
+    merge_external_ci_evidence,
     parse_csv_values,
+    parse_patterns,
     render_table,
     score_workflows,
 )
@@ -250,6 +252,82 @@ def test_rate_limit_wait_uses_retry_after_before_reset_header() -> None:
     assert client.rate_limit_events[0].reset_at is None
 
 
+def test_get_retries_transient_bad_gateway_then_returns_success(monkeypatch) -> None:
+    sleeps: list[float] = []
+    client = GitHubClient("token", sleep_fn=sleeps.append)
+    responses = []
+    for status_code in (502, 200):
+        response = requests.Response()
+        response.status_code = status_code
+        response.reason = "Bad Gateway" if status_code == 502 else "OK"
+        response.url = "https://api.github.com/test"
+        responses.append(response)
+    calls = 0
+
+    def scripted_get(*args, **kwargs):
+        nonlocal calls
+        response = responses[calls]
+        calls += 1
+        return response
+
+    monkeypatch.setattr(client.session, "get", scripted_get)
+
+    response = client.get("/test")
+
+    assert response.status_code == 200
+    assert calls == 2
+    assert sleeps == [1.0]
+
+
+def test_get_retries_connection_timeout_then_returns_success(monkeypatch) -> None:
+    sleeps: list[float] = []
+    client = GitHubClient("token", sleep_fn=sleeps.append)
+    response = requests.Response()
+    response.status_code = 200
+    response.url = "https://api.github.com/test"
+    outcomes = [requests.Timeout("timed out"), response]
+    calls = 0
+
+    def scripted_get(*args, **kwargs):
+        nonlocal calls
+        outcome = outcomes[calls]
+        calls += 1
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(client.session, "get", scripted_get)
+
+    result = client.get("/test")
+
+    assert result.status_code == 200
+    assert calls == 2
+    assert sleeps == [1.0]
+
+
+def test_get_stops_after_configured_transient_retry_limit(monkeypatch) -> None:
+    sleeps: list[float] = []
+    client = GitHubClient("token", sleep_fn=sleeps.append, max_retries=3)
+    response = requests.Response()
+    response.status_code = 503
+    response.reason = "Service Unavailable"
+    response.url = "https://api.github.com/test"
+    calls = 0
+
+    def always_unavailable(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return response
+
+    monkeypatch.setattr(client.session, "get", always_unavailable)
+
+    with pytest.raises(requests.HTTPError, match="503 Server Error"):
+        client.get("/test")
+
+    assert calls == 3
+    assert sleeps == [1.0, 2.0]
+
+
 class StubGitHubClient(GitHubClient):
     def __init__(self, payloads: dict[str, object]) -> None:
         super().__init__("token")
@@ -381,6 +459,36 @@ def test_load_token_uses_configured_env_var(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN_READONLY_WEB", " test-token ")
 
     assert load_token("GITHUB_TOKEN_READONLY_WEB") == "test-token"
+
+
+def test_load_cache_matches_github_owner_case_insensitively(tmp_path: Path) -> None:
+    cache_path = tmp_path / "cache.json"
+    cached_repo = {"name": "ExampleOrg/api-service", "score": 4}
+    cache_path.write_text(
+        json.dumps(
+            {
+                "owner": "exampleorg",
+                "active_days": 90,
+                "responsible_count": 2,
+                "responsible_pr_scan_limit": 30,
+                "ci_pr_scan_limit": 5,
+                "repositories": {"ExampleOrg/api-service": cached_repo},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cache = load_cache(
+        str(cache_path),
+        force_fresh=False,
+        owner="ExampleOrg",
+        active_days=90,
+        responsible_count=2,
+        responsible_pr_scan_limit=30,
+        ci_pr_scan_limit=5,
+    )
+
+    assert cache["repositories"]["ExampleOrg/api-service"] == cached_repo
 
 
 def test_json_output_includes_score_evidence_skipped_and_rate_limit_metadata(tmp_path: Path) -> None:

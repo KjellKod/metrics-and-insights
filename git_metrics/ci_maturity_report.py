@@ -26,6 +26,8 @@ load_dotenv()
 GITHUB_REST_URL = "https://api.github.com"
 DEFAULT_TOKEN_ENV = "GITHUB_TOKEN_READONLY_WEB"
 DEFAULT_CACHE_FILE = ".ci_maturity_cache.json"
+TRANSIENT_HTTP_STATUS_CODES = frozenset({500, 502, 503, 504})
+MAX_TRANSIENT_RETRY_DELAY_SECONDS = 30.0
 
 LINTER_PATTERNS = (
     "lint",
@@ -136,16 +138,41 @@ class GitHubClient:
     def get(self, path_or_url: str, *, params: dict[str, Any] | None = None) -> requests.Response:
         url = path_or_url if path_or_url.startswith("https://") else f"{GITHUB_REST_URL}{path_or_url}"
         for attempt in range(1, self.max_retries + 1):
-            response = self.session.get(url, params=params, timeout=60)
-            if not self._should_wait_for_rate_limit(response) or attempt == self.max_retries:
-                if response.status_code == 401:
-                    raise RuntimeError(
-                        f"GitHub rejected token from {self.auth_source} with 401 Unauthorized. "
-                        "Refresh that token or confirm it is valid for api.github.com."
-                    )
-                response.raise_for_status()
-                return response
-            self._wait_for_rate_limit(response, url)
+            try:
+                response = self.session.get(url, params=params, timeout=60)
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                if attempt == self.max_retries:
+                    raise
+                self._wait_for_transient_failure(
+                    url,
+                    attempt,
+                    reason=f"{type(exc).__name__}: {exc}",
+                )
+                continue
+
+            if response.status_code == 401:
+                raise RuntimeError(
+                    f"GitHub rejected token from {self.auth_source} with 401 Unauthorized. "
+                    "Refresh that token or confirm it is valid for api.github.com."
+                )
+            if self._should_wait_for_rate_limit(response):
+                if attempt == self.max_retries:
+                    response.raise_for_status()
+                self._wait_for_rate_limit(response, url)
+                continue
+            if response.status_code in TRANSIENT_HTTP_STATUS_CODES:
+                if attempt == self.max_retries:
+                    response.raise_for_status()
+                self._wait_for_transient_failure(
+                    url,
+                    attempt,
+                    reason=f"{response.status_code} {response.reason}",
+                    response=response,
+                )
+                continue
+
+            response.raise_for_status()
+            return response
         raise RuntimeError(f"GitHub request failed after {self.max_retries} attempts: {url}")
 
     def get_json(self, path_or_url: str, *, params: dict[str, Any] | None = None) -> Any:
@@ -432,6 +459,30 @@ class GitHubClient:
                 slept_seconds=sleep_seconds,
                 reset_at=reset_at,
             )
+        )
+        self.sleep_fn(sleep_seconds)
+
+    def _wait_for_transient_failure(
+        self,
+        url: str,
+        attempt: int,
+        *,
+        reason: str,
+        response: requests.Response | None = None,
+    ) -> None:
+        retry_after = response.headers.get("Retry-After") if response is not None else None
+        try:
+            sleep_seconds = float(retry_after) if retry_after is not None else 2 ** (attempt - 1)
+        except ValueError:
+            sleep_seconds = 2 ** (attempt - 1)
+        sleep_seconds = min(MAX_TRANSIENT_RETRY_DELAY_SECONDS, max(0.0, sleep_seconds))
+        logging.getLogger(__name__).warning(
+            "Transient GitHub request failure (%s); retrying in %.1f seconds (%d/%d): %s",
+            reason,
+            sleep_seconds,
+            attempt,
+            self.max_retries,
+            url,
         )
         self.sleep_fn(sleep_seconds)
 
@@ -761,8 +812,10 @@ def load_cache(
         return {"repositories": {}}
     if not isinstance(payload, dict):
         return {"repositories": {}}
+    cached_owner = payload.get("owner")
+    owner_matches = isinstance(cached_owner, str) and cached_owner.casefold() == owner.casefold()
     if (
-        payload.get("owner") != owner
+        not owner_matches
         or payload.get("active_days") != active_days
         or payload.get("responsible_count") != responsible_count
         or payload.get("responsible_pr_scan_limit") != responsible_pr_scan_limit
