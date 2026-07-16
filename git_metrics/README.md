@@ -117,7 +117,8 @@ Options:
 Environment configuration:
 - `CI_MATURITY_AGENTIC_PATTERNS`: Optional comma-separated patterns for agentic CI detection.
 
-When GitHub API rate limits are hit, the script honors `Retry-After` or waits until `X-RateLimit-Reset` before retrying.
+When GitHub API rate limits are hit, the script honors `Retry-After` or waits until `X-RateLimit-Reset` before retrying. Transient server errors, connection failures, and timeouts are retried with bounded exponential backoff.
+GitHub owner names are matched case-insensitively when reusing cached results.
 When cached repository results are reused, table and CSV runs print a reminder to re-run with `--force-fresh` for fresh GitHub data.
 Table and CSV output include likely responsible people based on recent distinct merged PR authors, with public profile names when available.
 JSON output includes per-repo scores, grade labels, responsible people, category evidence, skipped repositories, and rate-limit wait metadata.
