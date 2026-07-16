@@ -1,0 +1,30 @@
+tests/unit/git_metrics/test_ci_maturity_report.py
+  s_9b64b83b94770b::t_869864eefa6ba3 8,20,282-330,464-465,467-469,471-474,476-483,485-490
+  s_9b64b83b94770b::t_06d58f5ecf1c77 255-281
+  s_9b64b83b94770b::t_16440d53a19542 22,24
+  s_9b64b83b94770b::t_30f009bc98d9ae 466,470,475,484,491
+  s_9b64b83b94770b::t_94b81d5bd8a457 492-493
+git_metrics/ci_maturity_report.py
+  s_9b64b83b94770b::t_40bda5c89dc783 816,818
+  s_9b64b83b94770b::t_346ecf36f966b8 29-30,141-175,465-488,815
+git_metrics/README.md
+  s_9b64b83b94770b::t_346ecf36f966b8 120-121
+.quest-manifest
+  s_9b64b83b94770b::t_6376d762760773 8,71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "a6ca09d15f68a983ac5d0519c9d085130aefa296",
+  "prompts": {},
+  "sessions": {
+    "s_9b64b83b94770b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5cb5-e363-7081-9714-701615f07ecb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
