@@ -1,0 +1,29 @@
+jira_metrics/released_tickets.py
+  s_6e585976908546::t_f08229db056610 3,13,24-42,115,117
+jira_metrics/tests/test_released_tickets.py
+  s_3bac94675f978c::t_be15cdea3161d8 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "d292351bf6c94f87544693b98b6a53530a040673",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_6e585976908546": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
