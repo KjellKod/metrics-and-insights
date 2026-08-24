@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Report selected Jira ticket delivery time by completion month."""
+"""Report selected Jira ticket delivery time by completion month.
+reports active human effort for selected Jira tickets month by month for one required completion year. 
+Selection can use a label, a custom field display value, or both. When both are supplied, both must match at the same 
+historical completion timestamp.
+
+See the ../README.md for specifics or just run --help
+
+"""
 
 # pylint: disable=import-error,too-many-lines,too-many-instance-attributes
 
