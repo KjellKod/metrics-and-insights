@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import difflib
 import json
 import os
 import statistics
@@ -20,8 +21,10 @@ from cycle_time import HOURS_TO_DAYS, SECONDS_TO_HOURS, business_time_spent_in_s
 from jira_utils import (
     ChangelogFetchResult,
     JiraSearchResult,
+    JiraStatusCatalogResult,
     fetch_complete_changelogs,
     get_completion_statuses,
+    get_jira_status_catalog,
     search_jira_issues_raw,
 )
 
@@ -179,6 +182,7 @@ Custom field selector:
 Status names are case-insensitive, but their punctuation and spacing must match Jira.
 For example, use "In Progress" rather than "in-progress".
 Start statuses are priority-ordered. The first listed status found in a cycle wins.
+Start and end statuses are validated against active Jira workflows before the report runs.
 When both --label and the custom field selector are supplied, both must match.
 """,
     )
@@ -707,7 +711,36 @@ def _require_complete_changelog(result: ChangelogFetchResult) -> None:
         raise ReportError(f"Changelog retrieval was incomplete. {details}")
 
 
+def validate_status_configuration(config: ReportConfig, catalog: JiraStatusCatalogResult) -> None:
+    """Reject unknown or conflicting statuses before querying report candidates."""
+    if not catalog.complete:
+        details = " ".join(catalog.limitations)
+        raise ReportError(f"Jira status validation was incomplete. {details}")
+
+    available = {
+        _status_key(status): status
+        for status in sorted(catalog.statuses, key=lambda value: (value.casefold(), value))
+    }
+    unknown_start = [status for status in config.start_statuses if status not in available]
+    unknown_end = sorted(status for status in config.end_statuses if status not in available)
+    overlap = [status for status in config.start_statuses if status in config.end_statuses]
+    if not unknown_start and not unknown_end and not overlap:
+        return
+
+    lines = ["Jira status validation failed."]
+    for option, statuses in (("--start-statuses", unknown_start), ("--end-statuses", unknown_end)):
+        for status in statuses:
+            lines.append(f"Unknown {option}: '{status}'.")
+            matches = difflib.get_close_matches(status, available, n=1, cutoff=0.6)
+            if matches:
+                lines.append(f"Did you mean '{available[matches[0]]}'?")
+    for status in overlap:
+        lines.append(f"Status appears in both --start-statuses and --end-statuses: '{status}'.")
+    raise ReportError("\n".join(lines))
+
+
 def run_report(config: ReportConfig) -> tuple[list[SummaryRow], list[TicketResult], tuple[Path, Path] | None]:
+    validate_status_configuration(config, get_jira_status_catalog(config.projects))
     jql = build_completion_candidate_jql(config.year, config.issue_types, config.end_statuses, config.projects)
     print("Jira JQL:")
     print(jql)

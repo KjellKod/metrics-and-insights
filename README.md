@@ -173,6 +173,8 @@ Cycle model:
 - A completion without a prior accepted start counts as a completed cycle with missing start and no measured duration.
 - Each ticket is counted once per year and attributed to the month of its latest matching completion.
 
+Before querying report candidates, the script validates every configured start and end status against active Jira workflows in the selected project scope. Unknown statuses print the failing value and a close-match suggestion when available, then exit nonzero without writing CSVs. A status configured as both a start and end status is also rejected. With `--all-projects`, validation uses all active statuses visible to the Jira account.
+
 Required environment:
 ```bash
 JIRA_LINK="https://your_jira_instance.atlassian.net"

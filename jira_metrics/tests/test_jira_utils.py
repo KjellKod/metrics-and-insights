@@ -17,6 +17,7 @@ from jira_utils import (
     get_excluded_statuses,
     get_issue_created_month_key,
     get_jira_field_metadata,
+    get_jira_status_catalog,
     get_project_key,
     get_status_transitions_chronological,
     get_team_or_project_unknown,
@@ -332,6 +333,54 @@ class TestRawJiraRetrieval(unittest.TestCase):
         self.assertTrue(result.complete)
         self.assertEqual(result.fields[1]["id"], "customfield_1")
         self.assertEqual(result.fields[1]["name"], "Epic Link")
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_get_jira_status_catalog_reads_global_active_statuses(self, mock_get):
+        mock_get.return_value = FakeResponse(
+            200,
+            [{"id": "1", "name": "In Progress"}, {"id": "2", "name": "Done"}],
+        )
+
+        result = get_jira_status_catalog(None)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(result.statuses, frozenset({"In Progress", "Done"}))
+        self.assertTrue(mock_get.call_args.args[0].endswith("/rest/api/3/status"))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_get_jira_status_catalog_unions_project_workflow_statuses(self, mock_get):
+        mock_get.side_effect = [
+            FakeResponse(
+                200,
+                [{"name": "Story", "statuses": [{"name": "In Progress"}, {"name": "Done"}]}],
+            ),
+            FakeResponse(
+                200,
+                [{"name": "Task", "statuses": [{"name": "Code Review"}, {"name": "Released"}]}],
+            ),
+        ]
+
+        result = get_jira_status_catalog(("PROJ", "OTHER"))
+
+        self.assertTrue(result.complete)
+        self.assertEqual(
+            result.statuses,
+            frozenset({"In Progress", "Done", "Code Review", "Released"}),
+        )
+        self.assertTrue(mock_get.call_args_list[0].args[0].endswith("/rest/api/3/project/PROJ/statuses"))
+        self.assertTrue(mock_get.call_args_list[1].args[0].endswith("/rest/api/3/project/OTHER/statuses"))
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.requests.get")
+    def test_get_jira_status_catalog_fails_closed_on_invalid_project_response(self, mock_get):
+        mock_get.return_value = FakeResponse(200, {"unexpected": "shape"})
+
+        result = get_jira_status_catalog(("PROJ",))
+
+        self.assertFalse(result.complete)
+        self.assertIn("PROJ", " ".join(result.limitations))
 
     @patch.dict(os.environ, REST_ENV, clear=False)
     @patch("jira_utils.requests.post")

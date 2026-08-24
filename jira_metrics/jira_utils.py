@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
@@ -103,6 +104,15 @@ class JiraFieldResult:
     """Jira field metadata plus completeness diagnostics."""
 
     fields: list[dict[str, Any]]
+    complete: bool
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class JiraStatusCatalogResult:
+    """Visible active Jira status names plus completeness diagnostics."""
+
+    statuses: frozenset[str]
     complete: bool
     limitations: list[str] = field(default_factory=list)
 
@@ -242,6 +252,56 @@ def get_jira_field_metadata() -> JiraFieldResult:
             ["Jira field metadata contained an invalid field entry."],
         )
     return JiraFieldResult(data, True)
+
+
+def get_jira_status_catalog(projects: tuple[str, ...] | None) -> JiraStatusCatalogResult:
+    """Fetch active status names globally or from the configured project scope."""
+    jira_link, auth, headers = _jira_rest_config()
+    if projects is None:
+        endpoints = (("all visible projects", f"{jira_link}/rest/api/3/status"),)
+    else:
+        endpoints = tuple(
+            (project, f"{jira_link}/rest/api/3/project/{quote(project, safe='')}/statuses")
+            for project in projects
+        )
+
+    status_names: set[str] = set()
+    for scope, endpoint in endpoints:
+        data, _, error = _request_jira_json("GET", endpoint, auth=auth, headers=headers)
+        if error:
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} failed: {error}."],
+            )
+        if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} had an unexpected response shape."],
+            )
+
+        if projects is None:
+            status_entries = data
+        else:
+            raw_status_groups = [item.get("statuses") for item in data]
+            if any(not isinstance(group, list) for group in raw_status_groups):
+                return JiraStatusCatalogResult(
+                    frozenset(status_names),
+                    False,
+                    [f"Jira status retrieval for {scope} had an invalid workflow status group."],
+                )
+            status_entries = [status for group in raw_status_groups for status in group]
+
+        if any(not isinstance(item, dict) or not isinstance(item.get("name"), str) for item in status_entries):
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} contained an invalid status entry."],
+            )
+        status_names.update(item["name"].strip() for item in status_entries if item["name"].strip())
+
+    return JiraStatusCatalogResult(frozenset(status_names), True)
 
 
 def _history_identity(history: dict[str, Any]) -> str:

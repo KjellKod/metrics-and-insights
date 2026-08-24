@@ -9,7 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # pylint: disable=wrong-import-position,import-error
 import filtered_delivery_time as report
-from jira_utils import ChangelogFetchResult, JiraSearchResult
+from jira_utils import ChangelogFetchResult, JiraSearchResult, JiraStatusCatalogResult
 
 
 def issue(key="PROJ-1", issue_type="Story", labels=None, field_value=None):
@@ -188,6 +188,7 @@ class TestCliValidation(unittest.TestCase):
         self.assertIn("JIRA_FILTER_FIELD_ID=12345", help_text)
         self.assertIn('--start-statuses "In Progress"', help_text)
         self.assertIn('use "In Progress" rather than "in-progress"', help_text)
+        self.assertIn("validated against active Jira workflows", help_text)
 
     def test_parse_args_rejects_numeric_field_id_env_with_guidance(self):
         with self.assertRaisesRegex(SystemExit, "2"):
@@ -444,6 +445,47 @@ class TestCycleModel(unittest.TestCase):
         self.assertEqual(cycles[0].completion_timestamp.strftime("%Y-%m-%d %H:%M %z"), "2026-01-01 00:30 -0700")
 
 
+class TestStatusValidation(unittest.TestCase):
+    def test_validation_reports_unknown_start_and_end_statuses_with_suggestions(self):
+        catalog = JiraStatusCatalogResult(
+            frozenset({"In Progress", "Code Review", "Done", "Released"}),
+            True,
+        )
+
+        with self.assertRaises(report.ReportError) as raised:
+            report.validate_status_configuration(
+                config(
+                    start_statuses=("in progess", "code review"),
+                    end_statuses=frozenset({"done", "releasd"}),
+                ),
+                catalog,
+            )
+
+        message = str(raised.exception)
+        self.assertIn("Unknown --start-statuses: 'in progess'", message)
+        self.assertIn("Did you mean 'In Progress'?", message)
+        self.assertIn("Unknown --end-statuses: 'releasd'", message)
+        self.assertIn("Did you mean 'Released'?", message)
+
+    def test_validation_rejects_status_in_both_start_and_end_lists(self):
+        catalog = JiraStatusCatalogResult(frozenset({"In Progress", "Done"}), True)
+
+        with self.assertRaisesRegex(report.ReportError, "both --start-statuses and --end-statuses"):
+            report.validate_status_configuration(
+                config(
+                    start_statuses=("in progress", "done"),
+                    end_statuses=frozenset({"done"}),
+                ),
+                catalog,
+            )
+
+    def test_validation_fails_closed_when_status_catalog_is_incomplete(self):
+        catalog = JiraStatusCatalogResult(frozenset(), False, ["request failed"])
+
+        with self.assertRaisesRegex(report.ReportError, "status validation was incomplete.*request failed"):
+            report.validate_status_configuration(config(), catalog)
+
+
 class TestAggregationAndOutput(unittest.TestCase):
     def ticket_with_days(self, key, days):
         return report.TicketResult(
@@ -546,6 +588,29 @@ class TestAggregationAndOutput(unittest.TestCase):
 
 
 class TestFailClosed(unittest.TestCase):
+    def setUp(self):
+        self.status_catalog = patch(
+            "filtered_delivery_time.get_jira_status_catalog",
+            return_value=JiraStatusCatalogResult(
+                frozenset({"In Progress", "Implementing", "Done", "Released"}),
+                True,
+            ),
+        )
+        self.status_catalog_mock = self.status_catalog.start()
+        self.addCleanup(self.status_catalog.stop)
+
+    def test_run_report_validates_statuses_before_candidate_search(self):
+        self.status_catalog_mock.return_value = JiraStatusCatalogResult(
+            frozenset({"In Progress", "Done", "Released"}),
+            True,
+        )
+        with patch("filtered_delivery_time.search_jira_issues_raw") as search:
+            with self.assertRaisesRegex(report.ReportError, "Unknown --start-statuses: 'implementing'"):
+                report.run_report(config(output_dir=Path("/tmp/unused")))
+
+        self.status_catalog_mock.assert_called_once_with(("PROJ",))
+        search.assert_not_called()
+
     def test_run_report_prints_jql_before_search(self):
         expected_jql = report.build_completion_candidate_jql(
             2026,
