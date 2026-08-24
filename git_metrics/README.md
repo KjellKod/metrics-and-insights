@@ -140,7 +140,7 @@ python3 -m git_metrics.org_merged_prs_per_month \
   --owner example-org \
   --from 2025-01-01 \
   --to 2026-04-30 \
-  --exclude-repo-prefix internal- \
+  --exclude-repo-prefix <some-prefix> \
   --verbose \
   --loc
 ```
