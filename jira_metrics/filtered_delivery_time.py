@@ -66,7 +66,7 @@ class ReportError(RuntimeError):
 class ReportConfig:
     year: int
     issue_types: frozenset[str]
-    start_statuses: frozenset[str]
+    start_statuses: tuple[str, ...]
     end_statuses: frozenset[str]
     label: str | None
     field_id: str | None
@@ -178,6 +178,7 @@ Custom field selector:
 
 Status names are case-insensitive, but their punctuation and spacing must match Jira.
 For example, use "In Progress" rather than "in-progress".
+Start statuses are priority-ordered. The first listed status found in a cycle wins.
 When both --label and the custom field selector are supplied, both must match.
 """,
     )
@@ -199,7 +200,10 @@ When both --label and the custom field selector are supplied, both must match.
     parser.add_argument(
         "--start-statuses",
         required=True,
-        help='Comma-separated Jira status names that start a measured cycle, for example "In Progress"',
+        help=(
+            "Priority-ordered, comma-separated Jira status names that start a measured cycle; "
+            'for example "In Progress,Code Review,In Validation"'
+        ),
     )
     parser.add_argument(
         "--end-statuses",
@@ -258,6 +262,10 @@ def _normalized_set(values: Sequence[str]) -> frozenset[str]:
     return frozenset(value.strip().casefold() for value in values if value.strip())
 
 
+def _normalized_ordered(values: Sequence[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(value.strip().casefold() for value in values if value.strip()))
+
+
 def resolve_projects(args: argparse.Namespace) -> tuple[str, ...] | None:
     if args.all_projects:
         return None
@@ -288,7 +296,7 @@ def build_config(args: argparse.Namespace) -> ReportConfig:
     return ReportConfig(
         year=args.year,
         issue_types=_normalized_set(args.issue_types),
-        start_statuses=_normalized_set(args.start_statuses),
+        start_statuses=_normalized_ordered(args.start_statuses),
         end_statuses=_normalized_set(end_statuses),
         label=args.label.strip() if args.label else None,
         field_id=field_id,
@@ -482,25 +490,29 @@ def _status_key(value: str) -> str:
     return value.strip().casefold()
 
 
-def reconstruct_cycles(histories: list[FieldEvent], start_statuses: frozenset[str], end_statuses: frozenset[str], year: int) -> list[CycleResult]:
+def reconstruct_cycles(
+    histories: list[FieldEvent],
+    start_statuses: Sequence[str],
+    end_statuses: frozenset[str],
+    year: int,
+) -> list[CycleResult]:
     cycles: list[CycleResult] = []
-    open_start: datetime | None = None
+    start_priority = {_status_key(status): index for index, status in enumerate(start_statuses)}
+    end_status_keys = {_status_key(status) for status in end_statuses}
+    starts_by_status: dict[str, datetime] = {}
     completed_once = False
     current_completed = False
-    reopened_pending = False
     for event in _status_events(histories):
         to_status = _status_key(event.to_status)
-        if to_status in start_statuses:
-            if open_start is None:
-                open_start = event.timestamp
-                reopened_pending = completed_once
+        if to_status in start_priority:
+            starts_by_status.setdefault(to_status, event.timestamp)
             current_completed = False
             continue
-        if to_status not in end_statuses:
+        if to_status not in end_status_keys:
             continue
-        if current_completed and open_start is None:
+        if current_completed and not starts_by_status:
             continue
-        if open_start is None:
+        if not starts_by_status:
             if event.timestamp.year == year:
                 cycles.append(
                     CycleResult(
@@ -514,21 +526,22 @@ def reconstruct_cycles(histories: list[FieldEvent], start_statuses: frozenset[st
             completed_once = True
             current_completed = True
             continue
-        seconds = business_time_spent_in_seconds(open_start, event.timestamp)
+        selected_status = min(starts_by_status, key=start_priority.__getitem__)
+        selected_start = starts_by_status[selected_status]
+        seconds = business_time_spent_in_seconds(selected_start, event.timestamp)
         if event.timestamp.year == year:
             cycles.append(
                 CycleResult(
                     completion_timestamp=event.timestamp,
-                    started_at=open_start,
+                    started_at=selected_start,
                     business_seconds=seconds,
                     missing_start=False,
-                    reopened=reopened_pending,
+                    reopened=completed_once,
                 )
             )
-        open_start = None
+        starts_by_status.clear()
         completed_once = True
         current_completed = True
-        reopened_pending = False
     return cycles
 
 

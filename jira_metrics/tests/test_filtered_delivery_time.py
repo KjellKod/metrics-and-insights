@@ -51,7 +51,7 @@ def config(**overrides):
     base = {
         "year": 2026,
         "issue_types": frozenset({"story", "task", "bug"}),
-        "start_statuses": frozenset({"in progress", "implementing"}),
+        "start_statuses": ("in progress", "implementing"),
         "end_statuses": frozenset({"done", "released"}),
         "label": "example-label",
         "field_id": None,
@@ -161,6 +161,25 @@ class TestCliValidation(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(report.ReportError, "JIRA_PROJECTS"):
                 report.resolve_projects(args)
+
+    def test_build_config_preserves_start_status_priority(self):
+        args = report.parse_args(
+            [
+                "--year",
+                "2026",
+                "--issue-types",
+                "Story",
+                "--start-statuses",
+                "In Progress,Code Review,In Validation",
+                "--label",
+                "example-label",
+                "--all-projects",
+            ]
+        )
+
+        built = report.build_config(args)
+
+        self.assertEqual(built.start_statuses, ("in progress", "code review", "in validation"))
 
     def test_help_explains_field_id_environment_variable_and_status_names(self):
         help_text = report._parser().format_help()  # pylint: disable=protected-access
@@ -313,7 +332,45 @@ class TestCycleModel(unittest.TestCase):
             ]
         )
 
-        cycles = report.reconstruct_cycles(histories, frozenset({"in progress", "implementing"}), frozenset({"done"}), 2026)
+        cycles = report.reconstruct_cycles(histories, ("in progress", "implementing"), frozenset({"done"}), 2026)
+
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(cycles[0].business_seconds, 2 * 3600)
+
+    def test_reconstruct_cycles_uses_cli_priority_over_transition_order(self):
+        histories = report.normalize_changelog(
+            [
+                history(1, "2026-03-02T09:00:00.000-0700", [status_item("Open", "Code Review")]),
+                history(2, "2026-03-02T10:00:00.000-0700", [status_item("Code Review", "In Progress")]),
+                history(3, "2026-03-02T12:00:00.000-0700", [status_item("In Progress", "Done")]),
+            ]
+        )
+
+        cycles = report.reconstruct_cycles(
+            histories,
+            ("in progress", "code review", "in validation"),
+            frozenset({"done"}),
+            2026,
+        )
+
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(cycles[0].business_seconds, 2 * 3600)
+
+    def test_reconstruct_cycles_falls_back_to_next_available_priority(self):
+        histories = report.normalize_changelog(
+            [
+                history(1, "2026-03-02T09:00:00.000-0700", [status_item("Open", "In Validation")]),
+                history(2, "2026-03-02T10:00:00.000-0700", [status_item("In Validation", "Code Review")]),
+                history(3, "2026-03-02T12:00:00.000-0700", [status_item("Code Review", "Done")]),
+            ]
+        )
+
+        cycles = report.reconstruct_cycles(
+            histories,
+            ("in progress", "code review", "in validation"),
+            frozenset({"done"}),
+            2026,
+        )
 
         self.assertEqual(len(cycles), 1)
         self.assertEqual(cycles[0].business_seconds, 2 * 3600)
@@ -327,7 +384,7 @@ class TestCycleModel(unittest.TestCase):
             ]
         )
 
-        cycles = report.reconstruct_cycles(histories, frozenset({"in progress"}), frozenset({"done", "released"}), 2026)
+        cycles = report.reconstruct_cycles(histories, ("in progress",), frozenset({"done", "released"}), 2026)
 
         self.assertEqual(len(cycles), 1)
 
@@ -381,7 +438,7 @@ class TestCycleModel(unittest.TestCase):
             ]
         )
 
-        cycles = report.reconstruct_cycles(histories, frozenset({"in progress"}), frozenset({"done"}), 2026)
+        cycles = report.reconstruct_cycles(histories, ("in progress",), frozenset({"done"}), 2026)
 
         self.assertEqual(len(cycles), 1)
         self.assertEqual(cycles[0].completion_timestamp.strftime("%Y-%m-%d %H:%M %z"), "2026-01-01 00:30 -0700")

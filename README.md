@@ -164,7 +164,9 @@ Scripts print the active completion statuses at the start of execution for verif
 The script reconstructs labels, the selected custom field value, and issue type from complete changelog history at each completion timestamp. Candidate search filters only by project scope, issue types, accepted completion transitions, and a padded year window. It does not filter candidates by current label or current custom field value, so tickets changed after completion can still be counted correctly.
 
 Cycle model:
-- A cycle starts when a ticket enters any `--start-statuses` value and ends when it next enters any completion status.
+- `--start-statuses` is priority-ordered. For example, `"In Progress,Code Review,In Validation"` uses `In Progress` when that transition exists in the cycle, otherwise `Code Review`, otherwise `In Validation`.
+- CLI and Jira status values are trimmed and compared case-insensitively.
+- A cycle starts when a ticket enters the highest-priority available start status and ends when it next enters any completion status.
 - Moving among start statuses or among completion statuses does not create duplicate cycles.
 - A later start after completion is counted as a reopened cycle.
 - Idle time between completion and reopened start is excluded.
