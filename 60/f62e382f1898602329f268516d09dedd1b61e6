@@ -1,0 +1,21 @@
+jira_metrics/tests/test_filtered_delivery_time.py
+  s_3bac94675f978c::t_bf4a35cd70b53a 459-484
+jira_metrics/filtered_delivery_time.py
+  s_3bac94675f978c::t_bf4a35cd70b53a 654-655
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "60f62e382f1898602329f268516d09dedd1b61e6",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
