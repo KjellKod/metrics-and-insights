@@ -159,17 +159,54 @@ def _parser() -> argparse.ArgumentParser:
         description=(
             "Measure active Jira delivery time for tickets selected by historical label, "
             "custom field value, or both."
-        )
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Custom field selector:
+  --field-id-env takes an environment variable NAME, not a numeric field ID.
+  Set the variable inline or in .env, then pass its name to the option:
+
+    JIRA_FILTER_FIELD_ID=12345 python3 jira_metrics/filtered_delivery_time.py \\
+      --year 2026 \\
+      --issue-types "Bug,Task,Story" \\
+      --field-id-env JIRA_FILTER_FIELD_ID \\
+      --field-value "Bugs" \\
+      --start-statuses "In Progress" \\
+      --end-statuses "Done,Closed,Released" \\
+      --all-projects \\
+      -csv
+
+Status names are case-insensitive, but their punctuation and spacing must match Jira.
+For example, use "In Progress" rather than "in-progress".
+When both --label and the custom field selector are supplied, both must match.
+""",
     )
     parser.add_argument("--year", required=True, type=int, help="Completion year to report, for example 2026")
-    parser.add_argument("--issue-types", required=True, help="Comma-separated issue types to include")
-    parser.add_argument("--field-id-env", help="Environment variable containing the numeric custom field ID")
-    parser.add_argument("--field-value", help="Custom field display value that must match at completion")
-    parser.add_argument("--label", help="Label that must match at completion")
-    parser.add_argument("--start-statuses", required=True, help="Comma-separated statuses that start a measured cycle")
+    parser.add_argument(
+        "--issue-types",
+        required=True,
+        help='Comma-separated Jira issue-type names, for example "Bug,Task,Story"',
+    )
+    parser.add_argument(
+        "--field-id-env",
+        help="Environment variable NAME containing the numeric custom field ID; do not pass the ID directly",
+    )
+    parser.add_argument(
+        "--field-value",
+        help="Custom field display value that must match when each cycle completes",
+    )
+    parser.add_argument("--label", help="Label that must match when each cycle completes")
+    parser.add_argument(
+        "--start-statuses",
+        required=True,
+        help='Comma-separated Jira status names that start a measured cycle, for example "In Progress"',
+    )
     parser.add_argument(
         "--end-statuses",
-        help="Comma-separated statuses that complete a measured cycle; defaults to COMPLETION_STATUSES",
+        help=(
+            "Comma-separated Jira status names that complete a measured cycle; "
+            "defaults to COMPLETION_STATUSES"
+        ),
     )
     parser.add_argument("--all-projects", action="store_true", help="Search all Jira projects visible to the account")
     parser.add_argument(
@@ -204,6 +241,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         args.field_id_env = args.field_id_env.strip()
         if not args.field_id_env:
             parser.error("--field-id-env must not be blank")
+        if args.field_id_env.isdecimal():
+            parser.error(
+                "--field-id-env expects an environment variable name, not a numeric field ID. "
+                "Example: set JIRA_FILTER_FIELD_ID=12345, then pass "
+                "--field-id-env JIRA_FILTER_FIELD_ID"
+            )
     if not args.label and not args.field_value:
         parser.error("at least one selector is required: --label or --field-value with --field-id-env")
     if bool(args.field_id_env) != bool(args.field_value):
@@ -230,7 +273,9 @@ def resolve_field_id(field_id_env: str | None) -> str | None:
         return None
     raw = os.environ.get(field_id_env)
     if raw is None or not raw.strip():
-        raise ReportError(f"{field_id_env} is required for --field-id-env")
+        raise ReportError(
+            f"Environment variable '{field_id_env}' named by --field-id-env is not set or is empty"
+        )
     field_id = raw.strip()
     if not field_id.isdecimal():
         raise ReportError(f"{field_id_env} must contain a numeric Jira custom field ID")

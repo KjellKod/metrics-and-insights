@@ -162,6 +162,39 @@ class TestCliValidation(unittest.TestCase):
             with self.assertRaisesRegex(report.ReportError, "JIRA_PROJECTS"):
                 report.resolve_projects(args)
 
+    def test_help_explains_field_id_environment_variable_and_status_names(self):
+        help_text = report._parser().format_help()  # pylint: disable=protected-access
+
+        self.assertIn("environment variable NAME, not a numeric field ID", help_text)
+        self.assertIn("JIRA_FILTER_FIELD_ID=12345", help_text)
+        self.assertIn('--start-statuses "In Progress"', help_text)
+        self.assertIn('use "In Progress" rather than "in-progress"', help_text)
+
+    def test_parse_args_rejects_numeric_field_id_env_with_guidance(self):
+        with self.assertRaisesRegex(SystemExit, "2"):
+            report.parse_args(
+                [
+                    "--year",
+                    "2026",
+                    "--issue-types",
+                    "Bug",
+                    "--start-statuses",
+                    "In Progress",
+                    "--field-id-env",
+                    "12345",
+                    "--field-value",
+                    "Bugs",
+                ]
+            )
+
+    def test_resolve_field_id_missing_env_names_the_missing_variable(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(
+                report.ReportError,
+                "Environment variable 'JIRA_FILTER_FIELD_ID' named by --field-id-env is not set",
+            ):
+                report.resolve_field_id("JIRA_FILTER_FIELD_ID")
+
 
 class TestCandidateJql(unittest.TestCase):
     def test_candidate_jql_pads_year_window_and_omits_selectors(self):
