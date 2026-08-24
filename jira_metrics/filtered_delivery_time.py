@@ -651,6 +651,8 @@ def _require_complete_changelog(result: ChangelogFetchResult) -> None:
 
 def run_report(config: ReportConfig) -> tuple[list[SummaryRow], list[TicketResult], tuple[Path, Path] | None]:
     jql = build_completion_candidate_jql(config.year, config.issue_types, config.end_statuses, config.projects)
+    print("Jira JQL:")
+    print(jql)
     search_result = search_jira_issues_raw(jql, candidate_fields(config.field_id))
     _require_complete_search(search_result)
     issues_by_key: dict[str, dict[str, Any]] = {}

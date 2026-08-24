@@ -456,6 +456,32 @@ class TestAggregationAndOutput(unittest.TestCase):
 
 
 class TestFailClosed(unittest.TestCase):
+    def test_run_report_prints_jql_before_search(self):
+        expected_jql = report.build_completion_candidate_jql(
+            2026,
+            frozenset({"story", "task", "bug"}),
+            frozenset({"done", "released"}),
+            ("PROJ",),
+        )
+        events = []
+
+        def record_print(*values, **_kwargs):
+            events.append(("print", " ".join(str(value) for value in values)))
+
+        def record_search(jql, _fields):
+            events.append(("search", jql))
+            return JiraSearchResult([], False, ["expected stop"], 1)
+
+        with patch("builtins.print", side_effect=record_print):
+            with patch("filtered_delivery_time.search_jira_issues_raw", side_effect=record_search):
+                with self.assertRaises(report.ReportError):
+                    report.run_report(config(output_dir=Path("/tmp/unused")))
+
+        self.assertEqual(
+            events[:3],
+            [("print", "Jira JQL:"), ("print", expected_jql), ("search", expected_jql)],
+        )
+
     def test_run_exits_before_csv_when_candidate_search_incomplete(self):
         with patch("filtered_delivery_time.search_jira_issues_raw") as search:
             search.return_value = JiraSearchResult([], False, ["page failed"], 1)
