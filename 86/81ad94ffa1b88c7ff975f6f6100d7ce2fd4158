@@ -1,0 +1,24 @@
+README.md
+  s_3bac94675f978c::t_0f03db918d093c 167-169
+jira_metrics/tests/test_filtered_delivery_time.py
+  s_3bac94675f978c::t_d2b03e17b7b021 165-183,336-373
+  s_3bac94675f978c::t_0f03db918d093c 54,335,387,441
+jira_metrics/filtered_delivery_time.py
+  s_3bac94675f978c::t_0f03db918d093c 69,181,203-206,265-268,299,493-498,500-502,507-508,511,513,515,529-531,536,539,542
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "8681ad94ffa1b88c7ff975f6f6100d7ce2fd4158",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
