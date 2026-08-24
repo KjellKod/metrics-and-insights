@@ -12,11 +12,19 @@ import filtered_delivery_time as report
 from jira_utils import ChangelogFetchResult, JiraSearchResult, JiraStatusCatalogResult
 
 
-def issue(key="PROJ-1", issue_type="Story", labels=None, field_value=None):
+def issue(
+    key="PROJ-1",
+    issue_type="Story",
+    labels=None,
+    field_value=None,
+    created="2026-03-02T09:00:00.000-0700",
+):
     fields = {
         "issuetype": {"name": issue_type},
         "labels": labels or [],
     }
+    if created is not None:
+        fields["created"] = created
     if field_value is not None:
         fields["customfield_12345"] = {"value": field_value}
     return {"id": key.replace("PROJ-", ""), "key": key, "fields": fields}
@@ -189,6 +197,8 @@ class TestCliValidation(unittest.TestCase):
         self.assertIn('--start-statuses "In Progress"', help_text)
         self.assertIn('use "In Progress" rather than "in-progress"', help_text)
         self.assertIn("validated against active Jira workflows", help_text)
+        self.assertIn("candidate JQL is printed before any Jira API request", help_text)
+        self.assertIn("created in a configured start status use creation time", help_text)
 
     def test_parse_args_rejects_numeric_field_id_env_with_guidance(self):
         with self.assertRaisesRegex(SystemExit, "2"):
@@ -229,6 +239,9 @@ class TestCandidateJql(unittest.TestCase):
         self.assertIn('"2027-01-02"', jql)
         self.assertNotIn("labels", jql.casefold())
         self.assertNotIn("customfield", jql.casefold())
+
+    def test_candidate_fields_include_created_for_initial_status_reconstruction(self):
+        self.assertIn("created", report.candidate_fields(None))
 
 
 class TestHistoricalSelection(unittest.TestCase):
@@ -324,6 +337,51 @@ class TestHistoricalSelection(unittest.TestCase):
 
 
 class TestCycleModel(unittest.TestCase):
+    def test_created_in_configured_initial_status_uses_creation_as_start(self):
+        histories = report.normalize_changelog(
+            [history(1, "2026-03-02T12:00:00.000-0700", [status_item("Draft", "Done")])]
+        )
+
+        result = report.select_ticket_cycles(
+            issue(labels=["example-label"]),
+            histories,
+            config(start_statuses=("in progress", "draft")),
+        )
+
+        self.assertEqual(result.measured_cycles, 1)
+        self.assertEqual(result.missing_start_cycles, 0)
+        self.assertEqual(result.total_business_seconds, 3 * 3600)
+        self.assertIn('"start_source":"creation"', result.cycle_evidence[0])
+
+    def test_later_higher_priority_status_wins_over_initial_status(self):
+        histories = report.normalize_changelog(
+            [
+                history(1, "2026-03-02T10:00:00.000-0700", [status_item("Draft", "In Progress")]),
+                history(2, "2026-03-02T12:00:00.000-0700", [status_item("In Progress", "Done")]),
+            ]
+        )
+
+        result = report.select_ticket_cycles(
+            issue(labels=["example-label"]),
+            histories,
+            config(start_statuses=("in progress", "draft")),
+        )
+
+        self.assertEqual(result.total_business_seconds, 2 * 3600)
+        self.assertIn('"start_source":"transition"', result.cycle_evidence[0])
+
+    def test_missing_created_timestamp_fails_closed(self):
+        histories = report.normalize_changelog(
+            [history(1, "2026-03-02T12:00:00.000-0700", [status_item("Draft", "Done")])]
+        )
+
+        with self.assertRaisesRegex(report.ReportError, "created timestamp"):
+            report.select_ticket_cycles(
+                issue(labels=["example-label"], created=None),
+                histories,
+                config(start_statuses=("draft",)),
+            )
+
     def test_reconstruct_cycles_ignores_start_to_start_moves_and_status_case(self):
         histories = report.normalize_changelog(
             [
@@ -524,6 +582,7 @@ class TestAggregationAndOutput(unittest.TestCase):
             business_seconds=3600,
             missing_start=False,
             reopened=False,
+            start_source="transition",
         )
         latest = report.CycleResult(
             completion_timestamp=report.parse_jira_timestamp("2026-04-01T00:30:00.000-0700"),
@@ -531,6 +590,7 @@ class TestAggregationAndOutput(unittest.TestCase):
             business_seconds=7200,
             missing_start=False,
             reopened=True,
+            start_source="transition",
         )
         ticket = report.TicketResult(
             issue_key="PROJ-1",
@@ -584,6 +644,14 @@ class TestAggregationAndOutput(unittest.TestCase):
                 )
                 self.assertTrue(summary_path.exists())
                 self.assertTrue(detail_path.exists())
+                self.assertIn(
+                    "Total Measured Active Ticket Days",
+                    summary_path.read_text(encoding="utf-8").splitlines()[0],
+                )
+                self.assertIn(
+                    "Total Measured Active Ticket Days",
+                    detail_path.read_text(encoding="utf-8").splitlines()[0],
+                )
                 self.assertIn("'=PROJ-1", detail_path.read_text(encoding="utf-8"))
 
 
@@ -598,6 +666,20 @@ class TestFailClosed(unittest.TestCase):
         )
         self.status_catalog_mock = self.status_catalog.start()
         self.addCleanup(self.status_catalog.stop)
+
+    def test_run_report_prints_jql_before_status_validation_failure(self):
+        self.status_catalog_mock.return_value = JiraStatusCatalogResult(
+            frozenset(),
+            False,
+            ["request failed"],
+        )
+
+        with patch("builtins.print") as output:
+            with self.assertRaisesRegex(report.ReportError, "status validation was incomplete"):
+                report.run_report(config(output_dir=Path("/tmp/unused")))
+
+        output.assert_any_call("Jira JQL:")
+        self.assertEqual(output.call_args_list[0].args, ("Jira JQL:",))
 
     def test_run_report_validates_statuses_before_candidate_search(self):
         self.status_catalog_mock.return_value = JiraStatusCatalogResult(

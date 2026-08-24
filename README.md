@@ -167,13 +167,15 @@ Cycle model:
 - `--start-statuses` is priority-ordered. For example, `"In Progress,Code Review,In Validation"` uses `In Progress` when that transition exists in the cycle, otherwise `Code Review`, otherwise `In Validation`.
 - CLI and Jira status values are trimmed and compared case-insensitively.
 - A cycle starts when a ticket enters the highest-priority available start status and ends when it next enters any completion status.
+- When a ticket is created in a configured start status, its creation timestamp is a start candidate. A later higher-priority start status still wins.
 - Moving among start statuses or among completion statuses does not create duplicate cycles.
 - A later start after completion is counted as a reopened cycle.
 - Idle time between completion and reopened start is excluded.
 - A completion without a prior accepted start counts as a completed cycle with missing start and no measured duration.
+- Detail cycle evidence identifies whether the selected start came from ticket creation, a later transition, or was missing.
 - Each ticket is counted once per year and attributed to the month of its latest matching completion.
 
-Before querying report candidates, the script validates every configured start and end status against active Jira workflows in the selected project scope. Unknown statuses print the failing value and a close-match suggestion when available, then exit nonzero without writing CSVs. A status configured as both a start and end status is also rejected. With `--all-projects`, validation uses all active statuses visible to the Jira account.
+The script prints the exact candidate JQL before making any Jira API request. It then validates every configured start and end status against active Jira workflows in the selected project scope. Unknown statuses print the failing value and a close-match suggestion when available, then exit nonzero without writing CSVs. A status configured as both a start and end status is also rejected. With `--all-projects`, validation uses all active statuses visible to the Jira account.
 
 Required environment:
 ```bash
@@ -229,8 +231,10 @@ python3 jira_metrics/filtered_delivery_time.py \
 ```
 
 CSV output:
-- `filtered_delivery_time_summary_<year>.csv`: all 12 months, completed tickets, completed cycles, reopened cycles, measured cycles, missing-start counts, total business days, median business days per ticket, P85 business days per ticket, and `Data Complete`.
-- `filtered_delivery_time_details_<year>.csv`: per-ticket audit rows with selector evidence, latest matching completion, cycle counts, reopened counts, missing-start counts, and total business days.
+- `filtered_delivery_time_summary_<year>.csv`: all 12 months, completed tickets, completed cycles, reopened cycles, measured cycles, missing-start counts, total measured active ticket days, median business days per ticket, P85 business days per ticket, and `Data Complete`.
+- `filtered_delivery_time_details_<year>.csv`: per-ticket audit rows with selector evidence, latest matching completion, cycle counts, reopened counts, missing-start counts, and total measured active ticket days.
+
+`Total Measured Active Ticket Days` sums elapsed measured ticket time. Missing-start cycles contribute no time, while tickets active in parallel are added independently. This metric is not actual person-hours, human effort, or financial cost.
 
 The report fails closed. Incomplete candidate search, incomplete changelog retrieval, invalid custom field configuration, or calculation failure exits nonzero before writing successful CSV output.
 

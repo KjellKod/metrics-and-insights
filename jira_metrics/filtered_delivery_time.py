@@ -39,7 +39,7 @@ SUMMARY_COLUMNS = (
     "Measured Cycles",
     "Cycles Missing Start",
     "Tickets With Missing Start",
-    "Total Business Cycle Days",
+    "Total Measured Active Ticket Days",
     "Median Business Cycle Days per Ticket",
     "P85 Business Cycle Days per Ticket",
     "Data Complete",
@@ -56,7 +56,7 @@ DETAIL_COLUMNS = (
     "Reopened Cycles",
     "Measured Cycles",
     "Cycles Missing Start",
-    "Total Business Cycle Days",
+    "Total Measured Active Ticket Days",
     "Cycle Evidence",
 )
 
@@ -113,6 +113,7 @@ class CycleResult:
     business_seconds: float
     missing_start: bool
     reopened: bool
+    start_source: str
 
 
 @dataclass(frozen=True)
@@ -182,7 +183,10 @@ Custom field selector:
 Status names are case-insensitive, but their punctuation and spacing must match Jira.
 For example, use "In Progress" rather than "in-progress".
 Start statuses are priority-ordered. The first listed status found in a cycle wins.
+Tickets created in a configured start status use creation time as a start candidate.
 Start and end statuses are validated against active Jira workflows before the report runs.
+The exact candidate JQL is printed before any Jira API request.
+Total measured active ticket days sum elapsed ticket time, not human effort or cost.
 When both --label and the custom field selector are supplied, both must match.
 """,
     )
@@ -331,7 +335,7 @@ def build_completion_candidate_jql(
 
 
 def candidate_fields(field_id: str | None) -> list[str]:
-    fields = {"issuetype", "labels"}
+    fields = {"created", "issuetype", "labels"}
     if field_id is not None:
         fields.add(f"customfield_{field_id}")
     return sorted(fields)
@@ -422,6 +426,18 @@ def _issue_fields(issue: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+def _issue_created_timestamp(issue: dict[str, Any]) -> datetime:
+    raw_created = _issue_fields(issue).get("created")
+    if raw_created is None or (isinstance(raw_created, str) and not raw_created.strip()):
+        raise ReportError(f"Issue {issue.get('key', '(unknown)')} did not include a created timestamp")
+    try:
+        return parse_jira_timestamp(raw_created)
+    except (TypeError, ValueError, OSError) as exc:
+        raise ReportError(
+            f"Issue {issue.get('key', '(unknown)')} included an invalid created timestamp"
+        ) from exc
+
+
 def _current_labels(issue: dict[str, Any]) -> frozenset[str]:
     labels = _issue_fields(issue).get("labels", [])
     if not isinstance(labels, list):
@@ -494,22 +510,56 @@ def _status_key(value: str) -> str:
     return value.strip().casefold()
 
 
+def _initial_start_candidates(
+    status_events: list[StatusEvent],
+    start_priority: dict[str, int],
+    created_at: datetime | None,
+) -> dict[str, tuple[datetime, str]]:
+    if not status_events or created_at is None:
+        return {}
+    initial_status = _status_key(status_events[0].from_status)
+    if initial_status not in start_priority or created_at > status_events[0].timestamp:
+        return {}
+    return {initial_status: (created_at, "creation")}
+
+
+def _measured_cycle(
+    event: StatusEvent,
+    starts_by_status: dict[str, tuple[datetime, str]],
+    start_priority: dict[str, int],
+    reopened: bool,
+) -> CycleResult:
+    selected_status = min(starts_by_status, key=start_priority.__getitem__)
+    selected_start, start_source = starts_by_status[selected_status]
+    return CycleResult(
+        completion_timestamp=event.timestamp,
+        started_at=selected_start,
+        business_seconds=business_time_spent_in_seconds(selected_start, event.timestamp),
+        missing_start=False,
+        reopened=reopened,
+        start_source=start_source,
+    )
+
+
 def reconstruct_cycles(
     histories: list[FieldEvent],
     start_statuses: Sequence[str],
     end_statuses: frozenset[str],
     year: int,
+    created_at: datetime | None = None,
 ) -> list[CycleResult]:
     cycles: list[CycleResult] = []
     start_priority = {_status_key(status): index for index, status in enumerate(start_statuses)}
     end_status_keys = {_status_key(status) for status in end_statuses}
-    starts_by_status: dict[str, datetime] = {}
     completed_once = False
     current_completed = False
-    for event in _status_events(histories):
+    status_events = _status_events(histories)
+    starts_by_status = _initial_start_candidates(status_events, start_priority, created_at)
+
+    for event in status_events:
         to_status = _status_key(event.to_status)
         if to_status in start_priority:
-            starts_by_status.setdefault(to_status, event.timestamp)
+            starts_by_status.setdefault(to_status, (event.timestamp, "transition"))
             current_completed = False
             continue
         if to_status not in end_status_keys:
@@ -525,24 +575,14 @@ def reconstruct_cycles(
                         business_seconds=0,
                         missing_start=True,
                         reopened=False,
+                        start_source="missing",
                     )
                 )
             completed_once = True
             current_completed = True
             continue
-        selected_status = min(starts_by_status, key=start_priority.__getitem__)
-        selected_start = starts_by_status[selected_status]
-        seconds = business_time_spent_in_seconds(selected_start, event.timestamp)
         if event.timestamp.year == year:
-            cycles.append(
-                CycleResult(
-                    completion_timestamp=event.timestamp,
-                    started_at=selected_start,
-                    business_seconds=seconds,
-                    missing_start=False,
-                    reopened=completed_once,
-                )
-            )
+            cycles.append(_measured_cycle(event, starts_by_status, start_priority, completed_once))
         starts_by_status.clear()
         completed_once = True
         current_completed = True
@@ -561,7 +601,14 @@ def _selector_matches(snapshot: SelectorSnapshot, config: ReportConfig) -> bool:
 
 def select_ticket_cycles(issue: dict[str, Any], histories: list[FieldEvent], config: ReportConfig) -> TicketResult | None:
     matching: list[tuple[CycleResult, SelectorSnapshot]] = []
-    for cycle in reconstruct_cycles(histories, config.start_statuses, config.end_statuses, config.year):
+    created_at = _issue_created_timestamp(issue)
+    for cycle in reconstruct_cycles(
+        histories,
+        config.start_statuses,
+        config.end_statuses,
+        config.year,
+        created_at,
+    ):
         snapshot = selector_snapshot_at(issue, histories, cycle.completion_timestamp, config.field_id)
         if _selector_matches(snapshot, config):
             matching.append((cycle, snapshot))
@@ -583,6 +630,7 @@ def select_ticket_cycles(issue: dict[str, Any], histories: list[FieldEvent], con
                     "field_value": snapshot.field_value,
                     "missing_start": cycle.missing_start,
                     "reopened": cycle.reopened,
+                    "start_source": cycle.start_source,
                     "business_days": round(cycle.business_seconds / (SECONDS_TO_HOURS * HOURS_TO_DAYS), 4),
                 },
                 sort_keys=True,
@@ -657,7 +705,7 @@ def summary_to_row(row: SummaryRow) -> dict[str, str]:
         "Measured Cycles": str(row.measured_cycles),
         "Cycles Missing Start": str(row.missing_start_cycles),
         "Tickets With Missing Start": str(row.tickets_with_missing_start),
-        "Total Business Cycle Days": f"{row.total_business_days:.4f}",
+        "Total Measured Active Ticket Days": f"{row.total_business_days:.4f}",
         "Median Business Cycle Days per Ticket": f"{row.median_business_days:.4f}",
         "P85 Business Cycle Days per Ticket": f"{row.p85_business_days:.4f}",
         "Data Complete": "true" if row.data_complete else "false",
@@ -677,7 +725,7 @@ def detail_to_row(result: TicketResult) -> dict[str, str]:
         "Reopened Cycles": str(result.reopened_cycles),
         "Measured Cycles": str(result.measured_cycles),
         "Cycles Missing Start": str(result.missing_start_cycles),
-        "Total Business Cycle Days": f"{result.total_business_days:.4f}",
+        "Total Measured Active Ticket Days": f"{result.total_business_days:.4f}",
         "Cycle Evidence": "\n".join(result.cycle_evidence),
     }
 
@@ -740,10 +788,10 @@ def validate_status_configuration(config: ReportConfig, catalog: JiraStatusCatal
 
 
 def run_report(config: ReportConfig) -> tuple[list[SummaryRow], list[TicketResult], tuple[Path, Path] | None]:
-    validate_status_configuration(config, get_jira_status_catalog(config.projects))
     jql = build_completion_candidate_jql(config.year, config.issue_types, config.end_statuses, config.projects)
     print("Jira JQL:")
     print(jql)
+    validate_status_configuration(config, get_jira_status_catalog(config.projects))
     search_result = search_jira_issues_raw(jql, candidate_fields(config.field_id))
     _require_complete_search(search_result)
     issues_by_key: dict[str, dict[str, Any]] = {}
