@@ -1,0 +1,35 @@
+jira_metrics/tests/test_filtered_delivery_time.py
+  s_3bac94675f978c::t_1bccff65f95f03 585,593
+  s_3bac94675f978c::t_7287b5a4f23b9e 647-654
+  s_3bac94675f978c::t_a030b777c00811 201
+  s_3bac94675f978c::t_08ec91342f7567 15-21,26-27,243-245,340-384
+  s_3bac94675f978c::t_30b219430a01de 200
+  s_3bac94675f978c::t_9a6c16b4caba63 670-683
+jira_metrics/filtered_delivery_time.py
+  s_3bac94675f978c::t_30b219430a01de 188
+  s_3bac94675f978c::t_a030b777c00811 186
+  s_3bac94675f978c::t_1bccff65f95f03 116,338,429-440,549,556,558-559,562,578,604-611,633
+  s_3bac94675f978c::t_7287b5a4f23b9e 42,59,189,708,728
+  s_3bac94675f978c::t_8bfc9e337a5ab7 513-543,557,585
+  s_3bac94675f978c::t_2dce6bdc324348 794
+README.md
+  s_3bac94675f978c::t_30b219430a01de 178
+  s_3bac94675f978c::t_7287b5a4f23b9e 234-237
+  s_3bac94675f978c::t_1bccff65f95f03 170,175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "3f2fb290b2c6fb4ac07611e4b5eadb886abe5f6d",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
