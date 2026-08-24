@@ -1,0 +1,24 @@
+tests/unit/git_metrics/vulnerability_management/test_metrics.py
+  s_3bac94675f978c::t_e1cd338cc28b5f 40-45,216-218
+  s_3bac94675f978c::t_4fa77e08bd0c77 219-220
+git_metrics/vulnerability_management/models.py
+  s_3bac94675f978c::t_2b4726a0323129 36
+git_metrics/vulnerability_management/metrics.py
+  s_3bac94675f978c::t_2b4726a0323129 229-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5e0e1e55e4f144666653f9a83d2dba8df0eb9cdf",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
