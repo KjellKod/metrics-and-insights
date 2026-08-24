@@ -1,0 +1,105 @@
+git_metrics/vulnerability_management/cli.py
+  s_3bac94675f978c::t_ca6a77e49bc564 104-110,175,177-178
+  s_3bac94675f978c::t_5767e4e031f46b 144,176
+  s_3bac94675f978c::t_60ee26bf01722d 19-20
+  s_3bac94675f978c::t_25174a9c3d80d6 1-18,21-103,111-143,145-174,179-190
+docs/quest-journal/celebrations/dependabot-vulnerability-management_2026-08-24.md
+  s_6e585976908546::t_0808ca86b314a9 1-105
+docs/quest-journal/dependabot-vulnerability-management_2026-08-24.md
+  s_6e585976908546::t_0808ca86b314a9 1-192
+README.md
+  s_3bac94675f978c::t_70545cc642658b 62,114
+git_metrics/vulnerability_management/metrics.py
+  s_3bac94675f978c::t_f7692d677bb4dc 31-32
+  s_3bac94675f978c::t_b404a047a4f1ae 1-2,6-30,33-253,268-273,279-304,330-334
+  s_3bac94675f978c::t_9325541e2582e9 274-278,306,319-320,327-329
+  s_3bac94675f978c::t_5767e4e031f46b 3-5,267
+  s_3bac94675f978c::t_f9d13dc2bc3db6 254-266,307-318,321-326
+  s_3bac94675f978c::t_462ef99bf8f5d4 305
+tests/unit/git_metrics/vulnerability_management/test_cli.py
+  s_3bac94675f978c::t_1f2d4e0f5e3aee 10,14,116
+  s_3bac94675f978c::t_0ad7829fb8cfa8 3-5
+  s_3bac94675f978c::t_aa0dedfb6364db 1-2,6-9,11-13,15-72,91-98,100-115,117-122,124-129
+  s_3bac94675f978c::t_e371faa5fee429 130-158
+  s_3bac94675f978c::t_ca6a77e49bc564 73-90
+  s_3bac94675f978c::t_5767e4e031f46b 99,123
+git_metrics/vulnerability_management/collection.py
+  s_3bac94675f978c::t_cc65a1e02a89ba 1-134
+git_metrics/vulnerability_management/README.md
+  s_3bac94675f978c::t_70545cc642658b 1-116,119-124,129-133,136-142,147-151,154,157-177
+  s_3bac94675f978c::t_ca5ecc71caeba1 117-118,128,134-135,146,156
+  s_3bac94675f978c::t_3636b6efcff997 127,145,155
+  s_3bac94675f978c::t_60ee26bf01722d 125-126,143-144,152-153
+tests/unit/git_metrics/vulnerability_management/__init__.py
+  s_3bac94675f978c::t_c0768c06eb448c 1
+git_metrics/vulnerability_management/__init__.py
+  s_3bac94675f978c::t_cc65a1e02a89ba 1-3
+tests/unit/git_metrics/vulnerability_management/test_metrics.py
+  s_3bac94675f978c::t_5767e4e031f46b 193
+  s_3bac94675f978c::t_eb6bf27622c608 165,211
+  s_3bac94675f978c::t_f303c257cc5ea0 1-2,6-77,96-113,142,147,149-164,166-192,194-210,212-217,229-249
+  s_3bac94675f978c::t_e371faa5fee429 78-95,114-141,143-146,148,218-228
+  s_3bac94675f978c::t_bc6931e04ae0ef 3-5
+tests/unit/git_metrics/vulnerability_management/test_output.py
+  s_3bac94675f978c::t_e371faa5fee429 83,258-264,268-274
+  s_3bac94675f978c::t_22f2e6485ec560 236-239,241,244-247,255-256
+  s_3bac94675f978c::t_93d7cf92d9851f 292-293,295-305
+  s_3bac94675f978c::t_eb6bf27622c608 210-212
+  s_3bac94675f978c::t_381e702f4774d9 11,265-267
+  s_3bac94675f978c::t_bc6931e04ae0ef 3-5
+  s_6e585976908546::t_c0563f7a6d5ecf 294
+  s_3bac94675f978c::t_aa0dedfb6364db 1-2,6-9,12-28,30-31,33-82,84-109,164-170,178,180,190-209,213-230,275-285,287-288,290
+  s_3bac94675f978c::t_bac1b4b2c13a92 10,29,110-163,171-177,179,181-189,231-235,240,242-243,248-254,257
+  s_3bac94675f978c::t_60ee26bf01722d 32,286,289
+  s_3bac94675f978c::t_5767e4e031f46b 291
+git_metrics/vulnerability_management/__main__.py
+  s_3bac94675f978c::t_cc65a1e02a89ba 1-6
+git_metrics/README.md
+  s_3bac94675f978c::t_70545cc642658b 167-176
+git_metrics/vulnerability_management/output.py
+  s_3bac94675f978c::t_491b00671a0267 1
+  s_3bac94675f978c::t_7e3fe1adb17722 7,10,123,126,194,259,296
+  s_3bac94675f978c::t_d4afc8354c026c 2-6,9,11-33,35-75,77-97,99-122,124-125,127-181,190-193,195-205,212-213,216-240,242-258,267-274,276-295,297-298,301-349
+  s_3bac94675f978c::t_60ee26bf01722d 8,34,76,98,182-189,206-211,214-215,241,260-266,275,299-300
+git_metrics/vulnerability_management/publication.py
+  s_3bac94675f978c::t_60ee26bf01722d 1-34,53-71,73-78,80-89
+  s_6e585976908546::t_26de6fab62837e 79
+  s_6e585976908546::t_db7b10b910b2c5 36
+  s_3bac94675f978c::t_3636b6efcff997 35,37,50-52,72
+  s_3bac94675f978c::t_491b00671a0267 38-49
+tests/unit/git_metrics/vulnerability_management/conftest.py
+  s_3bac94675f978c::t_c0768c06eb448c 1-14,16-45,47-58
+  s_3bac94675f978c::t_5767e4e031f46b 15,46
+git_metrics/vulnerability_management/models.py
+  s_3bac94675f978c::t_f7692d677bb4dc 51-52,98-99,136-137
+  s_3bac94675f978c::t_6073e775beee1d 29-35,40-45
+  s_3bac94675f978c::t_cc65a1e02a89ba 1-28,36-39,49-50,53-97,100-135,138-177
+  s_3bac94675f978c::t_c39807c81f83e1 46-48
+tests/unit/git_metrics/vulnerability_management/test_collection.py
+  s_3bac94675f978c::t_c0768c06eb448c 1-4,6-8,10-17,19-85,87-104
+  s_3bac94675f978c::t_1f2d4e0f5e3aee 5,9,18,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "9afc5cbfef3cf522efca4a1ccf66fcf0697b6a91",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_6e585976908546": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
