@@ -36,9 +36,10 @@ REST_ENV = {
 
 
 class FakeResponse:
-    def __init__(self, status_code, payload):
+    def __init__(self, status_code, payload, headers=None):
         self.status_code = status_code
         self._payload = payload
+        self.headers = headers or {}
 
     def json(self):
         if isinstance(self._payload, ValueError):
@@ -258,6 +259,34 @@ class TestStatusTransitionHelpers(unittest.TestCase):
 
 
 class TestRawJiraRetrieval(unittest.TestCase):
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.time.sleep")
+    @patch("jira_utils.requests.get")
+    def test_request_jira_json_honors_retry_after_for_retryable_response(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            FakeResponse(429, {}, {"Retry-After": "3"}),
+            FakeResponse(200, {"issues": [], "isLast": True}),
+        ]
+
+        result = search_jira_issues_raw("updated >= '2024-01-01'", ["summary"])
+
+        self.assertTrue(result.complete)
+        mock_sleep.assert_called_once_with(3)
+
+    @patch.dict(os.environ, REST_ENV, clear=False)
+    @patch("jira_utils.time.sleep")
+    @patch("jira_utils.requests.get")
+    def test_request_jira_json_uses_exponential_delay_when_retry_after_invalid(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            FakeResponse(503, {}, {"Retry-After": "soon"}),
+            FakeResponse(200, {"issues": [], "isLast": True}),
+        ]
+
+        result = search_jira_issues_raw("updated >= '2024-01-01'", ["summary"])
+
+        self.assertTrue(result.complete)
+        mock_sleep.assert_called_once_with(1)
+
     @patch.dict(os.environ, REST_ENV, clear=False)
     @patch("jira_utils.requests.get")
     def test_search_jira_issues_raw_paginates_next_page_tokens(self, mock_get):

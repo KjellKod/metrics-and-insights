@@ -118,6 +118,7 @@ Scripts for extracting and analyzing Jira metrics:
 - `epic_tracking.py`: Track epic completion metrics with time-based analysis
 - `engineering_excellence.py`: Track engineering excellence vs product work
 - `cycle_time.py`: Calculate cycle time metrics
+- `filtered_delivery_time.py`: Measure selected tickets' active delivery time by historical completion month
 - `development_time.py`: Calculate total completed time spent in `In Progress`
 - `bug_health.py`: Generate monthly bug flow, backlog, priority, and SLA health CSVs
 - `release_failure.py`: Analyze release failures and impact
@@ -156,6 +157,78 @@ This configuration affects:
 - All other scripts that analyze ticket completion
 
 Scripts print the active completion statuses at the start of execution for verification.
+
+#### Filtered Delivery Time
+`jira_metrics/filtered_delivery_time.py` reports active human effort for selected Jira tickets month by month for one required completion year. Selection can use a label, a custom field display value, or both. When both are supplied, both must match at the same historical completion timestamp.
+
+The script reconstructs labels, the selected custom field value, and issue type from complete changelog history at each completion timestamp. Candidate search filters only by project scope, issue types, accepted completion transitions, and a padded year window. It does not filter candidates by current label or current custom field value, so tickets changed after completion can still be counted correctly.
+
+Cycle model:
+- A cycle starts when a ticket enters any `--start-statuses` value and ends when it next enters any completion status.
+- Moving among start statuses or among completion statuses does not create duplicate cycles.
+- A later start after completion is counted as a reopened cycle.
+- Idle time between completion and reopened start is excluded.
+- A completion without a prior accepted start counts as a completed cycle with missing start and no measured duration.
+- Each ticket is counted once per year and attributed to the month of its latest matching completion.
+
+Required environment:
+```bash
+JIRA_LINK="https://your_jira_instance.atlassian.net"
+USER_EMAIL="your_email@example.com"
+JIRA_API_KEY="your_jira_api_key"
+JIRA_PROJECTS="PROJECT1,PROJECT2" # unless --all-projects is supplied
+COMPLETION_STATUSES=released,done # optional when --end-statuses is supplied
+CUSTOM_FIELD_TICKET_CATEGORY=12345 # example only, used with --field-id-env
+```
+
+Help:
+```bash
+python3 jira_metrics/filtered_delivery_time.py --help
+```
+
+Field-only example:
+```bash
+python3 jira_metrics/filtered_delivery_time.py \
+  --year 2026 \
+  --issue-types "Story,Task,Bug" \
+  --field-id-env CUSTOM_FIELD_TICKET_CATEGORY \
+  --field-value "Bugs" \
+  --start-statuses "In Progress,Implementing" \
+  --output-dir reports/filtered-delivery-time \
+  -csv
+```
+
+Label-only example:
+```bash
+python3 jira_metrics/filtered_delivery_time.py \
+  --year 2026 \
+  --issue-types "Story,Task,Bug" \
+  --label "example-label" \
+  --start-statuses "In Progress,Implementing" \
+  --end-statuses "Done,Released" \
+  --output-dir reports/filtered-delivery-time \
+  -csv
+```
+
+Combined selector example:
+```bash
+python3 jira_metrics/filtered_delivery_time.py \
+  --year 2026 \
+  --issue-types "Story,Task,Bug" \
+  --field-id-env CUSTOM_FIELD_TICKET_CATEGORY \
+  --field-value "Bugs" \
+  --label "example-label" \
+  --start-statuses "In Progress,Implementing" \
+  --end-statuses "Done,Released" \
+  --output-dir reports/filtered-delivery-time \
+  -csv
+```
+
+CSV output:
+- `filtered_delivery_time_summary_<year>.csv`: all 12 months, completed tickets, completed cycles, reopened cycles, measured cycles, missing-start counts, total business days, median business days per ticket, P85 business days per ticket, and `Data Complete`.
+- `filtered_delivery_time_details_<year>.csv`: per-ticket audit rows with selector evidence, latest matching completion, cycle counts, reopened counts, missing-start counts, and total business days.
+
+The report fails closed. Incomplete candidate search, incomplete changelog retrieval, invalid custom field configuration, or calculation failure exits nonzero before writing successful CSV output.
 
 ## Environment Variables
 

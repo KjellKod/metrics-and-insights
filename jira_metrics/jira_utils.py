@@ -135,6 +135,18 @@ def _jira_rest_config() -> tuple[str, tuple[str, str], dict[str, str]]:
     return jira_link.rstrip("/"), (user_email, api_key), headers
 
 
+def _retry_delay(response, attempt: int) -> int:
+    retry_after = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    if retry_after is not None:
+        try:
+            parsed = int(str(retry_after).strip())
+        except ValueError:
+            parsed = None
+        if parsed is not None and parsed >= 0:
+            return min(parsed, 10)
+    return min(2**attempt, 10)
+
+
 def _request_jira_json(method, url, *, auth, headers, params=None, payload=None):  # pylint: disable=too-many-arguments
     """Request a Jira JSON page with bounded retries and sanitized failures."""
     request = requests.get if method == "GET" else requests.post
@@ -154,7 +166,7 @@ def _request_jira_json(method, url, *, auth, headers, params=None, payload=None)
             continue
 
         if response.status_code in (429, 500, 502, 503, 504) and attempt < 4:
-            time.sleep(min(2**attempt, 10))
+            time.sleep(_retry_delay(response, attempt))
             continue
         if response.status_code != 200:
             return None, response.status_code, f"{method} request returned status {response.status_code}"
