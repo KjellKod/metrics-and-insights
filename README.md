@@ -59,6 +59,7 @@ If you only need local analysis artifacts, MCP/Sheets access is not required. If
 │   ├── code_review_metrics.py          # Analyze code review patterns and timing
 │   ├── ci_pr_performance_metrics.py    # Analyze PR and CI metrics
 │   ├── org_merged_prs_per_month.py     # Count org-wide merged PRs per month
+│   ├── vulnerability_management/       # Report Dependabot workload, CVEs, and SLA observations
 │   ├── active_devs_one_off.py          # Track active developers
 │   ├── active_repositories_in_organization.py  # Identify active repositories
 │
@@ -110,6 +111,7 @@ Scripts for analyzing GitHub repository metrics and developer activity. For deta
 - `ci_pr_performance_metrics.py`: Track CI performance metrics for PRs
 - `ci_maturity_report.py`: Grade repository CI maturity across a GitHub user or organization profile
 - `org_merged_prs_per_month.py`: Count org-wide merged PRs per month, with optional per-repo and LOC totals
+- `vulnerability_management`: Report Dependabot workload, unique CVEs, current open exposure, and observed fixed-alert SLA. See the [dedicated guide](git_metrics/vulnerability_management/README.md)
 - `active_devs_one_off.py`: Identify and analyze active developers
 - `active_repositories_in_organization.py`: Identify and analyze active repositories
 

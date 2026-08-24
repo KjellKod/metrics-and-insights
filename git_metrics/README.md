@@ -164,6 +164,16 @@ Help and invocation notes:
 
 When GitHub Search returns more than 1000 results for a window, verbose and LOC modes recursively split the date range so counts stay attributable. Counts are token-scoped, so a token without private-repo access will under-report private repositories.
 
+### Vulnerability management
+
+Reports organization Dependabot alert volume, unique CVE exposure, current open risk, and observed fixed-alert SLA performance through one module CLI.
+
+```bash
+python3 -m git_metrics.vulnerability_management --year 2026 --owner sample-org -csv
+```
+
+See the [Dependabot Vulnerability Management guide](vulnerability_management/README.md) for permissions, metric definitions, SLA overrides, outputs, and current-state data limitations.
+
 ### active_devs_one_off.py
 One-time script to identify and analyze active developers in the repository.
 
