@@ -1,0 +1,45 @@
+docs/quest-journal/filtered-delivery-time_2026-08-24.md
+  s_6e585976908546::t_da00eccdeef75e 1-139
+jira_metrics/jira_utils.py
+  s_3bac94675f978c::t_f8f4299f535be2 138-149,169
+docs/quest-journal/celebrations/filtered-delivery-time_2026-08-24.md
+  s_6e585976908546::t_da00eccdeef75e 1-85
+jira_metrics/filtered_delivery_time.py
+  s_3bac94675f978c::t_0b482374f8f554 1-3,5-194,207-549,557-655,662-663,665-671,673-702
+  s_3bac94675f978c::t_1a065d5847facb 4
+  s_3bac94675f978c::t_e31a9334146f36 195-206,550-556,656-661,664,672
+README.md
+  s_3bac94675f978c::t_0d83485e12d628 121,161-231
+  s_3bac94675f978c::t_2dbaa3ce379523 232
+jira_metrics/tests/test_jira_utils.py
+  s_3bac94675f978c::t_33fe5bfcb1251d 39,42,262-289
+jira_metrics/tests/test_filtered_delivery_time.py
+  s_3bac94675f978c::t_81b2a623b80310 111-142,224-238,240-241,340-354,358-387,486-498
+  s_3bac94675f978c::t_342664d4b68d6e 1-4,6-110,143-223,239,242-276,280-339,355-357,388-485,499-502
+  s_3bac94675f978c::t_5dfdde092f340e 277-279
+  s_3bac94675f978c::t_27dd6043579fe6 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "5e5c958ea38590d52e6c5f1e2265892a1cd1d15c",
+  "prompts": {},
+  "sessions": {
+    "s_3bac94675f978c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_6e585976908546": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a02ff8-970e-7342-b9f6-b412abf10697",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
