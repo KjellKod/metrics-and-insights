@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
@@ -108,6 +109,15 @@ class JiraFieldResult:
 
 
 @dataclass(frozen=True)
+class JiraStatusCatalogResult:
+    """Visible active Jira status names plus completeness diagnostics."""
+
+    statuses: frozenset[str]
+    complete: bool
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class ChangelogFetchResult:
     """Complete raw changelogs grouped by issue key."""
 
@@ -135,6 +145,18 @@ def _jira_rest_config() -> tuple[str, tuple[str, str], dict[str, str]]:
     return jira_link.rstrip("/"), (user_email, api_key), headers
 
 
+def _retry_delay(response, attempt: int) -> int:
+    retry_after = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+    if retry_after is not None:
+        try:
+            parsed = int(str(retry_after).strip())
+        except ValueError:
+            parsed = None
+        if parsed is not None and parsed >= 0:
+            return min(parsed, 10)
+    return min(2**attempt, 10)
+
+
 def _request_jira_json(method, url, *, auth, headers, params=None, payload=None):  # pylint: disable=too-many-arguments
     """Request a Jira JSON page with bounded retries and sanitized failures."""
     request = requests.get if method == "GET" else requests.post
@@ -154,7 +176,7 @@ def _request_jira_json(method, url, *, auth, headers, params=None, payload=None)
             continue
 
         if response.status_code in (429, 500, 502, 503, 504) and attempt < 4:
-            time.sleep(min(2**attempt, 10))
+            time.sleep(_retry_delay(response, attempt))
             continue
         if response.status_code != 200:
             return None, response.status_code, f"{method} request returned status {response.status_code}"
@@ -230,6 +252,56 @@ def get_jira_field_metadata() -> JiraFieldResult:
             ["Jira field metadata contained an invalid field entry."],
         )
     return JiraFieldResult(data, True)
+
+
+def get_jira_status_catalog(projects: tuple[str, ...] | None) -> JiraStatusCatalogResult:
+    """Fetch active status names globally or from the configured project scope."""
+    jira_link, auth, headers = _jira_rest_config()
+    if projects is None:
+        endpoints = (("all visible projects", f"{jira_link}/rest/api/3/status"),)
+    else:
+        endpoints = tuple(
+            (project, f"{jira_link}/rest/api/3/project/{quote(project, safe='')}/statuses")
+            for project in projects
+        )
+
+    status_names: set[str] = set()
+    for scope, endpoint in endpoints:
+        data, _, error = _request_jira_json("GET", endpoint, auth=auth, headers=headers)
+        if error:
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} failed: {error}."],
+            )
+        if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} had an unexpected response shape."],
+            )
+
+        if projects is None:
+            status_entries = data
+        else:
+            raw_status_groups = [item.get("statuses") for item in data]
+            if any(not isinstance(group, list) for group in raw_status_groups):
+                return JiraStatusCatalogResult(
+                    frozenset(status_names),
+                    False,
+                    [f"Jira status retrieval for {scope} had an invalid workflow status group."],
+                )
+            status_entries = [status for group in raw_status_groups for status in group]
+
+        if any(not isinstance(item, dict) or not isinstance(item.get("name"), str) for item in status_entries):
+            return JiraStatusCatalogResult(
+                frozenset(status_names),
+                False,
+                [f"Jira status retrieval for {scope} contained an invalid status entry."],
+            )
+        status_names.update(item["name"].strip() for item in status_entries if item["name"].strip())
+
+    return JiraStatusCatalogResult(frozenset(status_names), True)
 
 
 def _history_identity(history: dict[str, Any]) -> str:

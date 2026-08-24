@@ -140,6 +140,7 @@ python3 -m git_metrics.org_merged_prs_per_month \
   --owner example-org \
   --from 2025-01-01 \
   --to 2026-04-30 \
+  --exclude-repo-prefix <some-prefix> \
   --verbose \
   --loc
 ```
@@ -152,6 +153,7 @@ Options:
 - `--format table|json|csv` Output format (default: `table`).
 - `-v, --verbose` Include per-repo merged PR counts for each month.
 - `-l, --loc` Include total additions and deletions for each month.
+- `--exclude-repo-prefix PREFIX` Exclude repository names beginning with `PREFIX`, case-insensitively. Repeat for multiple prefixes. Reports include the configured prefixes, matched repositories, and excluded PR count.
 - `--debug` Enable debug logging.
 
 Help and invocation notes:

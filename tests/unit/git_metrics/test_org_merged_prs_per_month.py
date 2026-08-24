@@ -333,6 +333,76 @@ def test_collect_report_in_verbose_mode_attaches_per_repo_counts() -> None:
     assert report.total == 5
 
 
+def test_collect_report_excludes_repo_prefix_from_counts_and_loc_and_reports_scope() -> None:
+    responses = [
+        _StubResponse(200, {"total_count": 4, "items": []}),
+        _StubResponse(200, _items_payload(["api", "internal-tools", "internal-tools", "INTERNAL-admin"], total=4)),
+        _graphql_response(
+            total=4,
+            nodes=[
+                _loc_node("api", 100, 30),
+                _loc_node("internal-tools", 50, 20),
+                _loc_node("internal-tools", 10, 4),
+                _loc_node("INTERNAL-admin", 7, 1),
+            ],
+        ),
+    ]
+    client, _session, _sleeps = _make_client(responses)
+
+    report = collect_report(
+        client,
+        "KjellKod",
+        date(2025, 4, 1),
+        date(2025, 4, 30),
+        verbose=True,
+        loc=True,
+        exclude_repo_prefixes=[" internal- ", "INTERNAL-"],
+        sleep_fn=lambda _s: None,
+        pause_seconds=0,
+    )
+
+    assert report.exclude_repo_prefixes == ("internal-",)
+    assert report.rows[0].merged_prs == 1
+    assert report.rows[0].per_repo == {"api": 1}
+    assert report.rows[0].additions == 100
+    assert report.rows[0].deletions == 30
+    assert report.rows[0].excluded_prs == 3
+    assert report.excluded_repositories == ("INTERNAL-admin", "internal-tools")
+    assert report.total_excluded_prs == 3
+
+    table = render_table(report)
+    assert "Excluded repo prefixes: internal-" in table
+    assert "Matched excluded repositories: INTERNAL-admin, internal-tools" in table
+    assert "Excluded merged PRs: 3" in table
+
+    payload = json.loads(render_json(report))
+    assert payload["excluded_repo_prefixes"] == ["internal-"]
+    assert payload["excluded_repositories"] == ["INTERNAL-admin", "internal-tools"]
+    assert payload["total_excluded_prs"] == 3
+    assert payload["rows"][0]["excluded_prs"] == 3
+
+    csv_lines = render_csv(report).splitlines()
+    assert csv_lines[0] == (
+        "month,repo,merged_prs,additions,deletions,excluded_prs," "excluded_repo_prefixes,excluded_repositories"
+    )
+    assert csv_lines[-1] == "TOTAL,,1,100,30,3,internal-,INTERNAL-admin;internal-tools"
+
+
+def test_collect_report_rejects_blank_exclude_repo_prefix() -> None:
+    client, _session, _sleeps = _make_client([])
+
+    with pytest.raises(ValueError, match="cannot be blank"):
+        collect_report(
+            client,
+            "KjellKod",
+            date(2025, 4, 1),
+            date(2025, 4, 30),
+            exclude_repo_prefixes=["  "],
+            sleep_fn=lambda _s: None,
+            pause_seconds=0,
+        )
+
+
 def test_render_table_in_verbose_mode_shows_per_repo_block_above_totals() -> None:
     responses = [
         _StubResponse(200, {"total_count": 3, "items": []}),
@@ -412,7 +482,25 @@ def test_argument_parser_accepts_short_v_flag() -> None:
     assert args_default.verbose is False
 
 
-def _graphql_response(*, total: int, nodes: list[dict[str, int]], next_cursor: str | None = None) -> _StubResponse:
+def test_argument_parser_accepts_repeatable_exclude_repo_prefix() -> None:
+    parser = build_argument_parser()
+    args = parser.parse_args(
+        [
+            "--from",
+            "2025-01-01",
+            "--to",
+            "2025-12-31",
+            "--exclude-repo-prefix",
+            "internal-",
+            "--exclude-repo-prefix",
+            "sandbox-",
+        ]
+    )
+
+    assert args.exclude_repo_prefix == ["internal-", "sandbox-"]
+
+
+def _graphql_response(*, total: int, nodes: list[dict[str, Any]], next_cursor: str | None = None) -> _StubResponse:
     return _StubResponse(
         200,
         {
@@ -428,6 +516,14 @@ def _graphql_response(*, total: int, nodes: list[dict[str, int]], next_cursor: s
             }
         },
     )
+
+
+def _loc_node(repo: str, additions: int, deletions: int) -> dict[str, Any]:
+    return {
+        "repository": {"name": repo},
+        "additions": additions,
+        "deletions": deletions,
+    }
 
 
 def test_loc_for_window_sums_additions_and_deletions_across_pages() -> None:
@@ -463,6 +559,25 @@ def test_loc_for_window_sums_additions_and_deletions_across_pages() -> None:
     assert first_payload["variables"]["cursor"] is None
     # Second page passes the cursor returned by the first.
     assert session.post_calls[1][1]["variables"]["cursor"] == "abc"
+
+
+def test_loc_for_window_excludes_matching_repo_prefix_case_insensitively() -> None:
+    responses = [
+        _graphql_response(
+            total=3,
+            nodes=[
+                _loc_node("api", 100, 30),
+                _loc_node("internal-tools", 50, 20),
+                _loc_node("INTERNAL-admin", 7, 1),
+            ],
+        )
+    ]
+    client, _session, _sleeps = _make_client(responses)
+    window = MonthWindow(label="2025-04", start=date(2025, 4, 1), end=date(2025, 4, 30))
+
+    additions, deletions, total = loc_for_window(client, "KjellKod", window, ("internal-",))
+
+    assert (additions, deletions, total) == (100, 30, 1)
 
 
 def test_loc_for_window_halves_window_when_total_exceeds_search_cap() -> None:

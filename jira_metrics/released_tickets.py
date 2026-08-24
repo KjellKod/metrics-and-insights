@@ -1,5 +1,6 @@
 import csv
 import os
+import sys
 from collections import defaultdict
 from datetime import datetime
 
@@ -9,6 +10,7 @@ import pytz
 from jira_utils import (
     JiraStatus,
     extract_status_timestamps,
+    get_common_parser,
     get_ticket_points,
     get_tickets_from_jira,
     interpret_status_timestamps,
@@ -17,6 +19,25 @@ from jira_utils import (
 )
 
 projects = os.environ.get("JIRA_PROJECTS").split(",")
+
+
+def parse_arguments():
+    parser = get_common_parser()
+    parser.description = "Report monthly Jira tickets released during a calendar year"
+    parser.add_argument("--year", type=int, required=True, metavar="YYYY", help="Calendar year to analyze")
+
+    arguments = sys.argv[1:]
+    has_year = any(argument == "--year" or argument.startswith("--year=") for argument in arguments)
+    asks_for_help = any(argument in {"-h", "--help"} for argument in arguments)
+    if not has_year and not asks_for_help:
+        parser.print_help()
+        parser.exit(2)
+
+    return parse_common_arguments(parser)
+
+
+def get_year_date_range(year):
+    return f"{year}-01-01", f"{year}-12-31"
 
 
 def get_resolution_date(ticket):
@@ -91,11 +112,9 @@ def show_result(jql_month_data, args):
 
 
 def main():
-    args = parse_common_arguments()
+    args = parse_arguments()
     args.csv = True
-    current_year = datetime.now().year
-    start_date = f"{current_year}-01-01"
-    end_date = f"{current_year}-12-31"
+    start_date, end_date = get_year_date_range(args.year)
     jql_query = f"project in ({', '.join(projects)}) AND status in (Released) and status changed to Released during ({start_date}, {end_date}) AND issueType in (Task, Bug, Story, Spike) ORDER BY updated ASC"
     jql_issues = get_tickets_from_jira(jql_query)
     jql_month_data = process_issues(jql_issues, start_date, end_date)
