@@ -1,5 +1,5 @@
 anyio==4.13.0
-astroid==3.3.5
+astroid==4.1.2
 backoff==2.2.1
 black==26.5.1
 certifi==2026.5.20
